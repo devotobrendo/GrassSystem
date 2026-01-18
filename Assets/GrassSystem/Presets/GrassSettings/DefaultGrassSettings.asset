@@ -25,7 +25,7 @@ MonoBehaviour:
   minFadeDistance: 30
   maxDrawDistance: 50
   cullingTreeDepth: 4
-  useCheckeredPattern: 0
+  useCheckeredPattern: 1
   patternColorA: {r: 0.2, g: 0.5, b: 0.1, a: 1}
   patternColorB: {r: 0.15, g: 0.45, b: 0.08, a: 1}
   patternScale: 2
@@ -37,7 +37,10 @@ MonoBehaviour:
   topTint: {r: 0.8, g: 1, b: 0.6, a: 1}
   bottomTint: {r: 0.2, g: 0.4, b: 0.1, a: 1}
   translucency: 0.3
-  useAlignedNormals: 1
+  useAlignedNormals: 0
+  useTerrainLightmap: 0
+  terrain: {fileID: 0}
+  terrainLightmapInfluence: 0.5
   interactorStrength: 1
   maxInteractors: 8
   castShadows: 0
