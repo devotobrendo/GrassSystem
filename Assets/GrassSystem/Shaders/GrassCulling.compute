@@ -1,0 +1,151 @@
+// GrassCulling.compute - GPU-side frustum culling and LOD for grass instances
+// Performs culling independently of Unity's internal culling system
+
+#pragma kernel CSMain
+
+// Input buffer - all grass instances
+struct GrassInput
+{
+    float3 position;
+    float3 normal;
+    float2 widthHeight;
+    float3 color;
+    float patternMask;
+};
+
+// Output buffer - visible instances with computed data
+struct GrassOutput
+{
+    float3 position;
+    float3 normal;
+    float2 widthHeight;
+    float3 color;
+    float patternMask;
+    float distanceScale;
+};
+
+// Buffers
+StructuredBuffer<GrassInput> _SourceBuffer;
+AppendStructuredBuffer<GrassOutput> _VisibleBuffer;
+RWStructuredBuffer<uint> _IndirectArgsBuffer;
+
+// Camera data
+float4x4 _ViewProjectionMatrix;
+float3 _CameraPosition;
+float4 _FrustumPlanes[6]; // xyz = normal, w = distance
+
+// Settings
+float _MinFadeDistance;
+float _MaxDrawDistance;
+float _MinHeight;
+float _MaxHeight;
+float _MinWidth;
+float _MaxWidth;
+
+// Interactors (up to 16)
+float4 _Interactors[16]; // xyz = position, w = radius
+int _InteractorCount;
+float _InteractorStrength;
+
+// Wind
+float _Time;
+float _WindSpeed;
+float _WindStrength;
+float _WindFrequency;
+
+uint _InstanceCount;
+
+// Check if point is inside frustum
+bool IsInFrustum(float3 position, float radius)
+{
+    [unroll]
+    for (int i = 0; i < 6; i++)
+    {
+        float dist = dot(_FrustumPlanes[i].xyz, position) + _FrustumPlanes[i].w;
+        if (dist < -radius)
+            return false;
+    }
+    return true;
+}
+
+// Calculate distance-based scale for LOD
+float CalculateDistanceScale(float3 position)
+{
+    float dist = distance(_CameraPosition, position);
+    
+    // Beyond max distance - cull
+    if (dist > _MaxDrawDistance)
+        return 0.0;
+    
+    // Before min distance - full scale
+    if (dist < _MinFadeDistance)
+        return 1.0;
+    
+    // Fade zone - interpolate
+    return 1.0 - saturate((dist - _MinFadeDistance) / (_MaxDrawDistance - _MinFadeDistance));
+}
+
+// Calculate interaction displacement (bending)
+float3 CalculateInteractionOffset(float3 position)
+{
+    float3 totalOffset = float3(0, 0, 0);
+    
+    [loop]
+    for (int i = 0; i < _InteractorCount; i++)
+    {
+        float3 interactorPos = _Interactors[i].xyz;
+        float radius = _Interactors[i].w;
+        
+        if (radius <= 0)
+            continue;
+        
+        float3 toGrass = position - interactorPos;
+        float dist = length(toGrass.xz); // Horizontal distance only
+        
+        if (dist < radius && dist > 0.001)
+        {
+            float influence = 1.0 - saturate(dist / radius);
+            influence = influence * influence; // Quadratic falloff
+            
+            float3 pushDir = normalize(float3(toGrass.x, 0, toGrass.z));
+            totalOffset += pushDir * influence * _InteractorStrength;
+        }
+    }
+    
+    return totalOffset;
+}
+
+[numthreads(128, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _InstanceCount)
+        return;
+    
+    GrassInput input = _SourceBuffer[id.x];
+    
+    // Frustum culling with small radius for grass blade
+    float bladeRadius = max(input.widthHeight.x, input.widthHeight.y) * 0.5;
+    if (!IsInFrustum(input.position, bladeRadius))
+        return;
+    
+    // Distance-based LOD / culling
+    float distScale = CalculateDistanceScale(input.position);
+    if (distScale <= 0.01)
+        return;
+    
+    // Passed all culling - add to visible buffer
+    GrassOutput output;
+    output.position = input.position;
+    output.normal = input.normal;
+    output.widthHeight = input.widthHeight;
+    output.color = input.color;
+    output.patternMask = input.patternMask;
+    output.distanceScale = distScale;
+    
+    _VisibleBuffer.Append(output);
+    
+    // Increment indirect args (vertex count per instance * instance count)
+    // Args[0] = vertex count per mesh (set externally)
+    // Args[1] = instance count (we increment this)
+    InterlockedAdd(_IndirectArgsBuffer[1], 1);
+}

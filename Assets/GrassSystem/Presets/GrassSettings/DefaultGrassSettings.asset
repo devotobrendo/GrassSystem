@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f7dc3ad6fc052f40be15ddb5773e282, type: 3}
+  m_Name: DefaultGrassSettings
+  m_EditorClassIdentifier: GrassSystem::GrassSystem.SO_GrassSettings
+  cullingShader: {fileID: 7200000, guid: 780ebd41b14bcfa4ea235a416c62a893, type: 3}
+  grassMaterial: {fileID: 2100000, guid: 336b1f5d2af7535449977acea87aae1b, type: 2}
+  grassMesh: {fileID: 4300000, guid: 203e874fba1f26e40880d095de01f36d, type: 2}
+  minWidth: 0.05
+  maxWidth: 0.15
+  minHeight: 0.2
+  maxHeight: 0.6
+  windSpeed: 0.28
+  windStrength: 0.085
+  windFrequency: 0.051
+  minFadeDistance: 30
+  maxDrawDistance: 50
+  cullingTreeDepth: 4
+  useCheckeredPattern: 0
+  patternColorA: {r: 0.2, g: 0.5, b: 0.1, a: 1}
+  patternColorB: {r: 0.15, g: 0.45, b: 0.08, a: 1}
+  patternScale: 2
+  useTipCutout: 0
+  tipMaskTexture: {fileID: 0}
+  tipCutoffHeight: 0.8
+  albedoTexture: {fileID: 2800000, guid: 2c4e51a73d7c73d40935ba83394b9014, type: 3}
+  normalMap: {fileID: 0}
+  topTint: {r: 0.8, g: 1, b: 0.6, a: 1}
+  bottomTint: {r: 0.2, g: 0.4, b: 0.1, a: 1}
+  translucency: 0.3
+  useAlignedNormals: 1
+  interactorStrength: 1
+  maxInteractors: 8
+  castShadows: 0
+  receiveShadows: 1
+  drawCullingBounds: 0

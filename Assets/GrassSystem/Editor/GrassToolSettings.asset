@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36596aba45ff8de498fed149a9a9a7db, type: 3}
+  m_Name: GrassToolSettings
+  m_EditorClassIdentifier: GrassSystem.Editor::GrassSystem.SO_GrassToolSettings
+  brushSize: 0.5
+  density: 4.1
+  normalLimit: 0.8
+  bladeWidth: 0.341
+  bladeHeight: 1.15
+  heightBrushValue: 0.5
+  brushColor: {r: 0.20328665, g: 0.6, b: 0.2, a: 1}
+  colorVariationR: 0.188
+  colorVariationG: 0.071
+  colorVariationB: 0.1
+  patternBrushValue: 0
+  paintMask:
+    serializedVersion: 2
+    m_Bits: 7
+  blockMask:
+    serializedVersion: 2
+    m_Bits: 0
+  maxGrassToGenerate: 100000
+  generationDensity: 0.5
