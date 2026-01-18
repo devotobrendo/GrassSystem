@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
+
 Shader "GrassSystem/GrassLit"
 {
     Properties
@@ -30,6 +32,13 @@ Shader "GrassSystem/GrassLit"
         [Header(Lighting)]
         _Translucency ("Translucency", Range(0, 1)) = 0.3
         [Toggle] _AlignNormals ("Align Normals to Up", Float) = 1
+        
+        [Header(Terrain Lightmap)]
+        [Toggle] _UseTerrainLightmap ("Use Terrain Lightmap", Float) = 0
+        _TerrainLightmap ("Terrain Lightmap", 2D) = "white" {}
+        _TerrainLightmapInfluence ("Lightmap Influence", Range(0, 1)) = 0.5
+        _TerrainPosition ("Terrain Position", Vector) = (0, 0, 0, 0)
+        _TerrainSize ("Terrain Size", Vector) = (1, 1, 1, 0)
     }
     
     SubShader
@@ -60,10 +69,8 @@ Shader "GrassSystem/GrassLit"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "GrassCommon.hlsl"
             
-            // Instance data buffer
             StructuredBuffer<GrassDrawData> _GrassBuffer;
             
-            // Interactor data (set from C#)
             float4 _Interactors[16];
             int _InteractorCount;
             float _InteractorStrength;
@@ -71,9 +78,11 @@ Shader "GrassSystem/GrassLit"
             TEXTURE2D(_MainTex);
             TEXTURE2D(_NormalMap);
             TEXTURE2D(_TipMask);
+            TEXTURE2D(_TerrainLightmap);
             SAMPLER(sampler_MainTex);
             SAMPLER(sampler_NormalMap);
             SAMPLER(sampler_TipMask);
+            SAMPLER(sampler_TerrainLightmap);
             
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
@@ -91,6 +100,10 @@ Shader "GrassSystem/GrassLit"
                 float _WindFrequency;
                 float _Translucency;
                 float _AlignNormals;
+                float _UseTerrainLightmap;
+                float _TerrainLightmapInfluence;
+                float4 _TerrainPosition;
+                float4 _TerrainSize;
             CBUFFER_END
             
             struct Attributes
@@ -120,10 +133,8 @@ Shader "GrassSystem/GrassLit"
             {
                 Varyings output;
                 
-                // Get instance data
                 GrassDrawData grassData = _GrassBuffer[input.instanceID];
                 
-                // Calculate wind
                 float2 windOffset = CalculateWind(
                     grassData.position,
                     _Time.y,
@@ -132,7 +143,6 @@ Shader "GrassSystem/GrassLit"
                     _WindFrequency
                 );
                 
-                // Calculate interaction offset
                 float3 interactionOffset = float3(0, 0, 0);
                 [loop]
                 for (int i = 0; i < _InteractorCount; i++)
@@ -155,7 +165,6 @@ Shader "GrassSystem/GrassLit"
                     }
                 }
                 
-                // Transform vertex
                 float3 worldPos = TransformGrassVertex(
                     input.positionOS.xyz,
                     grassData.position,
@@ -172,17 +181,11 @@ Shader "GrassSystem/GrassLit"
                 output.positionCS = TransformWorldToHClip(worldPos);
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 
-                // Normal handling
                 if (_AlignNormals > 0.5)
-                {
-                    output.normalWS = float3(0, 1, 0); // Point up for uniform lighting
-                }
+                    output.normalWS = float3(0, 1, 0);
                 else
-                {
                     output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-                }
                 
-                // Tangent space for normal mapping
                 float3 tangent = TransformObjectToWorldDir(input.tangentOS.xyz);
                 output.tangentWS = tangent;
                 output.bitangentWS = cross(output.normalWS, tangent) * input.tangentOS.w;
@@ -197,11 +200,9 @@ Shader "GrassSystem/GrassLit"
             
             half4 frag(Varyings input) : SV_Target
             {
-                // Sample textures
                 half4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                 half3 normalTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, input.uv));
                 
-                // Tip cutout
                 if (_UseTipCutout > 0.5)
                 {
                     half tipMask = SAMPLE_TEXTURE2D(_TipMask, sampler_TipMask, input.uv).a;
@@ -209,7 +210,6 @@ Shader "GrassSystem/GrassLit"
                     clip(tipMask * tipCut - _AlphaCutoff);
                 }
                 
-                // Transform normal from tangent to world space
                 float3x3 tangentToWorld = float3x3(
                     normalize(input.tangentWS),
                     normalize(input.bitangentWS),
@@ -217,26 +217,27 @@ Shader "GrassSystem/GrassLit"
                 );
                 float3 normalWS = mul(normalTS, tangentToWorld);
                 
-                // Height-based color gradient
                 half3 baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
-                
-                // Apply instance color
                 baseColor *= input.grassColor;
                 
-                // Apply checkered pattern
+                if (_UseTerrainLightmap > 0.5)
+                {
+                    float2 terrainUV = (input.positionWS.xz - _TerrainPosition.xz) / _TerrainSize.xz;
+                    terrainUV = saturate(terrainUV);
+                    half3 terrainLight = SAMPLE_TEXTURE2D(_TerrainLightmap, sampler_TerrainLightmap, terrainUV).rgb;
+                    baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
+                }
+                
                 if (_UsePattern > 0.5)
                 {
                     float checker = CalculateCheckerPattern(input.positionWS, _PatternScale);
-                    // Blend with pattern mask from instance data
                     float useMask = lerp(checker, input.patternMask, 0.5);
                     half3 patternColor = lerp(_PatternColorA.rgb, _PatternColorB.rgb, useMask);
                     baseColor *= patternColor;
                 }
                 
-                // Apply albedo texture
                 baseColor *= albedo.rgb;
                 
-                // Lighting
                 InputData inputData = (InputData)0;
                 inputData.positionWS = input.positionWS;
                 inputData.normalWS = normalize(normalWS);
@@ -246,7 +247,6 @@ Shader "GrassSystem/GrassLit"
                 inputData.bakedGI = SampleSH(inputData.normalWS);
                 inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
                 
-                // Simple lit surface
                 SurfaceData surfaceData = (SurfaceData)0;
                 surfaceData.albedo = baseColor;
                 surfaceData.alpha = 1.0;
@@ -257,13 +257,11 @@ Shader "GrassSystem/GrassLit"
                 
                 half4 color = UniversalFragmentPBR(inputData, surfaceData);
                 
-                // Add simple translucency (fake SSS)
                 Light mainLight = GetMainLight(inputData.shadowCoord);
                 float NdotL = dot(inputData.normalWS, mainLight.direction);
                 float translucencyFactor = saturate(-NdotL) * _Translucency;
                 color.rgb += mainLight.color * translucencyFactor * baseColor * 0.5;
                 
-                // Apply fog
                 color.rgb = MixFog(color.rgb, input.fogFactor);
                 
                 return color;
@@ -271,7 +269,6 @@ Shader "GrassSystem/GrassLit"
             ENDHLSL
         }
         
-        // Shadow caster pass
         Pass
         {
             Name "ShadowCaster"
