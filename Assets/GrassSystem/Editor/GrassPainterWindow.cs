@@ -1,5 +1,4 @@
-// GrassPainterWindow.cs - Editor window for painting grass
-// Access via Tools > Grass Painter
+// Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
 using System.Collections.Generic;
 using UnityEditor;
@@ -9,19 +8,15 @@ namespace GrassSystem
 {
     public class GrassPainterWindow : EditorWindow
     {
-        // Tool modes
         private enum PaintMode { Add, Remove, Height, Pattern, Color }
         private PaintMode currentMode = PaintMode.Add;
         
-        // References
         private GrassRenderer targetRenderer;
         private SO_GrassToolSettings toolSettings;
         
-        // UI state
         private Vector2 scrollPos;
         private bool isPainting;
         
-        // Raycast cache
         private RaycastHit[] hitResults = new RaycastHit[10];
         private Vector3 lastPaintPos;
         private float minPaintDistance = 0.1f;
@@ -38,10 +33,8 @@ namespace GrassSystem
         {
             SceneView.duringSceneGui += OnSceneGUI;
             LoadOrCreateSettings();
-            
-            // Find existing renderer
             if (targetRenderer == null)
-                targetRenderer = FindObjectOfType<GrassRenderer>();
+                targetRenderer = FindAnyObjectByType<GrassRenderer>();
         }
         
         private void OnDisable()
@@ -57,13 +50,8 @@ namespace GrassSystem
             if (toolSettings == null)
             {
                 toolSettings = CreateInstance<SO_GrassToolSettings>();
-                
-                // Ensure directory exists
                 if (!AssetDatabase.IsValidFolder("Assets/GrassSystem/Editor"))
-                {
                     AssetDatabase.CreateFolder("Assets/GrassSystem", "Editor");
-                }
-                
                 AssetDatabase.CreateAsset(toolSettings, path);
                 AssetDatabase.SaveAssets();
             }
@@ -77,29 +65,21 @@ namespace GrassSystem
             EditorGUILayout.LabelField("Grass Painter", EditorStyles.boldLabel);
             EditorGUILayout.Space(5);
             
-            // Target renderer
             EditorGUI.BeginChangeCheck();
             targetRenderer = (GrassRenderer)EditorGUILayout.ObjectField(
                 "Target Renderer", targetRenderer, typeof(GrassRenderer), true);
             if (EditorGUI.EndChangeCheck() && targetRenderer == null)
-            {
-                targetRenderer = FindObjectOfType<GrassRenderer>();
-            }
+                targetRenderer = FindAnyObjectByType<GrassRenderer>();
             
             if (targetRenderer == null)
             {
                 EditorGUILayout.HelpBox("No GrassRenderer found. Create one or assign it.", MessageType.Warning);
-                
                 if (GUILayout.Button("Create Grass Renderer"))
-                {
                     CreateGrassRenderer();
-                }
-                
                 EditorGUILayout.EndScrollView();
                 return;
             }
             
-            // Settings check
             if (targetRenderer.settings == null)
             {
                 EditorGUILayout.HelpBox("GrassRenderer has no settings assigned.", MessageType.Error);
@@ -109,50 +89,46 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             
-            // Grass count
             int grassCount = targetRenderer.GrassDataList?.Count ?? 0;
             EditorGUILayout.LabelField($"Total Grass: {grassCount:N0}", EditorStyles.boldLabel);
             
             EditorGUILayout.Space(10);
             
-            // Paint mode
+            if (GUILayout.Button("Reset All Settings"))
+            {
+                if (EditorUtility.DisplayDialog("Reset Settings", "Reset all brush settings to defaults?", "Yes", "Cancel"))
+                {
+                    toolSettings.ResetToDefaults();
+                    EditorUtility.SetDirty(toolSettings);
+                }
+            }
+            
+            EditorGUILayout.Space(10);
+            
             EditorGUILayout.LabelField("Paint Mode", EditorStyles.boldLabel);
             currentMode = (PaintMode)GUILayout.Toolbar((int)currentMode, 
                 new string[] { "Add", "Remove", "Height", "Pattern", "Color" });
             
             EditorGUILayout.Space(10);
-            
-            // Tool settings
             DrawToolSettings();
-            
             EditorGUILayout.Space(10);
             
-            // Actions
             EditorGUILayout.LabelField("Actions", EditorStyles.boldLabel);
             
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Generate on Selection"))
-            {
                 GenerateOnSelection();
-            }
             if (GUILayout.Button("Clear All"))
             {
-                if (EditorUtility.DisplayDialog("Clear Grass", 
-                    "Are you sure you want to clear all grass?", "Yes", "Cancel"))
-                {
+                if (EditorUtility.DisplayDialog("Clear Grass", "Are you sure you want to clear all grass?", "Yes", "Cancel"))
                     ClearAllGrass();
-                }
             }
             EditorGUILayout.EndHorizontal();
             
             if (GUILayout.Button("Rebuild Buffers"))
-            {
                 targetRenderer.RebuildBuffers();
-            }
             
             EditorGUILayout.Space(10);
-            
-            // Instructions
             EditorGUILayout.HelpBox(
                 "Hold Right Mouse Button in Scene View to paint.\n" +
                 "Shift + RMB to remove.\n" +
@@ -161,11 +137,8 @@ namespace GrassSystem
             
             EditorGUILayout.EndScrollView();
             
-            // Save settings
             if (GUI.changed && toolSettings != null)
-            {
                 EditorUtility.SetDirty(toolSettings);
-            }
         }
         
         private void DrawToolSettings()
@@ -173,7 +146,6 @@ namespace GrassSystem
             if (toolSettings == null) return;
             
             EditorGUILayout.LabelField("Brush Settings", EditorStyles.boldLabel);
-            
             toolSettings.brushSize = EditorGUILayout.Slider("Brush Size", toolSettings.brushSize, 0.1f, 50f);
             
             if (currentMode == PaintMode.Add)
@@ -212,6 +184,10 @@ namespace GrassSystem
                 EditorGUILayout.LabelField("Color Brush", EditorStyles.boldLabel);
                 toolSettings.brushColor = EditorGUILayout.ColorField("Target Color", toolSettings.brushColor);
                 EditorGUILayout.HelpBox("Paint this color onto existing grass blades.", MessageType.Info);
+                
+                EditorGUILayout.Space(5);
+                if (GUILayout.Button("Reset Color (paint white)"))
+                    toolSettings.brushColor = Color.white;
             }
         }
         
@@ -222,32 +198,26 @@ namespace GrassSystem
             
             Event e = Event.current;
             
-            // Handle scroll for brush size
             if (e.type == EventType.ScrollWheel && e.control)
             {
-                toolSettings.brushSize = Mathf.Clamp(
-                    toolSettings.brushSize - e.delta.y * 0.5f, 0.1f, 50f);
+                toolSettings.brushSize = Mathf.Clamp(toolSettings.brushSize - e.delta.y * 0.5f, 0.1f, 50f);
                 e.Use();
                 Repaint();
             }
             
-            // Get mouse position in world
             Ray ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
             int hitCount = Physics.RaycastNonAlloc(ray, hitResults, 500f, toolSettings.paintMask);
             
-            if (hitCount == 0)
-                return;
+            if (hitCount == 0) return;
             
             Vector3 hitPoint = hitResults[0].point;
             Vector3 hitNormal = hitResults[0].normal;
             
-            // Draw brush
             Handles.color = GetBrushColor();
             Handles.DrawWireDisc(hitPoint, hitNormal, toolSettings.brushSize);
             Handles.color = new Color(Handles.color.r, Handles.color.g, Handles.color.b, 0.2f);
             Handles.DrawSolidDisc(hitPoint, hitNormal, toolSettings.brushSize);
             
-            // Handle painting
             if (e.type == EventType.MouseDown && e.button == 1)
             {
                 isPainting = true;
@@ -258,8 +228,6 @@ namespace GrassSystem
             {
                 isPainting = false;
                 e.Use();
-                
-                // Rebuild buffers after painting
                 targetRenderer.RebuildBuffers();
                 EditorUtility.SetDirty(targetRenderer);
             }
@@ -268,7 +236,6 @@ namespace GrassSystem
             {
                 if (Vector3.Distance(hitPoint, lastPaintPos) > minPaintDistance)
                 {
-                    // Shift to remove
                     PaintMode mode = e.shift ? PaintMode.Remove : currentMode;
                     Paint(hitPoint, hitNormal, mode);
                     lastPaintPos = hitPoint;
@@ -300,21 +267,11 @@ namespace GrassSystem
             
             switch (mode)
             {
-                case PaintMode.Add:
-                    AddGrass(position, normal, grassList);
-                    break;
-                case PaintMode.Remove:
-                    RemoveGrass(position, grassList);
-                    break;
-                case PaintMode.Height:
-                    EditHeight(position, grassList);
-                    break;
-                case PaintMode.Pattern:
-                    EditPattern(position, grassList);
-                    break;
-                case PaintMode.Color:
-                    EditColor(position, grassList);
-                    break;
+                case PaintMode.Add: AddGrass(position, normal, grassList); break;
+                case PaintMode.Remove: RemoveGrass(position, grassList); break;
+                case PaintMode.Height: EditHeight(position, grassList); break;
+                case PaintMode.Pattern: EditPattern(position, grassList); break;
+                case PaintMode.Color: EditColor(position, grassList); break;
             }
             
             Undo.RecordObject(targetRenderer, "Paint Grass");
@@ -322,37 +279,24 @@ namespace GrassSystem
         
         private void AddGrass(Vector3 center, Vector3 normal, List<GrassData> grassList)
         {
-            // Calculate number of grass to add based on density
             int count = Mathf.RoundToInt(toolSettings.brushSize * toolSettings.density);
             
             for (int i = 0; i < count; i++)
             {
-                // Random position within brush
                 Vector2 offset = Random.insideUnitCircle * toolSettings.brushSize;
                 Vector3 pos = center + new Vector3(offset.x, 0, offset.y);
                 
-                // Raycast to get actual surface position
                 if (Physics.Raycast(pos + Vector3.up * 10f, Vector3.down, out RaycastHit hit, 20f, toolSettings.paintMask))
                 {
-                    // Check normal limit
                     if (hit.normal.y < toolSettings.normalLimit)
                         continue;
                     
-                    // Random color variation
                     Color col = toolSettings.brushColor;
                     col.r += Random.Range(-toolSettings.colorVariationR, toolSettings.colorVariationR);
                     col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
                     col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
                     
-                    GrassData data = new GrassData(
-                        hit.point,
-                        hit.normal,
-                        toolSettings.bladeWidth,
-                        toolSettings.bladeHeight,
-                        col,
-                        toolSettings.patternBrushValue
-                    );
-                    
+                    GrassData data = new GrassData(hit.point, hit.normal, toolSettings.bladeWidth, toolSettings.bladeHeight, col, toolSettings.patternBrushValue);
                     grassList.Add(data);
                 }
             }
@@ -365,12 +309,9 @@ namespace GrassSystem
             for (int i = grassList.Count - 1; i >= 0; i--)
             {
                 Vector3 diff = grassList[i].position - center;
-                diff.y = 0; // Ignore vertical distance
-                
+                diff.y = 0;
                 if (diff.sqrMagnitude < sqrRadius)
-                {
                     grassList.RemoveAt(i);
-                }
             }
         }
         
@@ -382,7 +323,6 @@ namespace GrassSystem
             {
                 Vector3 diff = grassList[i].position - center;
                 diff.y = 0;
-                
                 if (diff.sqrMagnitude < sqrRadius)
                 {
                     var data = grassList[i];
@@ -400,7 +340,6 @@ namespace GrassSystem
             {
                 Vector3 diff = grassList[i].position - center;
                 diff.y = 0;
-                
                 if (diff.sqrMagnitude < sqrRadius)
                 {
                     var data = grassList[i];
@@ -419,7 +358,6 @@ namespace GrassSystem
             {
                 Vector3 diff = grassList[i].position - center;
                 diff.y = 0;
-                
                 if (diff.sqrMagnitude < sqrRadius)
                 {
                     var data = grassList[i];
@@ -441,8 +379,7 @@ namespace GrassSystem
         {
             if (targetRenderer == null || Selection.gameObjects.Length == 0)
             {
-                EditorUtility.DisplayDialog("No Selection", 
-                    "Please select one or more meshes to generate grass on.", "OK");
+                EditorUtility.DisplayDialog("No Selection", "Please select one or more meshes to generate grass on.", "OK");
                 return;
             }
             
@@ -453,7 +390,6 @@ namespace GrassSystem
                 var meshFilter = go.GetComponent<MeshFilter>();
                 if (meshFilter == null || meshFilter.sharedMesh == null)
                     continue;
-                
                 GenerateOnMesh(meshFilter);
             }
             
@@ -470,7 +406,6 @@ namespace GrassSystem
             var normals = mesh.normals;
             var triangles = mesh.triangles;
             
-            // Calculate mesh surface area for density
             float totalArea = 0f;
             for (int i = 0; i < triangles.Length; i += 3)
             {
@@ -480,54 +415,37 @@ namespace GrassSystem
                 totalArea += Vector3.Cross(v1 - v0, v2 - v0).magnitude * 0.5f;
             }
             
-            int targetCount = Mathf.Min(
-                Mathf.RoundToInt(totalArea * toolSettings.generationDensity * 100),
-                toolSettings.maxGrassToGenerate
-            );
-            
+            int targetCount = Mathf.Min(Mathf.RoundToInt(totalArea * toolSettings.generationDensity * 100), toolSettings.maxGrassToGenerate);
             var grassList = targetRenderer.GrassDataList;
             int added = 0;
             
             for (int attempt = 0; attempt < targetCount * 3 && added < targetCount; attempt++)
             {
-                // Random triangle based on area (simplified: just random)
                 int triIndex = Random.Range(0, triangles.Length / 3) * 3;
                 
                 Vector3 v0 = transform.TransformPoint(vertices[triangles[triIndex]]);
                 Vector3 v1 = transform.TransformPoint(vertices[triangles[triIndex + 1]]);
                 Vector3 v2 = transform.TransformPoint(vertices[triangles[triIndex + 2]]);
                 
-                // Random point in triangle
                 float u = Random.value;
                 float v = Random.value;
                 if (u + v > 1f) { u = 1f - u; v = 1f - v; }
                 Vector3 pos = v0 + u * (v1 - v0) + v * (v2 - v0);
                 
-                // Interpolate normal
                 Vector3 n0 = transform.TransformDirection(normals[triangles[triIndex]]);
                 Vector3 n1 = transform.TransformDirection(normals[triangles[triIndex + 1]]);
                 Vector3 n2 = transform.TransformDirection(normals[triangles[triIndex + 2]]);
                 Vector3 normal = (n0 + u * (n1 - n0) + v * (n2 - n0)).normalized;
                 
-                // Check normal limit
                 if (normal.y < toolSettings.normalLimit)
                     continue;
                 
-                // Random color
                 Color col = toolSettings.brushColor;
                 col.r += Random.Range(-toolSettings.colorVariationR, toolSettings.colorVariationR);
                 col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
                 col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
                 
-                GrassData data = new GrassData(
-                    pos,
-                    normal,
-                    toolSettings.bladeWidth,
-                    toolSettings.bladeHeight,
-                    col,
-                    0f
-                );
-                
+                GrassData data = new GrassData(pos, normal, toolSettings.bladeWidth, toolSettings.bladeHeight, col, 0f);
                 grassList.Add(data);
                 added++;
             }
@@ -538,26 +456,16 @@ namespace GrassSystem
         private void ClearAllGrass()
         {
             if (targetRenderer == null) return;
-            
             Undo.RecordObject(targetRenderer, "Clear Grass");
             targetRenderer.ClearGrass();
             EditorUtility.SetDirty(targetRenderer);
         }
     }
     
-    // Internal utility class for layer mask field
     internal static class InternalEditorUtility
     {
         public static string[] layers => UnityEditorInternal.InternalEditorUtility.layers;
-        
-        public static int LayerMaskToConcatenatedLayersMask(LayerMask mask)
-        {
-            return UnityEditorInternal.InternalEditorUtility.LayerMaskToConcatenatedLayersMask(mask);
-        }
-        
-        public static LayerMask ConcatenatedLayersMaskToLayerMask(int mask)
-        {
-            return UnityEditorInternal.InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(mask);
-        }
+        public static int LayerMaskToConcatenatedLayersMask(LayerMask mask) => UnityEditorInternal.InternalEditorUtility.LayerMaskToConcatenatedLayersMask(mask);
+        public static LayerMask ConcatenatedLayersMaskToLayerMask(int mask) => UnityEditorInternal.InternalEditorUtility.ConcatenatedLayersMaskToLayerMask(mask);
     }
 }
