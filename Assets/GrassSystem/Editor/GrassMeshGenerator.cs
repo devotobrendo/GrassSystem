@@ -1,5 +1,4 @@
-// GrassMeshGenerator.cs - Creates default grass blade mesh at editor time
-// Run via Assets > Create > Grass System > Generate Default Mesh
+// Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
 using UnityEditor;
 using UnityEngine;
@@ -29,23 +28,17 @@ namespace GrassSystem
             }
         }
         
-        /// <summary>
-        /// Generates a simple grass blade mesh (quad with 4 vertices)
-        /// Optimized for instanced rendering
-        /// </summary>
         public static Mesh GenerateGrassBladeMesh()
         {
             Mesh mesh = new Mesh();
             mesh.name = "GrassBlade";
             
-            // Simple quad - 4 vertices
-            // UV.y goes from 0 (base) to 1 (tip)
             Vector3[] vertices = new Vector3[]
             {
-                new Vector3(-0.5f, 0f, 0f),   // Bottom left
-                new Vector3(0.5f, 0f, 0f),    // Bottom right
-                new Vector3(-0.3f, 1f, 0f),   // Top left (slightly narrower)
-                new Vector3(0.3f, 1f, 0f)     // Top right (slightly narrower)
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3(0.5f, 0f, 0f),
+                new Vector3(-0.3f, 1f, 0f),
+                new Vector3(0.3f, 1f, 0f)
             };
             
             Vector2[] uvs = new Vector2[]
@@ -72,27 +65,18 @@ namespace GrassSystem
                 new Vector4(1f, 0f, 0f, 1f)
             };
             
-            int[] triangles = new int[]
-            {
-                0, 2, 1,
-                1, 2, 3
-            };
+            int[] triangles = new int[] { 0, 2, 1, 1, 2, 3 };
             
             mesh.vertices = vertices;
             mesh.uv = uvs;
             mesh.normals = normals;
             mesh.tangents = tangents;
             mesh.triangles = triangles;
-            
             mesh.RecalculateBounds();
             
             return mesh;
         }
         
-        /// <summary>
-        /// Generates a more detailed grass blade with multiple segments
-        /// Better for close-up views but more expensive
-        /// </summary>
         public static Mesh GenerateDetailedGrassBladeMesh(int segments = 3)
         {
             Mesh mesh = new Mesh();
@@ -107,7 +91,7 @@ namespace GrassSystem
             for (int i = 0; i <= segments; i++)
             {
                 float t = (float)i / segments;
-                float width = Mathf.Lerp(0.5f, 0.1f, t); // Taper towards tip
+                float width = Mathf.Lerp(0.5f, 0.1f, t);
                 
                 int idx = i * 2;
                 vertices[idx] = new Vector3(-width, t, 0f);
@@ -143,7 +127,6 @@ namespace GrassSystem
             mesh.normals = normals;
             mesh.tangents = tangents;
             mesh.triangles = triangles;
-            
             mesh.RecalculateBounds();
             
             return mesh;

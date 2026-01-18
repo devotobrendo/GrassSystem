@@ -1,5 +1,4 @@
-// SO_GrassToolSettings.cs - Editor tool settings persistence
-// Stores brush settings between sessions
+// Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
 using UnityEngine;
 
@@ -51,5 +50,20 @@ namespace GrassSystem
         public int maxGrassToGenerate = 100000;
         [Range(0.01f, 1f)]
         public float generationDensity = 0.5f;
+        
+        public void ResetToDefaults()
+        {
+            brushSize = 5f;
+            density = 1f;
+            normalLimit = 0.8f;
+            bladeWidth = 0.1f;
+            bladeHeight = 0.4f;
+            heightBrushValue = 0.5f;
+            brushColor = new Color(0.3f, 0.6f, 0.2f);
+            colorVariationR = 0.1f;
+            colorVariationG = 0.15f;
+            colorVariationB = 0.1f;
+            patternBrushValue = 0f;
+        }
     }
 }

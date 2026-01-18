@@ -1,9 +1,7 @@
-// GrassCulling.compute - GPU-side frustum culling and LOD for grass instances
-// Performs culling independently of Unity's internal culling system
+// Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
 #pragma kernel CSMain
 
-// Input buffer - all grass instances
 struct GrassInput
 {
     float3 position;
@@ -13,7 +11,6 @@ struct GrassInput
     float patternMask;
 };
 
-// Output buffer - visible instances with computed data
 struct GrassOutput
 {
     float3 position;
@@ -24,17 +21,14 @@ struct GrassOutput
     float distanceScale;
 };
 
-// Buffers
 StructuredBuffer<GrassInput> _SourceBuffer;
 AppendStructuredBuffer<GrassOutput> _VisibleBuffer;
 RWStructuredBuffer<uint> _IndirectArgsBuffer;
 
-// Camera data
 float4x4 _ViewProjectionMatrix;
 float3 _CameraPosition;
-float4 _FrustumPlanes[6]; // xyz = normal, w = distance
+float4 _FrustumPlanes[6];
 
-// Settings
 float _MinFadeDistance;
 float _MaxDrawDistance;
 float _MinHeight;
@@ -42,12 +36,10 @@ float _MaxHeight;
 float _MinWidth;
 float _MaxWidth;
 
-// Interactors (up to 16)
-float4 _Interactors[16]; // xyz = position, w = radius
+float4 _Interactors[16];
 int _InteractorCount;
 float _InteractorStrength;
 
-// Wind
 float _Time;
 float _WindSpeed;
 float _WindStrength;
@@ -55,7 +47,6 @@ float _WindFrequency;
 
 uint _InstanceCount;
 
-// Check if point is inside frustum
 bool IsInFrustum(float3 position, float radius)
 {
     [unroll]
@@ -68,24 +59,19 @@ bool IsInFrustum(float3 position, float radius)
     return true;
 }
 
-// Calculate distance-based scale for LOD
 float CalculateDistanceScale(float3 position)
 {
     float dist = distance(_CameraPosition, position);
     
-    // Beyond max distance - cull
     if (dist > _MaxDrawDistance)
         return 0.0;
     
-    // Before min distance - full scale
     if (dist < _MinFadeDistance)
         return 1.0;
     
-    // Fade zone - interpolate
     return 1.0 - saturate((dist - _MinFadeDistance) / (_MaxDrawDistance - _MinFadeDistance));
 }
 
-// Calculate interaction displacement (bending)
 float3 CalculateInteractionOffset(float3 position)
 {
     float3 totalOffset = float3(0, 0, 0);
@@ -100,12 +86,12 @@ float3 CalculateInteractionOffset(float3 position)
             continue;
         
         float3 toGrass = position - interactorPos;
-        float dist = length(toGrass.xz); // Horizontal distance only
+        float dist = length(toGrass.xz);
         
         if (dist < radius && dist > 0.001)
         {
             float influence = 1.0 - saturate(dist / radius);
-            influence = influence * influence; // Quadratic falloff
+            influence = influence * influence;
             
             float3 pushDir = normalize(float3(toGrass.x, 0, toGrass.z));
             totalOffset += pushDir * influence * _InteractorStrength;
@@ -123,17 +109,14 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     
     GrassInput input = _SourceBuffer[id.x];
     
-    // Frustum culling with small radius for grass blade
     float bladeRadius = max(input.widthHeight.x, input.widthHeight.y) * 0.5;
     if (!IsInFrustum(input.position, bladeRadius))
         return;
     
-    // Distance-based LOD / culling
     float distScale = CalculateDistanceScale(input.position);
     if (distScale <= 0.01)
         return;
     
-    // Passed all culling - add to visible buffer
     GrassOutput output;
     output.position = input.position;
     output.normal = input.normal;
@@ -143,9 +126,5 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     output.distanceScale = distScale;
     
     _VisibleBuffer.Append(output);
-    
-    // Increment indirect args (vertex count per instance * instance count)
-    // Args[0] = vertex count per mesh (set externally)
-    // Args[1] = instance count (we increment this)
     InterlockedAdd(_IndirectArgsBuffer[1], 1);
 }
