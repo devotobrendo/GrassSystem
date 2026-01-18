@@ -1,5 +1,4 @@
-// GrassRenderer.cs - Main rendering controller for GPU-instanced grass
-// Manages compute buffers, dispatches culling, and renders via RenderMeshIndirect
+// Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -17,29 +16,19 @@ namespace GrassSystem
         [SerializeField, HideInInspector]
         private List<GrassData> grassData = new List<GrassData>();
         
-        // Compute buffers
         private ComputeBuffer sourceBuffer;
         private ComputeBuffer visibleBuffer;
-        private GraphicsBuffer argsBuffer; // Must be GraphicsBuffer for RenderMeshIndirect in Unity 6
+        private GraphicsBuffer argsBuffer;
         private ComputeBuffer interactorBuffer;
         
-        // Kernel ID
         private int cullingKernel;
         private const int THREAD_GROUP_SIZE = 128;
         
-        // Bounds for rendering
         private Bounds renderBounds;
-        
-        // Indirect args: [vertexCount, instanceCount, startVertex, startInstance, 0]
         private readonly uint[] argsReset = new uint[5] { 0, 0, 0, 0, 0 };
-        
-        // Interactor data cache
         private Vector4[] interactorData = new Vector4[16];
-        
-        // Material instance
         private Material materialInstance;
         
-        // Shader property IDs (cached for performance)
         private static readonly int PropSourceBuffer = Shader.PropertyToID("_SourceBuffer");
         private static readonly int PropVisibleBuffer = Shader.PropertyToID("_VisibleBuffer");
         private static readonly int PropIndirectArgs = Shader.PropertyToID("_IndirectArgsBuffer");
@@ -58,18 +47,13 @@ namespace GrassSystem
         private static readonly int PropWindStrength = Shader.PropertyToID("_WindStrength");
         private static readonly int PropWindFrequency = Shader.PropertyToID("_WindFrequency");
         
-        // Camera frustum planes
         private Vector4[] frustumPlanes = new Vector4[6];
         private Plane[] cameraPlanes = new Plane[6];
-        
-        // Is initialized?
         private bool isInitialized;
         
-        #region Public API
+        private uint[] readbackArgs = new uint[5];
+        private int lastVisibleCount;
         
-        /// <summary>
-        /// Access to grass data for painting tools
-        /// </summary>
         public List<GrassData> GrassDataList
         {
             get => grassData;
@@ -80,9 +64,8 @@ namespace GrassSystem
             }
         }
         
-        /// <summary>
-        /// Force rebuild of all GPU buffers
-        /// </summary>
+        public int VisibleGrassCount => lastVisibleCount;
+        
         public void RebuildBuffers()
         {
             Cleanup();
@@ -90,27 +73,11 @@ namespace GrassSystem
                 Initialize();
         }
         
-        /// <summary>
-        /// Clear all grass data
-        /// </summary>
         public void ClearGrass()
         {
             grassData.Clear();
             Cleanup();
         }
-        
-        // Visible count tracking
-        private uint[] readbackArgs = new uint[5];
-        private int lastVisibleCount;
-        
-        /// <summary>
-        /// Number of grass instances currently being rendered (after culling)
-        /// </summary>
-        public int VisibleGrassCount => lastVisibleCount;
-        
-        #endregion
-        
-        #region Lifecycle
         
         private void OnEnable()
         {
@@ -125,21 +92,16 @@ namespace GrassSystem
         
         private void Update()
         {
-            if (!isInitialized || grassData.Count == 0)
+            if (!isInitialized || grassData.Count == 0 || sourceBuffer == null)
                 return;
             
             Camera cam = GetCurrentCamera();
             if (cam == null)
                 return;
             
-            // Update and dispatch
             UpdateCulling(cam);
             Render();
         }
-        
-        #endregion
-        
-        #region Initialization
         
         private void Initialize()
         {
@@ -158,23 +120,18 @@ namespace GrassSystem
             if (grassData.Count == 0)
                 return;
             
-            // Create source buffer
             sourceBuffer = new ComputeBuffer(grassData.Count, GrassData.Stride, ComputeBufferType.Structured);
             sourceBuffer.SetData(grassData);
             
-            // Create visible buffer (append buffer)
             visibleBuffer = new ComputeBuffer(grassData.Count, GrassDrawData.Stride, ComputeBufferType.Append);
             
-            // Create indirect args buffer (GraphicsBuffer required for RenderMeshIndirect)
             argsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, sizeof(uint) * 5);
             argsReset[0] = settings.grassMesh.GetIndexCount(0);
-            argsReset[1] = 0; // Will be set by compute shader
+            argsReset[1] = 0;
             argsBuffer.SetData(argsReset);
             
-            // Get kernel
             cullingKernel = settings.cullingShader.FindKernel("CSMain");
             
-            // Set static compute shader properties
             settings.cullingShader.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
             settings.cullingShader.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
             settings.cullingShader.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
@@ -186,14 +143,10 @@ namespace GrassSystem
             settings.cullingShader.SetFloat(PropWindFrequency, settings.windFrequency);
             settings.cullingShader.SetFloat(PropInteractorStrength, settings.interactorStrength);
             
-            // Create material instance
             materialInstance = new Material(settings.grassMaterial);
             materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
             
-            // Apply settings to material
             ApplySettingsToMaterial();
-            
-            // Calculate bounds
             UpdateBounds();
             
             isInitialized = true;
@@ -227,6 +180,27 @@ namespace GrassSystem
             materialInstance.SetFloat("_AlignNormals", settings.useAlignedNormals ? 1 : 0);
             
             materialInstance.SetFloat(PropInteractorStrength, settings.interactorStrength);
+            
+            materialInstance.SetFloat("_UseTerrainLightmap", settings.useTerrainLightmap ? 1 : 0);
+            materialInstance.SetFloat("_TerrainLightmapInfluence", settings.terrainLightmapInfluence);
+            
+            if (settings.useTerrainLightmap && settings.terrain != null)
+            {
+                TerrainData terrainData = settings.terrain.terrainData;
+                Vector3 terrainPos = settings.terrain.transform.position;
+                Vector3 terrainSize = terrainData.size;
+                
+                materialInstance.SetVector("_TerrainPosition", new Vector4(terrainPos.x, terrainPos.y, terrainPos.z, 0));
+                materialInstance.SetVector("_TerrainSize", new Vector4(terrainSize.x, terrainSize.y, terrainSize.z, 0));
+                
+                int lightmapIndex = settings.terrain.lightmapIndex;
+                if (lightmapIndex >= 0 && lightmapIndex < LightmapSettings.lightmaps.Length)
+                {
+                    var lightmapData = LightmapSettings.lightmaps[lightmapIndex];
+                    if (lightmapData.lightmapColor != null)
+                        materialInstance.SetTexture("_TerrainLightmap", lightmapData.lightmapColor);
+                }
+            }
         }
         
         private void UpdateBounds()
@@ -239,9 +213,7 @@ namespace GrassSystem
             
             renderBounds = new Bounds(grassData[0].position, Vector3.one);
             foreach (var data in grassData)
-            {
                 renderBounds.Encapsulate(data.position);
-            }
             renderBounds.Expand(settings.maxHeight * 2);
         }
         
@@ -268,10 +240,6 @@ namespace GrassSystem
             isInitialized = false;
         }
         
-        #endregion
-        
-        #region Rendering
-        
         private Camera GetCurrentCamera()
         {
             #if UNITY_EDITOR
@@ -286,17 +254,14 @@ namespace GrassSystem
         
         private void UpdateCulling(Camera cam)
         {
-            // Reset visible buffer and args
             visibleBuffer.SetCounterValue(0);
             argsReset[1] = 0;
             argsBuffer.SetData(argsReset);
             
-            // Update camera data
             Matrix4x4 vp = cam.projectionMatrix * cam.worldToCameraMatrix;
             settings.cullingShader.SetMatrix(PropViewProjMatrix, vp);
             settings.cullingShader.SetVector(PropCameraPos, cam.transform.position);
             
-            // Update frustum planes
             GeometryUtility.CalculateFrustumPlanes(cam, cameraPlanes);
             for (int i = 0; i < 6; i++)
             {
@@ -309,15 +274,14 @@ namespace GrassSystem
             }
             settings.cullingShader.SetVectorArray(PropFrustumPlanes, frustumPlanes);
             
-            // Update interactors
             UpdateInteractors();
-            
-            // Update time
             settings.cullingShader.SetFloat(PropTime, Time.time);
             
-            // Dispatch compute shader
             int threadGroups = Mathf.CeilToInt((float)grassData.Count / THREAD_GROUP_SIZE);
             settings.cullingShader.Dispatch(cullingKernel, threadGroups, 1, 1);
+            
+            argsBuffer.GetData(readbackArgs);
+            lastVisibleCount = (int)readbackArgs[1];
         }
         
         private void UpdateInteractors()
@@ -336,7 +300,6 @@ namespace GrassSystem
             settings.cullingShader.SetVectorArray(PropInteractors, interactorData);
             settings.cullingShader.SetInt(PropInteractorCount, count);
             
-            // Also set on material for vertex shader
             materialInstance.SetVectorArray(PropInteractors, interactorData);
             materialInstance.SetInt(PropInteractorCount, count);
         }
@@ -354,10 +317,6 @@ namespace GrassSystem
             Graphics.RenderMeshIndirect(rp, settings.grassMesh, argsBuffer);
         }
         
-        #endregion
-        
-        #region Debug
-        
         private void OnDrawGizmosSelected()
         {
             if (settings != null && settings.drawCullingBounds)
@@ -366,7 +325,5 @@ namespace GrassSystem
                 Gizmos.DrawWireCube(renderBounds.center, renderBounds.size);
             }
         }
-        
-        #endregion
     }
 }
