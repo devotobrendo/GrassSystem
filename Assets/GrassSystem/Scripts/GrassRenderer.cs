@@ -28,6 +28,7 @@ namespace GrassSystem
         private readonly uint[] argsReset = new uint[5] { 0, 0, 0, 0, 0 };
         private Vector4[] interactorData = new Vector4[16];
         private Material materialInstance;
+        private Mesh cachedMesh;
         
         private static readonly int PropSourceBuffer = Shader.PropertyToID("_SourceBuffer");
         private static readonly int PropVisibleBuffer = Shader.PropertyToID("_VisibleBuffer");
@@ -125,16 +126,17 @@ namespace GrassSystem
             
             visibleBuffer = new ComputeBuffer(grassData.Count, GrassDrawData.Stride, ComputeBufferType.Append);
             
-            // Get the active mesh based on mode
-            Mesh activeMesh = settings.GetActiveMesh(GetInstanceID());
-            if (activeMesh == null)
+            // Get and cache the active mesh based on mode
+            // This ensures consistency between argsBuffer index count and rendered mesh
+            cachedMesh = settings.GetActiveMesh(GetInstanceID());
+            if (cachedMesh == null)
             {
                 Debug.LogError("GrassRenderer: No valid mesh available!", this);
                 return;
             }
             
             argsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, sizeof(uint) * 5);
-            argsReset[0] = activeMesh.GetIndexCount(0);
+            argsReset[0] = cachedMesh.GetIndexCount(0);
             argsReset[1] = 0;
             argsBuffer.SetData(argsReset);
             
@@ -330,8 +332,8 @@ namespace GrassSystem
         
         private void Render()
         {
-            Mesh activeMesh = settings.GetActiveMesh(GetInstanceID());
-            if (activeMesh == null) return;
+            // Use cached mesh to ensure consistency with argsBuffer
+            if (cachedMesh == null) return;
             
             var rp = new RenderParams(materialInstance)
             {
@@ -341,7 +343,7 @@ namespace GrassSystem
                 layer = gameObject.layer
             };
             
-            Graphics.RenderMeshIndirect(rp, activeMesh, argsBuffer);
+            Graphics.RenderMeshIndirect(rp, cachedMesh, argsBuffer);
         }
         
         private void OnDrawGizmosSelected()

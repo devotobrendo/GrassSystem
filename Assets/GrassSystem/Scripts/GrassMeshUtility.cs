@@ -73,8 +73,9 @@ namespace GrassSystem
             mesh.triangles = triangles;
             mesh.RecalculateBounds();
             
-            // Mark as non-readable to save memory after upload to GPU
-            mesh.UploadMeshData(true);
+            // Keep mesh readable and prevent Unity from auto-destroying it
+            // This avoids issues with static cache being invalidated during domain reloads
+            mesh.hideFlags = HideFlags.HideAndDontSave;
             
             return mesh;
         }

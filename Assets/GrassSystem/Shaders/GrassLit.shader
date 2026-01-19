@@ -345,6 +345,13 @@ Shader "GrassSystem/GrassLit"
                 float _WindFrequency;
                 float _Translucency;
                 float _AlignNormals;
+                float _UseTerrainLightmap;
+                float _TerrainLightmapInfluence;
+                float4 _TerrainPosition;
+                float4 _TerrainSize;
+                float _UseOnlyAlbedoColor;
+                float _UseUniformScale;
+                float4 _MeshRotation;
             CBUFFER_END
             
             struct Attributes
@@ -385,7 +392,9 @@ Shader "GrassSystem/GrassLit"
                     grassData.distanceScale,
                     windOffset,
                     float3(0, 0, 0),
-                    input.uv.y
+                    input.uv.y,
+                    _UseUniformScale,
+                    _MeshRotation.xyz
                 );
                 
                 float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
