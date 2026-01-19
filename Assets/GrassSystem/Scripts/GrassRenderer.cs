@@ -125,8 +125,16 @@ namespace GrassSystem
             
             visibleBuffer = new ComputeBuffer(grassData.Count, GrassDrawData.Stride, ComputeBufferType.Append);
             
+            // Get the active mesh based on mode
+            Mesh activeMesh = settings.GetActiveMesh(GetInstanceID());
+            if (activeMesh == null)
+            {
+                Debug.LogError("GrassRenderer: No valid mesh available!", this);
+                return;
+            }
+            
             argsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, sizeof(uint) * 5);
-            argsReset[0] = settings.grassMesh.GetIndexCount(0);
+            argsReset[0] = activeMesh.GetIndexCount(0);
             argsReset[1] = 0;
             argsBuffer.SetData(argsReset);
             
@@ -200,6 +208,22 @@ namespace GrassSystem
                     if (lightmapData.lightmapColor != null)
                         materialInstance.SetTexture("_TerrainLightmap", lightmapData.lightmapColor);
                 }
+            }
+            
+            // Custom Mesh Mode settings
+            bool isCustomMeshMode = settings.grassMode == GrassMode.CustomMesh;
+            materialInstance.SetFloat("_UseOnlyAlbedoColor", (isCustomMeshMode && settings.useOnlyAlbedoColor) ? 1 : 0);
+            materialInstance.SetFloat("_UseUniformScale", isCustomMeshMode ? 1 : 0);
+            
+            if (isCustomMeshMode)
+            {
+                // Convert degrees to radians for shader
+                Vector3 rotationRad = settings.meshRotationOffset * Mathf.Deg2Rad;
+                materialInstance.SetVector("_MeshRotation", new Vector4(rotationRad.x, rotationRad.y, rotationRad.z, 0));
+            }
+            else
+            {
+                materialInstance.SetVector("_MeshRotation", Vector4.zero);
             }
         }
         
@@ -306,6 +330,9 @@ namespace GrassSystem
         
         private void Render()
         {
+            Mesh activeMesh = settings.GetActiveMesh(GetInstanceID());
+            if (activeMesh == null) return;
+            
             var rp = new RenderParams(materialInstance)
             {
                 worldBounds = renderBounds,
@@ -314,7 +341,7 @@ namespace GrassSystem
                 layer = gameObject.layer
             };
             
-            Graphics.RenderMeshIndirect(rp, settings.grassMesh, argsBuffer);
+            Graphics.RenderMeshIndirect(rp, activeMesh, argsBuffer);
         }
         
         private void OnDrawGizmosSelected()

@@ -14,30 +14,37 @@ MonoBehaviour:
   m_EditorClassIdentifier: GrassSystem::GrassSystem.SO_GrassSettings
   cullingShader: {fileID: 7200000, guid: 780ebd41b14bcfa4ea235a416c62a893, type: 3}
   grassMaterial: {fileID: 2100000, guid: 336b1f5d2af7535449977acea87aae1b, type: 2}
-  grassMesh: {fileID: 4300000, guid: 203e874fba1f26e40880d095de01f36d, type: 2}
-  minWidth: 0.05
-  maxWidth: 0.15
-  minHeight: 0.2
-  maxHeight: 0.6
+  grassMesh: {fileID: 8254687373856176130, guid: e95e173edd8242a46a4a9e77d38c72e8, type: 3}
+  meshRotation: {x: 90, y: 90, z: 0}
+  tiltVariation: 45
+  useAlbedoColor: 1
+  minWidth: 1
+  maxWidth: 1
+  minHeight: 1
+  maxHeight: 1
   windSpeed: 0.28
-  windStrength: 0.085
-  windFrequency: 0.051
+  windStrength: 0.357
+  windFrequency: 0.04
   minFadeDistance: 30
   maxDrawDistance: 50
   cullingTreeDepth: 4
-  useCheckeredPattern: 1
+  useCheckeredPattern: 0
   patternColorA: {r: 0.2, g: 0.5, b: 0.1, a: 1}
   patternColorB: {r: 0.15, g: 0.45, b: 0.08, a: 1}
   patternScale: 2
   useTipCutout: 0
   tipMaskTexture: {fileID: 0}
   tipCutoffHeight: 0.8
-  albedoTexture: {fileID: 2800000, guid: 2c4e51a73d7c73d40935ba83394b9014, type: 3}
-  normalMap: {fileID: 0}
-  topTint: {r: 0.8, g: 1, b: 0.6, a: 1}
-  bottomTint: {r: 0.2, g: 0.4, b: 0.1, a: 1}
+  albedoTexture: {fileID: 2800000, guid: 4db7e83740caea34790e437606913c5a, type: 3}
+  normalMap: {fileID: 2800000, guid: 50dce4c614b14de4fbc3eb3d2b36739e, type: 3}
+  useTextureAtlas: 0
+  atlasColumns: 2
+  atlasRows: 2
+  atlasTileIndex: 3
+  topTint: {r: 0.7666528, g: 1, b: 0, a: 1}
+  bottomTint: {r: 0.4528302, g: 0, b: 0, a: 1}
   translucency: 0.3
-  useAlignedNormals: 0
+  useAlignedNormals: 1
   useTerrainLightmap: 0
   terrain: {fileID: 0}
   terrainLightmapInfluence: 0.5

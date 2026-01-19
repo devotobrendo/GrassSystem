@@ -145,6 +145,13 @@ namespace GrassSystem
         {
             if (toolSettings == null) return;
             
+            // Show current mode info
+            if (targetRenderer != null && targetRenderer.settings != null)
+            {
+                var mode = targetRenderer.settings.grassMode;
+                EditorGUILayout.HelpBox($"Mode: {mode}", MessageType.None);
+            }
+            
             EditorGUILayout.LabelField("Brush Settings", EditorStyles.boldLabel);
             toolSettings.brushSize = EditorGUILayout.Slider("Brush Size", toolSettings.brushSize, 0.1f, 50f);
             
@@ -154,16 +161,41 @@ namespace GrassSystem
                 toolSettings.normalLimit = EditorGUILayout.Slider("Normal Limit", toolSettings.normalLimit, 0f, 1f);
                 
                 EditorGUILayout.Space(5);
-                EditorGUILayout.LabelField("Blade Dimensions", EditorStyles.boldLabel);
-                toolSettings.bladeWidth = EditorGUILayout.Slider("Width", toolSettings.bladeWidth, 0.01f, 0.5f);
-                toolSettings.bladeHeight = EditorGUILayout.Slider("Height", toolSettings.bladeHeight, 0.1f, 2f);
+                
+                // Show different options based on mode
+                bool isCustomMeshMode = targetRenderer != null && 
+                                        targetRenderer.settings != null && 
+                                        targetRenderer.settings.grassMode == GrassMode.CustomMesh;
+                
+                if (isCustomMeshMode)
+                {
+                    EditorGUILayout.LabelField("Blade Size", EditorStyles.boldLabel);
+                    toolSettings.bladeSize = EditorGUILayout.Slider("Size", toolSettings.bladeSize, 0.1f, 3f);
+                    EditorGUILayout.HelpBox("Custom Mesh mode uses uniform scale.", MessageType.Info);
+                }
+                else
+                {
+                    EditorGUILayout.LabelField("Blade Dimensions", EditorStyles.boldLabel);
+                    toolSettings.bladeWidth = EditorGUILayout.Slider("Width", toolSettings.bladeWidth, 0.01f, 0.5f);
+                    toolSettings.bladeHeight = EditorGUILayout.Slider("Height", toolSettings.bladeHeight, 0.1f, 2f);
+                }
                 
                 EditorGUILayout.Space(5);
                 EditorGUILayout.LabelField("Color", EditorStyles.boldLabel);
-                toolSettings.brushColor = EditorGUILayout.ColorField("Base Color", toolSettings.brushColor);
-                toolSettings.colorVariationR = EditorGUILayout.Slider("Red Variation", toolSettings.colorVariationR, 0f, 0.3f);
-                toolSettings.colorVariationG = EditorGUILayout.Slider("Green Variation", toolSettings.colorVariationG, 0f, 0.3f);
-                toolSettings.colorVariationB = EditorGUILayout.Slider("Blue Variation", toolSettings.colorVariationB, 0f, 0.3f);
+                
+                // Show color options only if not using only albedo color
+                bool useOnlyAlbedo = isCustomMeshMode && targetRenderer.settings.useOnlyAlbedoColor;
+                if (useOnlyAlbedo)
+                {
+                    EditorGUILayout.HelpBox("Color settings disabled: 'Use Only Albedo Color' is enabled in settings.", MessageType.Info);
+                }
+                else
+                {
+                    toolSettings.brushColor = EditorGUILayout.ColorField("Base Color", toolSettings.brushColor);
+                    toolSettings.colorVariationR = EditorGUILayout.Slider("Red Variation", toolSettings.colorVariationR, 0f, 0.3f);
+                    toolSettings.colorVariationG = EditorGUILayout.Slider("Green Variation", toolSettings.colorVariationG, 0f, 0.3f);
+                    toolSettings.colorVariationB = EditorGUILayout.Slider("Blue Variation", toolSettings.colorVariationB, 0f, 0.3f);
+                }
                 
                 EditorGUILayout.Space(5);
                 toolSettings.paintMask = EditorGUILayout.MaskField("Paint Mask", 
@@ -172,7 +204,17 @@ namespace GrassSystem
             }
             else if (currentMode == PaintMode.Height)
             {
-                toolSettings.heightBrushValue = EditorGUILayout.Slider("Height Value", toolSettings.heightBrushValue, 0.1f, 2f);
+                bool isCustomMeshMode = targetRenderer != null && 
+                                        targetRenderer.settings != null && 
+                                        targetRenderer.settings.grassMode == GrassMode.CustomMesh;
+                if (isCustomMeshMode)
+                {
+                    toolSettings.bladeSize = EditorGUILayout.Slider("Size Value", toolSettings.bladeSize, 0.1f, 3f);
+                }
+                else
+                {
+                    toolSettings.heightBrushValue = EditorGUILayout.Slider("Height Value", toolSettings.heightBrushValue, 0.1f, 2f);
+                }
             }
             else if (currentMode == PaintMode.Pattern)
             {
@@ -281,6 +323,11 @@ namespace GrassSystem
         {
             int count = Mathf.RoundToInt(toolSettings.brushSize * toolSettings.density);
             
+            // Determine if we're in custom mesh mode
+            bool isCustomMeshMode = targetRenderer != null && 
+                                    targetRenderer.settings != null && 
+                                    targetRenderer.settings.grassMode == GrassMode.CustomMesh;
+            
             for (int i = 0; i < count; i++)
             {
                 Vector2 offset = Random.insideUnitCircle * toolSettings.brushSize;
@@ -296,7 +343,21 @@ namespace GrassSystem
                     col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
                     col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
                     
-                    GrassData data = new GrassData(hit.point, hit.normal, toolSettings.bladeWidth, toolSettings.bladeHeight, col, toolSettings.patternBrushValue);
+                    // Use size for custom mesh mode, width/height for default mode
+                    float width, height;
+                    if (isCustomMeshMode)
+                    {
+                        // For custom mesh mode, width stores the uniform scale
+                        width = toolSettings.bladeSize;
+                        height = 1f; // Height is ignored in uniform scale mode
+                    }
+                    else
+                    {
+                        width = toolSettings.bladeWidth;
+                        height = toolSettings.bladeHeight;
+                    }
+                    
+                    GrassData data = new GrassData(hit.point, hit.normal, width, height, col, toolSettings.patternBrushValue);
                     grassList.Add(data);
                 }
             }
@@ -445,7 +506,13 @@ namespace GrassSystem
                 col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
                 col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
                 
-                GrassData data = new GrassData(pos, normal, toolSettings.bladeWidth, toolSettings.bladeHeight, col, 0f);
+                // Use size for custom mesh mode, width/height for default mode
+                bool isCustomMeshMode = targetRenderer.settings != null && 
+                                        targetRenderer.settings.grassMode == GrassMode.CustomMesh;
+                float width = isCustomMeshMode ? toolSettings.bladeSize : toolSettings.bladeWidth;
+                float height = isCustomMeshMode ? 1f : toolSettings.bladeHeight;
+                
+                GrassData data = new GrassData(pos, normal, width, height, col, 0f);
                 grassList.Add(data);
                 added++;
             }

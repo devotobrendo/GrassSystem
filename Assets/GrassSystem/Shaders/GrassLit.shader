@@ -39,6 +39,11 @@ Shader "GrassSystem/GrassLit"
         _TerrainLightmapInfluence ("Lightmap Influence", Range(0, 1)) = 0.5
         _TerrainPosition ("Terrain Position", Vector) = (0, 0, 0, 0)
         _TerrainSize ("Terrain Size", Vector) = (1, 1, 1, 0)
+        
+        [Header(Custom Mesh Mode)]
+        [Toggle] _UseOnlyAlbedoColor ("Use Only Albedo Color", Float) = 0
+        [Toggle] _UseUniformScale ("Use Uniform Scale", Float) = 0
+        _MeshRotation ("Mesh Rotation (Radians)", Vector) = (0, 0, 0, 0)
     }
     
     SubShader
@@ -104,6 +109,9 @@ Shader "GrassSystem/GrassLit"
                 float _TerrainLightmapInfluence;
                 float4 _TerrainPosition;
                 float4 _TerrainSize;
+                float _UseOnlyAlbedoColor;
+                float _UseUniformScale;
+                float4 _MeshRotation;
             CBUFFER_END
             
             struct Attributes
@@ -174,7 +182,9 @@ Shader "GrassSystem/GrassLit"
                     grassData.distanceScale,
                     windOffset,
                     interactionOffset,
-                    input.uv.y
+                    input.uv.y,
+                    _UseUniformScale,
+                    _MeshRotation.xyz
                 );
                 
                 output.positionWS = worldPos;
@@ -200,10 +210,20 @@ Shader "GrassSystem/GrassLit"
             
             half4 frag(Varyings input) : SV_Target
             {
-                half4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
-                half3 normalTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, input.uv));
+                // Default mode: no textures, just solid color
+                // Custom mesh mode: sample textures
+                bool isDefaultMode = _UseUniformScale < 0.5;
                 
-                if (_UseTipCutout > 0.5)
+                half4 albedo = half4(1, 1, 1, 1);
+                half3 normalTS = half3(0, 0, 1);
+                
+                if (!isDefaultMode)
+                {
+                    albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                    normalTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, input.uv));
+                }
+                
+                if (_UseTipCutout > 0.5 && !isDefaultMode)
                 {
                     half tipMask = SAMPLE_TEXTURE2D(_TipMask, sampler_TipMask, input.uv).a;
                     float tipCut = CalculateTipCutout(input.uv.y, _TipCutoff);
@@ -217,8 +237,19 @@ Shader "GrassSystem/GrassLit"
                 );
                 float3 normalWS = mul(normalTS, tangentToWorld);
                 
-                half3 baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
-                baseColor *= input.grassColor;
+                // Color calculation based on mode
+                half3 baseColor;
+                if (_UseOnlyAlbedoColor > 0.5)
+                {
+                    // Custom Mesh Mode with Use Only Albedo: use only albedo color
+                    baseColor = half3(1, 1, 1);
+                }
+                else
+                {
+                    // Default Mode or Custom without Use Only Albedo: apply tints and grass color
+                    baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
+                    baseColor *= input.grassColor;
+                }
                 
                 if (_UseTerrainLightmap > 0.5)
                 {
@@ -236,7 +267,11 @@ Shader "GrassSystem/GrassLit"
                     baseColor *= patternColor;
                 }
                 
-                baseColor *= albedo.rgb;
+                // Only apply albedo texture in Custom Mesh mode
+                if (!isDefaultMode)
+                {
+                    baseColor *= albedo.rgb;
+                }
                 
                 InputData inputData = (InputData)0;
                 inputData.positionWS = input.positionWS;

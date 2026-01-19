@@ -12,13 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 36596aba45ff8de498fed149a9a9a7db, type: 3}
   m_Name: GrassToolSettings
   m_EditorClassIdentifier: GrassSystem.Editor::GrassSystem.SO_GrassToolSettings
-  brushSize: 5
-  density: 1
+  brushSize: 11.3
+  density: 10
   normalLimit: 0.8
-  bladeWidth: 0.1
-  bladeHeight: 0.4
+  useSettingsDimensions: 1
+  bladeWidth: 1
+  bladeHeight: 1
   heightBrushValue: 0.5
-  brushColor: {r: 1, g: 1, b: 1, a: 1}
+  brushColor: {r: 0.3, g: 0.6, b: 0.2, a: 1}
   colorVariationR: 0.1
   colorVariationG: 0.15
   colorVariationB: 0.1
