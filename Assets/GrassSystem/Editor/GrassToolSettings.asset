@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 36596aba45ff8de498fed149a9a9a7db, type: 3}
   m_Name: GrassToolSettings
   m_EditorClassIdentifier: GrassSystem.Editor::GrassSystem.SO_GrassToolSettings
-  brushSize: 7.7
+  brushSize: 50
   density: 10
   normalLimit: 0.8
   useCustomSize: 1
@@ -20,8 +20,8 @@ MonoBehaviour:
   maxBladeWidth: 0.08
   minBladeHeight: 0.15
   maxBladeHeight: 0.35
-  minBladeSize: 1.81
-  maxBladeSize: 2.96
+  minBladeSize: 0.6
+  maxBladeSize: 1.28
   heightBrushValue: 0.5
   brushColor: {r: 1, g: 1, b: 1, a: 1}
   colorVariationR: 0.1

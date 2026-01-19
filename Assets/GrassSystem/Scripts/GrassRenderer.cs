@@ -82,13 +82,86 @@ namespace GrassSystem
         
         private void OnEnable()
         {
+            LogEvent("OnEnable");
+            
+            // Subscribe to scene events for proper cleanup
+            #if UNITY_EDITOR
+            UnityEditor.SceneManagement.EditorSceneManager.sceneClosing += OnSceneClosing;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += OnSceneOpened;
+            UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+            #endif
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
+            
             if (grassData.Count > 0)
                 Initialize();
         }
         
         private void OnDisable()
         {
+            // Unsubscribe from events
+            #if UNITY_EDITOR
+            UnityEditor.SceneManagement.EditorSceneManager.sceneClosing -= OnSceneClosing;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneOpened -= OnSceneOpened;
+            UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+            #endif
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            
             Cleanup();
+        }
+        
+        private void OnDestroy()
+        {
+            LogEvent("OnDestroy");
+            Cleanup();
+        }
+        
+        private void OnApplicationQuit()
+        {
+            LogEvent("OnApplicationQuit");
+            Cleanup();
+        }
+        
+        #if UNITY_EDITOR
+        private void OnSceneClosing(UnityEngine.SceneManagement.Scene scene, bool removingScene)
+        {
+            if (gameObject.scene == scene)
+            {
+                LogEvent($"OnSceneClosing ({scene.name})");
+                Cleanup();
+            }
+        }
+        
+        private void OnSceneOpened(UnityEngine.SceneManagement.Scene scene, UnityEditor.SceneManagement.OpenSceneMode mode)
+        {
+            // Reinitialize if needed after scene reload
+            if (gameObject.scene == scene && grassData.Count > 0 && !isInitialized)
+            {
+                LogEvent($"OnSceneOpened ({scene.name})");
+                Initialize();
+            }
+        }
+        
+        private void OnBeforeAssemblyReload()
+        {
+            LogEvent("OnBeforeAssemblyReload (Domain Reload)");
+            // Critical: cleanup before domain reload to prevent buffer leaks
+            Cleanup();
+        }
+        #endif
+        
+        private void OnSceneUnloaded(UnityEngine.SceneManagement.Scene scene)
+        {
+            if (gameObject.scene == scene)
+            {
+                LogEvent($"OnSceneUnloaded ({scene.name})");
+                Cleanup();
+            }
+        }
+        
+        private void LogEvent(string eventName)
+        {
+            if (GrassPerformanceOverlay.LogLifecycleEventsEnabled)
+                Debug.Log($"[GrassRenderer] {eventName} - Grass: {grassData.Count}", this);
         }
         
         private void Update()
@@ -106,6 +179,12 @@ namespace GrassSystem
         
         private void Initialize()
         {
+            // Safety: cleanup any existing buffers before reinitializing
+            if (sourceBuffer != null || visibleBuffer != null || argsBuffer != null)
+            {
+                Cleanup();
+            }
+            
             if (settings == null)
             {
                 Debug.LogWarning("GrassRenderer: No settings assigned!", this);
@@ -249,6 +328,8 @@ namespace GrassSystem
         
         private void Cleanup()
         {
+            LogEvent("Cleanup - Releasing buffers");
+            
             sourceBuffer?.Release();
             visibleBuffer?.Release();
             argsBuffer?.Release();
@@ -310,8 +391,22 @@ namespace GrassSystem
             int threadGroups = Mathf.CeilToInt((float)grassData.Count / THREAD_GROUP_SIZE);
             settings.cullingShader.Dispatch(cullingKernel, threadGroups, 1, 1);
             
-            argsBuffer.GetData(readbackArgs);
-            lastVisibleCount = (int)readbackArgs[1];
+            // Use async readback to avoid GPU stall (critical for performance)
+            // Only do readback in Editor for debugging - skip in builds for max performance
+            #if UNITY_EDITOR
+            if (argsBuffer != null && argsBuffer.IsValid())
+            {
+                AsyncGPUReadback.Request(argsBuffer, (request) =>
+                {
+                    if (!request.hasError && request.done)
+                    {
+                        var data = request.GetData<uint>();
+                        if (data.Length > 1)
+                            lastVisibleCount = (int)data[1];
+                    }
+                });
+            }
+            #endif
         }
         
         private void UpdateInteractors()

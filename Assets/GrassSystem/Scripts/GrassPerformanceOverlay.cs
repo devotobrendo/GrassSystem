@@ -16,6 +16,15 @@ namespace GrassSystem
         [Range(0f, 1f)]
         public float backgroundAlpha = 0.7f;
         
+        [Header("Debug")]
+        [Tooltip("Log lifecycle events (Initialize, Cleanup, Scene events) to Console")]
+        public bool logLifecycleEvents = false;
+        
+        /// <summary>
+        /// Static accessor for other scripts to check if logging is enabled
+        /// </summary>
+        public static bool LogLifecycleEventsEnabled { get; private set; }
+        
         [Header("Target Benchmarks")]
         public int targetFPS = 30;
         
@@ -44,6 +53,13 @@ namespace GrassSystem
         {
             grassRenderer = FindAnyObjectByType<GrassRenderer>();
             Application.targetFrameRate = targetFPS;
+            LogLifecycleEventsEnabled = logLifecycleEvents;
+        }
+        
+        private void OnValidate()
+        {
+            // Update static flag when inspector value changes
+            LogLifecycleEventsEnabled = logLifecycleEvents;
         }
         
         private void Update()
@@ -131,21 +147,38 @@ namespace GrassSystem
             GUI.Label(new Rect(x + 10, y + 5, width - 20, height - 10), sb.ToString(), labelStyle);
         }
         
+        private Texture2D bgTexture;
+        
         private void InitStyles()
         {
             if (boxStyle != null) return;
             
             boxStyle = new GUIStyle(GUI.skin.box);
-            Texture2D bgTex = new Texture2D(1, 1);
-            bgTex.SetPixel(0, 0, new Color(0.1f, 0.1f, 0.15f, backgroundAlpha));
-            bgTex.Apply();
-            boxStyle.normal.background = bgTex;
+            bgTexture = new Texture2D(1, 1);
+            bgTexture.SetPixel(0, 0, new Color(0.1f, 0.1f, 0.15f, backgroundAlpha));
+            bgTexture.Apply();
+            boxStyle.normal.background = bgTexture;
             
             labelStyle = new GUIStyle(GUI.skin.label);
             labelStyle.fontSize = fontSize;
             labelStyle.richText = true;
             labelStyle.wordWrap = true;
             labelStyle.normal.textColor = Color.white;
+        }
+        
+        private void OnDisable()
+        {
+            // Cleanup to prevent texture leak
+            if (bgTexture != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(bgTexture);
+                else
+                    DestroyImmediate(bgTexture);
+                bgTexture = null;
+            }
+            boxStyle = null;
+            labelStyle = null;
         }
         
         public void ResetStats()

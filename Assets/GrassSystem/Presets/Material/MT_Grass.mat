@@ -86,6 +86,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _TerrainLightmap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _TipMask:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -109,6 +113,7 @@ Material:
     - _AlphaClip: 0
     - _AlphaCutoff: 0.5
     - _AlphaToMask: 0
+    - _AmbientBoost: 1
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
     - _BumpScale: 1
@@ -124,6 +129,8 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
+    - _LightProbeInfluence: 1
+    - _MaxTiltAngle: 0.26
     - _Metallic: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.005
@@ -136,10 +143,15 @@ Material:
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
+    - _TerrainLightmapInfluence: 0.5
+    - _TiltVariation: 0.7
     - _TipCutoff: 0.8
     - _Translucency: 0.3
+    - _UseOnlyAlbedoColor: 0
     - _UsePattern: 0
+    - _UseTerrainLightmap: 0
     - _UseTipCutout: 0
+    - _UseUniformScale: 0
     - _WindFrequency: 0.1
     - _WindSpeed: 1
     - _WindStrength: 0.3
@@ -151,9 +163,12 @@ Material:
     - _BottomTint: {r: 0.19999996, g: 0.39999998, b: 0.09999997, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _MeshRotation: {r: 0, g: 0, b: 0, a: 0}
     - _PatternColorA: {r: 0.19999996, g: 0.5, b: 0.09999997, a: 1}
     - _PatternColorB: {r: 0.14999998, g: 0.45, b: 0.079999976, a: 1}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
+    - _TerrainPosition: {r: 0, g: 0, b: 0, a: 0}
+    - _TerrainSize: {r: 1, g: 1, b: 1, a: 0}
     - _TopTint: {r: 0.8, g: 1, b: 0.6, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
