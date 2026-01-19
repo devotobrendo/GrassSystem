@@ -167,17 +167,48 @@ namespace GrassSystem
                                         targetRenderer.settings != null && 
                                         targetRenderer.settings.grassMode == GrassMode.CustomMesh;
                 
+                // Toggle for custom size override
+                toolSettings.useCustomSize = EditorGUILayout.Toggle("Use Custom Size", toolSettings.useCustomSize);
+                
                 if (isCustomMeshMode)
                 {
                     EditorGUILayout.LabelField("Blade Size", EditorStyles.boldLabel);
-                    toolSettings.bladeSize = EditorGUILayout.Slider("Size", toolSettings.bladeSize, 0.1f, 3f);
-                    EditorGUILayout.HelpBox("Custom Mesh mode uses uniform scale.", MessageType.Info);
+                    if (toolSettings.useCustomSize)
+                    {
+                        toolSettings.minBladeSize = EditorGUILayout.Slider("Min Size", toolSettings.minBladeSize, 0.1f, 3f);
+                        toolSettings.maxBladeSize = EditorGUILayout.Slider("Max Size", toolSettings.maxBladeSize, 0.1f, 3f);
+                    }
+                    else
+                    {
+                        var settings = targetRenderer.settings;
+                        EditorGUI.BeginDisabledGroup(true);
+                        EditorGUILayout.Slider("Min Size (from Settings)", settings.minSize, 0.1f, 3f);
+                        EditorGUILayout.Slider("Max Size (from Settings)", settings.maxSize, 0.1f, 3f);
+                        EditorGUI.EndDisabledGroup();
+                        EditorGUILayout.HelpBox("Enable 'Use Custom Size' to override.", MessageType.Info);
+                    }
                 }
                 else
                 {
                     EditorGUILayout.LabelField("Blade Dimensions", EditorStyles.boldLabel);
-                    toolSettings.bladeWidth = EditorGUILayout.Slider("Width", toolSettings.bladeWidth, 0.01f, 0.5f);
-                    toolSettings.bladeHeight = EditorGUILayout.Slider("Height", toolSettings.bladeHeight, 0.1f, 2f);
+                    if (toolSettings.useCustomSize)
+                    {
+                        toolSettings.minBladeWidth = EditorGUILayout.Slider("Min Width", toolSettings.minBladeWidth, 0.01f, 0.5f);
+                        toolSettings.maxBladeWidth = EditorGUILayout.Slider("Max Width", toolSettings.maxBladeWidth, 0.01f, 0.5f);
+                        toolSettings.minBladeHeight = EditorGUILayout.Slider("Min Height", toolSettings.minBladeHeight, 0.1f, 2f);
+                        toolSettings.maxBladeHeight = EditorGUILayout.Slider("Max Height", toolSettings.maxBladeHeight, 0.1f, 2f);
+                    }
+                    else
+                    {
+                        var settings = targetRenderer.settings;
+                        EditorGUI.BeginDisabledGroup(true);
+                        EditorGUILayout.Slider("Min Width (from Settings)", settings.minWidth, 0.01f, 0.3f);
+                        EditorGUILayout.Slider("Max Width (from Settings)", settings.maxWidth, 0.01f, 0.3f);
+                        EditorGUILayout.Slider("Min Height (from Settings)", settings.minHeight, 0.05f, 1.5f);
+                        EditorGUILayout.Slider("Max Height (from Settings)", settings.maxHeight, 0.05f, 1.5f);
+                        EditorGUI.EndDisabledGroup();
+                        EditorGUILayout.HelpBox("Enable 'Use Custom Size' to override.", MessageType.Info);
+                    }
                 }
                 
                 EditorGUILayout.Space(5);
@@ -209,7 +240,7 @@ namespace GrassSystem
                                         targetRenderer.settings.grassMode == GrassMode.CustomMesh;
                 if (isCustomMeshMode)
                 {
-                    toolSettings.bladeSize = EditorGUILayout.Slider("Size Value", toolSettings.bladeSize, 0.1f, 3f);
+                    toolSettings.minBladeSize = EditorGUILayout.Slider("Size Value", toolSettings.minBladeSize, 0.1f, 3f);
                 }
                 else
                 {
@@ -328,6 +359,28 @@ namespace GrassSystem
                                     targetRenderer.settings != null && 
                                     targetRenderer.settings.grassMode == GrassMode.CustomMesh;
             
+            // Get min/max values based on useCustomSize toggle
+            float minWidth, maxWidth, minHeight, maxHeight, minSize, maxSize;
+            if (toolSettings.useCustomSize)
+            {
+                minWidth = toolSettings.minBladeWidth;
+                maxWidth = toolSettings.maxBladeWidth;
+                minHeight = toolSettings.minBladeHeight;
+                maxHeight = toolSettings.maxBladeHeight;
+                minSize = toolSettings.minBladeSize;
+                maxSize = toolSettings.maxBladeSize;
+            }
+            else
+            {
+                var settings = targetRenderer.settings;
+                minWidth = settings.minWidth;
+                maxWidth = settings.maxWidth;
+                minHeight = settings.minHeight;
+                maxHeight = settings.maxHeight;
+                minSize = settings.minSize;
+                maxSize = settings.maxSize;
+            }
+            
             for (int i = 0; i < count; i++)
             {
                 Vector2 offset = Random.insideUnitCircle * toolSettings.brushSize;
@@ -348,13 +401,13 @@ namespace GrassSystem
                     if (isCustomMeshMode)
                     {
                         // For custom mesh mode, width stores the uniform scale
-                        width = toolSettings.bladeSize;
+                        width = Random.Range(minSize, maxSize);
                         height = 1f; // Height is ignored in uniform scale mode
                     }
                     else
                     {
-                        width = toolSettings.bladeWidth;
-                        height = toolSettings.bladeHeight;
+                        width = Random.Range(minWidth, maxWidth);
+                        height = Random.Range(minHeight, maxHeight);
                     }
                     
                     GrassData data = new GrassData(hit.point, hit.normal, width, height, col, toolSettings.patternBrushValue);
@@ -506,11 +559,44 @@ namespace GrassSystem
                 col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
                 col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
                 
-                // Use size for custom mesh mode, width/height for default mode
+                // Determine if we're in custom mesh mode
                 bool isCustomMeshMode = targetRenderer.settings != null && 
                                         targetRenderer.settings.grassMode == GrassMode.CustomMesh;
-                float width = isCustomMeshMode ? toolSettings.bladeSize : toolSettings.bladeWidth;
-                float height = isCustomMeshMode ? 1f : toolSettings.bladeHeight;
+                
+                // Get min/max values based on useCustomSize toggle
+                float minWidth, maxWidth, minHeight, maxHeight, minSize, maxSize;
+                if (toolSettings.useCustomSize)
+                {
+                    minWidth = toolSettings.minBladeWidth;
+                    maxWidth = toolSettings.maxBladeWidth;
+                    minHeight = toolSettings.minBladeHeight;
+                    maxHeight = toolSettings.maxBladeHeight;
+                    minSize = toolSettings.minBladeSize;
+                    maxSize = toolSettings.maxBladeSize;
+                }
+                else
+                {
+                    var settings = targetRenderer.settings;
+                    minWidth = settings.minWidth;
+                    maxWidth = settings.maxWidth;
+                    minHeight = settings.minHeight;
+                    maxHeight = settings.maxHeight;
+                    minSize = settings.minSize;
+                    maxSize = settings.maxSize;
+                }
+                
+                // Use size for custom mesh mode, width/height for default mode
+                float width, height;
+                if (isCustomMeshMode)
+                {
+                    width = Random.Range(minSize, maxSize);
+                    height = 1f;
+                }
+                else
+                {
+                    width = Random.Range(minWidth, maxWidth);
+                    height = Random.Range(minHeight, maxHeight);
+                }
                 
                 GrassData data = new GrassData(pos, normal, width, height, col, 0f);
                 grassList.Add(data);

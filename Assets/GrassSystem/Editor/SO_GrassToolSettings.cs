@@ -17,17 +17,28 @@ namespace GrassSystem
         [Range(0f, 1f)]
         public float normalLimit = 0.8f;
         
-        [Header("Blade Dimensions")]
+        [Header("Size Override")]
+        [Tooltip("When enabled, use custom min/max values below instead of settings")]
+        public bool useCustomSize = false;
+        
+        [Header("Blade Dimensions (Default Mode - Custom Override)")]
         [Range(0.01f, 0.5f)]
-        public float bladeWidth = 0.1f;
+        public float minBladeWidth = 0.03f;
+        [Range(0.01f, 0.5f)]
+        public float maxBladeWidth = 0.08f;
         
         [Range(0.1f, 2f)]
-        public float bladeHeight = 0.4f;
+        public float minBladeHeight = 0.15f;
+        [Range(0.1f, 2f)]
+        public float maxBladeHeight = 0.35f;
         
-        [Header("Blade Size (Custom Mesh Mode)")]
+        [Header("Blade Size (Custom Mesh Mode - Custom Override)")]
         [Range(0.1f, 3f)]
-        [Tooltip("Uniform scale for custom meshes")]
-        public float bladeSize = 1f;
+        [Tooltip("Minimum uniform scale for custom meshes")]
+        public float minBladeSize = 0.5f;
+        [Range(0.1f, 3f)]
+        [Tooltip("Maximum uniform scale for custom meshes")]
+        public float maxBladeSize = 1.2f;
         
         [Header("Height Brush")]
         [Range(0.1f, 2f)]
@@ -61,10 +72,14 @@ namespace GrassSystem
             brushSize = 5f;
             density = 2f;  // Higher density for Zelda-style grass fields
             normalLimit = 0.8f;
+            useCustomSize = false;
             // Zelda BOTW-style blade dimensions
-            bladeWidth = 0.05f;
-            bladeHeight = 0.25f;
-            bladeSize = 1f;
+            minBladeWidth = 0.03f;
+            maxBladeWidth = 0.08f;
+            minBladeHeight = 0.15f;
+            maxBladeHeight = 0.35f;
+            minBladeSize = 0.5f;
+            maxBladeSize = 1.2f;
             heightBrushValue = 0.25f;
             brushColor = Color.white;  // Use white color, tints handle the green
             colorVariationR = 0.05f;
