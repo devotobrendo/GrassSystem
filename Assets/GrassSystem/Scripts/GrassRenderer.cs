@@ -227,6 +227,10 @@ namespace GrassSystem
             {
                 materialInstance.SetVector("_MeshRotation", Vector4.zero);
             }
+            
+            // Natural variation - convert degrees to radians
+            materialInstance.SetFloat("_MaxTiltAngle", settings.maxTiltAngle * Mathf.Deg2Rad);
+            materialInstance.SetFloat("_TiltVariation", settings.tiltVariation);
         }
         
         private void UpdateBounds()

@@ -68,7 +68,9 @@ float3 TransformGrassVertex(
     float3 interactionOffset,
     float uvY,
     float useUniformScale,
-    float3 meshRotation
+    float3 meshRotation,
+    float maxTiltAngle,
+    float tiltVariation
 )
 {
     float3 scaledPos = localPos;
@@ -86,6 +88,16 @@ float3 TransformGrassVertex(
         scaledPos.x *= width;
         scaledPos.y *= height * distanceScale;
     }
+    
+    // Generate random tilt angles (X and Z rotation) for natural clump look
+    float tiltHash1 = Hash(worldPivot.xz + float2(3.14159, 2.71828));
+    float tiltHash2 = Hash(worldPivot.xz + float2(1.41421, 1.73205));
+    float tiltX = (tiltHash1 - 0.5) * 2.0 * maxTiltAngle * tiltVariation;
+    float tiltZ = (tiltHash2 - 0.5) * 2.0 * maxTiltAngle * tiltVariation;
+    
+    // Apply tilt rotation (before Y rotation for natural outward lean)
+    float3x3 tiltMatrix = RotationFromEuler(float3(tiltX, 0, tiltZ));
+    scaledPos = mul(tiltMatrix, scaledPos);
     
     // Random Y rotation based on position
     float rotation = Hash(worldPivot.xz) * 6.28318;
@@ -121,7 +133,7 @@ float3 TransformGrassVertex(
         localPos, worldPivot, surfaceNormal,
         width, height, distanceScale,
         windOffset, interactionOffset, uvY,
-        0.0, float3(0, 0, 0)
+        0.0, float3(0, 0, 0), 0.0, 0.0
     );
 }
 

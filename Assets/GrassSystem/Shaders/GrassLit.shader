@@ -44,6 +44,10 @@ Shader "GrassSystem/GrassLit"
         [Toggle] _UseOnlyAlbedoColor ("Use Only Albedo Color", Float) = 0
         [Toggle] _UseUniformScale ("Use Uniform Scale", Float) = 0
         _MeshRotation ("Mesh Rotation (Radians)", Vector) = (0, 0, 0, 0)
+        
+        [Header(Natural Variation)]
+        _MaxTiltAngle ("Max Tilt Angle (Radians)", Float) = 0.26
+        _TiltVariation ("Tilt Variation", Range(0, 1)) = 0.7
     }
     
     SubShader
@@ -112,6 +116,8 @@ Shader "GrassSystem/GrassLit"
                 float _UseOnlyAlbedoColor;
                 float _UseUniformScale;
                 float4 _MeshRotation;
+                float _MaxTiltAngle;
+                float _TiltVariation;
             CBUFFER_END
             
             struct Attributes
@@ -184,7 +190,9 @@ Shader "GrassSystem/GrassLit"
                     interactionOffset,
                     input.uv.y,
                     _UseUniformScale,
-                    _MeshRotation.xyz
+                    _MeshRotation.xyz,
+                    _MaxTiltAngle,
+                    _TiltVariation
                 );
                 
                 output.positionWS = worldPos;
@@ -352,6 +360,8 @@ Shader "GrassSystem/GrassLit"
                 float _UseOnlyAlbedoColor;
                 float _UseUniformScale;
                 float4 _MeshRotation;
+                float _MaxTiltAngle;
+                float _TiltVariation;
             CBUFFER_END
             
             struct Attributes
@@ -394,7 +404,9 @@ Shader "GrassSystem/GrassLit"
                     float3(0, 0, 0),
                     input.uv.y,
                     _UseUniformScale,
-                    _MeshRotation.xyz
+                    _MeshRotation.xyz,
+                    _MaxTiltAngle,
+                    _TiltVariation
                 );
                 
                 float3 normalWS = TransformObjectToWorldNormal(input.normalOS);

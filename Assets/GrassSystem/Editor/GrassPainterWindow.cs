@@ -232,6 +232,18 @@ namespace GrassSystem
                 toolSettings.paintMask = EditorGUILayout.MaskField("Paint Mask", 
                     InternalEditorUtility.LayerMaskToConcatenatedLayersMask(toolSettings.paintMask),
                     InternalEditorUtility.layers);
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("Cluster Spawning", EditorStyles.boldLabel);
+                toolSettings.useClusterSpawning = EditorGUILayout.Toggle("Enable Clusters", toolSettings.useClusterSpawning);
+                if (toolSettings.useClusterSpawning)
+                {
+                    EditorGUI.indentLevel++;
+                    toolSettings.minBladesPerCluster = EditorGUILayout.IntSlider("Min Blades", toolSettings.minBladesPerCluster, 1, 10);
+                    toolSettings.maxBladesPerCluster = EditorGUILayout.IntSlider("Max Blades", toolSettings.maxBladesPerCluster, 1, 10);
+                    toolSettings.clusterRadius = EditorGUILayout.Slider("Cluster Radius", toolSettings.clusterRadius, 0.01f, 0.5f);
+                    EditorGUI.indentLevel--;
+                }
             }
             else if (currentMode == PaintMode.Height)
             {
@@ -384,34 +396,50 @@ namespace GrassSystem
             for (int i = 0; i < count; i++)
             {
                 Vector2 offset = Random.insideUnitCircle * toolSettings.brushSize;
-                Vector3 pos = center + new Vector3(offset.x, 0, offset.y);
+                Vector3 clusterCenter = center + new Vector3(offset.x, 0, offset.y);
                 
-                if (Physics.Raycast(pos + Vector3.up * 10f, Vector3.down, out RaycastHit hit, 20f, toolSettings.paintMask))
+                if (Physics.Raycast(clusterCenter + Vector3.up * 10f, Vector3.down, out RaycastHit hit, 20f, toolSettings.paintMask))
                 {
                     if (hit.normal.y < toolSettings.normalLimit)
                         continue;
                     
-                    Color col = toolSettings.brushColor;
-                    col.r += Random.Range(-toolSettings.colorVariationR, toolSettings.colorVariationR);
-                    col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
-                    col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
+                    // Determine how many blades in this cluster
+                    int bladesInCluster = toolSettings.useClusterSpawning 
+                        ? Random.Range(toolSettings.minBladesPerCluster, toolSettings.maxBladesPerCluster + 1)
+                        : 1;
                     
-                    // Use size for custom mesh mode, width/height for default mode
-                    float width, height;
-                    if (isCustomMeshMode)
+                    for (int b = 0; b < bladesInCluster; b++)
                     {
-                        // For custom mesh mode, width stores the uniform scale
-                        width = Random.Range(minSize, maxSize);
-                        height = 1f; // Height is ignored in uniform scale mode
+                        // Offset within cluster (first blade at center, rest spread out)
+                        Vector3 bladePos = hit.point;
+                        if (b > 0 && toolSettings.useClusterSpawning)
+                        {
+                            Vector2 clusterOffset = Random.insideUnitCircle * toolSettings.clusterRadius;
+                            bladePos += new Vector3(clusterOffset.x, 0, clusterOffset.y);
+                        }
+                        
+                        Color col = toolSettings.brushColor;
+                        col.r += Random.Range(-toolSettings.colorVariationR, toolSettings.colorVariationR);
+                        col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
+                        col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
+                        
+                        // Use size for custom mesh mode, width/height for default mode
+                        float width, height;
+                        if (isCustomMeshMode)
+                        {
+                            // For custom mesh mode, width stores the uniform scale
+                            width = Random.Range(minSize, maxSize);
+                            height = 1f; // Height is ignored in uniform scale mode
+                        }
+                        else
+                        {
+                            width = Random.Range(minWidth, maxWidth);
+                            height = Random.Range(minHeight, maxHeight);
+                        }
+                        
+                        GrassData data = new GrassData(bladePos, hit.normal, width, height, col, toolSettings.patternBrushValue);
+                        grassList.Add(data);
                     }
-                    else
-                    {
-                        width = Random.Range(minWidth, maxWidth);
-                        height = Random.Range(minHeight, maxHeight);
-                    }
-                    
-                    GrassData data = new GrassData(hit.point, hit.normal, width, height, col, toolSettings.patternBrushValue);
-                    grassList.Add(data);
                 }
             }
         }
@@ -554,11 +582,6 @@ namespace GrassSystem
                 if (normal.y < toolSettings.normalLimit)
                     continue;
                 
-                Color col = toolSettings.brushColor;
-                col.r += Random.Range(-toolSettings.colorVariationR, toolSettings.colorVariationR);
-                col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
-                col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
-                
                 // Determine if we're in custom mesh mode
                 bool isCustomMeshMode = targetRenderer.settings != null && 
                                         targetRenderer.settings.grassMode == GrassMode.CustomMesh;
@@ -585,25 +608,46 @@ namespace GrassSystem
                     maxSize = settings.maxSize;
                 }
                 
-                // Use size for custom mesh mode, width/height for default mode
-                float width, height;
-                if (isCustomMeshMode)
-                {
-                    width = Random.Range(minSize, maxSize);
-                    height = 1f;
-                }
-                else
-                {
-                    width = Random.Range(minWidth, maxWidth);
-                    height = Random.Range(minHeight, maxHeight);
-                }
+                // Determine how many blades in this cluster
+                int bladesInCluster = toolSettings.useClusterSpawning 
+                    ? Random.Range(toolSettings.minBladesPerCluster, toolSettings.maxBladesPerCluster + 1)
+                    : 1;
                 
-                GrassData data = new GrassData(pos, normal, width, height, col, 0f);
-                grassList.Add(data);
+                for (int b = 0; b < bladesInCluster; b++)
+                {
+                    // Offset within cluster (first blade at center, rest spread out)
+                    Vector3 bladePos = pos;
+                    if (b > 0 && toolSettings.useClusterSpawning)
+                    {
+                        Vector2 clusterOffset = Random.insideUnitCircle * toolSettings.clusterRadius;
+                        bladePos += new Vector3(clusterOffset.x, 0, clusterOffset.y);
+                    }
+                    
+                    Color col = toolSettings.brushColor;
+                    col.r += Random.Range(-toolSettings.colorVariationR, toolSettings.colorVariationR);
+                    col.g += Random.Range(-toolSettings.colorVariationG, toolSettings.colorVariationG);
+                    col.b += Random.Range(-toolSettings.colorVariationB, toolSettings.colorVariationB);
+                    
+                    // Use size for custom mesh mode, width/height for default mode
+                    float width, height;
+                    if (isCustomMeshMode)
+                    {
+                        width = Random.Range(minSize, maxSize);
+                        height = 1f;
+                    }
+                    else
+                    {
+                        width = Random.Range(minWidth, maxWidth);
+                        height = Random.Range(minHeight, maxHeight);
+                    }
+                    
+                    GrassData data = new GrassData(bladePos, normal, width, height, col, 0f);
+                    grassList.Add(data);
+                }
                 added++;
             }
             
-            Debug.Log($"Generated {added} grass instances on {meshFilter.gameObject.name}");
+            Debug.Log($"Generated {added} grass clusters ({grassList.Count} total blades) on {meshFilter.gameObject.name}");
         }
         
         private void ClearAllGrass()

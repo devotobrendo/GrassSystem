@@ -23,6 +23,10 @@ namespace GrassSystem
         private SerializedProperty useOnlyAlbedoColor;
         private SerializedProperty meshRotationOffset;
         
+        // Natural Variation
+        private SerializedProperty maxTiltAngle;
+        private SerializedProperty tiltVariation;
+        
         // Blade Dimensions (Default mode)
         private SerializedProperty minWidth;
         private SerializedProperty maxWidth;
@@ -89,6 +93,9 @@ namespace GrassSystem
             maxSize = serializedObject.FindProperty("maxSize");
             useOnlyAlbedoColor = serializedObject.FindProperty("useOnlyAlbedoColor");
             meshRotationOffset = serializedObject.FindProperty("meshRotationOffset");
+            
+            maxTiltAngle = serializedObject.FindProperty("maxTiltAngle");
+            tiltVariation = serializedObject.FindProperty("tiltVariation");
             
             minWidth = serializedObject.FindProperty("minWidth");
             maxWidth = serializedObject.FindProperty("maxWidth");
@@ -215,6 +222,13 @@ namespace GrassSystem
             EditorGUILayout.PropertyField(windSpeed);
             EditorGUILayout.PropertyField(windStrength);
             EditorGUILayout.PropertyField(windFrequency);
+            
+            EditorGUILayout.Space(10);
+            
+            // === NATURAL VARIATION ===
+            EditorGUILayout.LabelField("Natural Variation", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(maxTiltAngle, new GUIContent("Max Tilt Angle", "Maximum random tilt angle in degrees for natural clump look"));
+            EditorGUILayout.PropertyField(tiltVariation, new GUIContent("Tilt Variation", "How much the tilt varies between grass instances (0 = no tilt, 1 = full random)"));
             
             EditorGUILayout.Space(10);
             

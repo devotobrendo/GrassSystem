@@ -62,6 +62,22 @@ namespace GrassSystem
         public LayerMask paintMask = -1;
         public LayerMask blockMask = 0;
         
+        [Header("Cluster Spawning")]
+        [Tooltip("Spawn multiple grass blades in clusters/tufts")]
+        public bool useClusterSpawning = true;
+        
+        [Range(1, 10)]
+        [Tooltip("Minimum grass blades per cluster")]
+        public int minBladesPerCluster = 3;
+        
+        [Range(1, 10)]
+        [Tooltip("Maximum grass blades per cluster")]
+        public int maxBladesPerCluster = 6;
+        
+        [Range(0.01f, 0.5f)]
+        [Tooltip("Radius of each cluster")]
+        public float clusterRadius = 0.1f;
+        
         [Header("Generation")]
         public int maxGrassToGenerate = 100000;
         [Range(0.01f, 1f)]
@@ -86,6 +102,11 @@ namespace GrassSystem
             colorVariationG = 0.1f;
             colorVariationB = 0.05f;
             patternBrushValue = 0f;
+            // Cluster defaults
+            useClusterSpawning = true;
+            minBladesPerCluster = 3;
+            maxBladesPerCluster = 6;
+            clusterRadius = 0.1f;
         }
     }
 }

@@ -37,6 +37,14 @@ namespace GrassSystem
         [Tooltip("Rotation offset for custom meshes (degrees)")]
         public Vector3 meshRotationOffset = Vector3.zero;
         
+        [Header("Natural Variation")]
+        [Range(0f, 45f)]
+        [Tooltip("Maximum random tilt angle in degrees for natural clump look")]
+        public float maxTiltAngle = 15f;
+        [Range(0f, 1f)]
+        [Tooltip("How much the tilt varies between grass instances (0 = no tilt, 1 = full random)")]
+        public float tiltVariation = 0.7f;
+        
         [Header("Blade Dimensions (Default Mode)")]
         [Range(0.01f, 0.3f)]
         public float minWidth = 0.03f;
