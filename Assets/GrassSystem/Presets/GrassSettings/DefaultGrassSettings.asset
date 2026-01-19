@@ -12,19 +12,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f7dc3ad6fc052f40be15ddb5773e282, type: 3}
   m_Name: DefaultGrassSettings
   m_EditorClassIdentifier: GrassSystem::GrassSystem.SO_GrassSettings
+  grassMode: 1
   cullingShader: {fileID: 7200000, guid: 780ebd41b14bcfa4ea235a416c62a893, type: 3}
   grassMaterial: {fileID: 2100000, guid: 336b1f5d2af7535449977acea87aae1b, type: 2}
   grassMesh: {fileID: 8254687373856176130, guid: e95e173edd8242a46a4a9e77d38c72e8, type: 3}
-  meshRotation: {x: 90, y: 90, z: 0}
-  tiltVariation: 45
-  useAlbedoColor: 1
-  minWidth: 1
-  maxWidth: 1
-  minHeight: 1
-  maxHeight: 1
-  windSpeed: 0.28
+  customMeshes:
+  - {fileID: 8254687373856176130, guid: e95e173edd8242a46a4a9e77d38c72e8, type: 3}
+  - {fileID: 8999472620707259278, guid: ece6aa39196320145a9da21405616fdf, type: 3}
+  - {fileID: 4799939183687158410, guid: 5b3d071dcaeaa634ea481e00ef6fc42a, type: 3}
+  minSize: 0.49
+  maxSize: 0.82
+  useOnlyAlbedoColor: 1
+  meshRotationOffset: {x: 90, y: 90, z: 0}
+  maxTiltAngle: 35.6
+  tiltVariation: 1
+  minWidth: 0.1
+  maxWidth: 0.1
+  minHeight: 1.5
+  maxHeight: 1.5
+  windSpeed: 1.81
   windStrength: 0.357
-  windFrequency: 0.04
+  windFrequency: 0.272
   minFadeDistance: 30
   maxDrawDistance: 50
   cullingTreeDepth: 4
@@ -37,12 +45,8 @@ MonoBehaviour:
   tipCutoffHeight: 0.8
   albedoTexture: {fileID: 2800000, guid: 4db7e83740caea34790e437606913c5a, type: 3}
   normalMap: {fileID: 2800000, guid: 50dce4c614b14de4fbc3eb3d2b36739e, type: 3}
-  useTextureAtlas: 0
-  atlasColumns: 2
-  atlasRows: 2
-  atlasTileIndex: 3
-  topTint: {r: 0.7666528, g: 1, b: 0, a: 1}
-  bottomTint: {r: 0.4528302, g: 0, b: 0, a: 1}
+  topTint: {r: 0.39488173, g: 1, b: 0, a: 1}
+  bottomTint: {r: 0.076403484, g: 0.3490566, b: 0, a: 1}
   translucency: 0.3
   useAlignedNormals: 1
   useTerrainLightmap: 0

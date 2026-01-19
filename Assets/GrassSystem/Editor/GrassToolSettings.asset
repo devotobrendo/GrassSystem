@@ -12,14 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 36596aba45ff8de498fed149a9a9a7db, type: 3}
   m_Name: GrassToolSettings
   m_EditorClassIdentifier: GrassSystem.Editor::GrassSystem.SO_GrassToolSettings
-  brushSize: 11.3
+  brushSize: 7.7
   density: 10
   normalLimit: 0.8
-  useSettingsDimensions: 1
-  bladeWidth: 1
-  bladeHeight: 1
+  useCustomSize: 1
+  minBladeWidth: 0.03
+  maxBladeWidth: 0.08
+  minBladeHeight: 0.15
+  maxBladeHeight: 0.35
+  minBladeSize: 1.81
+  maxBladeSize: 2.96
   heightBrushValue: 0.5
-  brushColor: {r: 0.3, g: 0.6, b: 0.2, a: 1}
+  brushColor: {r: 1, g: 1, b: 1, a: 1}
   colorVariationR: 0.1
   colorVariationG: 0.15
   colorVariationB: 0.1
@@ -30,5 +34,9 @@ MonoBehaviour:
   blockMask:
     serializedVersion: 2
     m_Bits: 0
+  useClusterSpawning: 1
+  minBladesPerCluster: 3
+  maxBladesPerCluster: 10
+  clusterRadius: 0.1
   maxGrassToGenerate: 100000
   generationDensity: 0.5

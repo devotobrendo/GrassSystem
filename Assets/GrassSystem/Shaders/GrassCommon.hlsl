@@ -15,9 +15,13 @@ struct GrassDrawData
 
 float2 CalculateWind(float3 worldPos, float time, float speed, float strength, float frequency)
 {
+    // Per-instance phase offset for variation (prevents uniform synchronized movement)
+    float phaseOffset = Hash(worldPos.xz) * 6.28318;
+    float amplitudeVariation = 0.7 + Hash(worldPos.xz + float2(1.618, 2.718)) * 0.6; // 0.7-1.3 range
+    
     float2 windUV = worldPos.xz * frequency;
-    float2 wind1 = sin(windUV + time * speed) * strength;
-    float2 wind2 = sin(windUV * 0.5 + time * speed * 0.7) * strength * 0.5;
+    float2 wind1 = sin(windUV + time * speed + phaseOffset) * strength * amplitudeVariation;
+    float2 wind2 = sin(windUV * 0.5 + time * speed * 0.7 + phaseOffset * 0.5) * strength * 0.5 * amplitudeVariation;
     return wind1 + wind2;
 }
 
@@ -103,14 +107,43 @@ float3 TransformGrassVertex(
     float rotation = Hash(worldPivot.xz) * 6.28318;
     scaledPos = mul(RotationY(rotation), scaledPos);
     
-    // Wind influence (stronger at top)
+    // Wind influence - apply as rotation-based bending (more natural than translation)
     float windInfluence = uvY * uvY;
-    scaledPos.xz += windOffset * windInfluence;
+    float windMagnitude = length(windOffset) * windInfluence;
+    if (windMagnitude > 0.001)
+    {
+        // Calculate wind bend angle (clamped are it from going crazy)
+        float windBendAngle = min(windMagnitude * 0.5, 0.5); // Max ~30 degrees bend
+        
+        // Rotate the offset direction by the blade's Y rotation to get local wind direction
+        float2 rotatedWind = float2(
+            windOffset.x * cos(-rotation) - windOffset.y * sin(-rotation),
+            windOffset.x * sin(-rotation) + windOffset.y * cos(-rotation)
+        );
+        float2 windDir = normalize(rotatedWind);
+        
+        // Apply bend as tilt rotation (forward/back based on wind direction)
+        float3x3 windBend = RotationFromEuler(float3(windDir.y * windBendAngle, 0, -windDir.x * windBendAngle));
+        scaledPos = mul(windBend, scaledPos);
+    }
     
-    // Interaction bending
+    // Interaction bending - also use rotation for consistency
     float bendInfluence = uvY;
-    scaledPos.xz += interactionOffset.xz * bendInfluence;
-    scaledPos.y -= length(interactionOffset.xz) * bendInfluence * 0.3;
+    float interactMagnitude = length(interactionOffset.xz) * bendInfluence;
+    if (interactMagnitude > 0.001)
+    {
+        float interactBendAngle = min(interactMagnitude * 0.8, 0.8);
+        float2 interactDir = normalize(interactionOffset.xz);
+        
+        // Rotate to local space
+        float2 localInteract = float2(
+            interactDir.x * cos(-rotation) - interactDir.y * sin(-rotation),
+            interactDir.x * sin(-rotation) + interactDir.y * cos(-rotation)
+        );
+        
+        float3x3 interactBend = RotationFromEuler(float3(localInteract.y * interactBendAngle, 0, -localInteract.x * interactBendAngle));
+        scaledPos = mul(interactBend, scaledPos);
+    }
     
     float3 worldPos = worldPivot + scaledPos;
     return worldPos;
