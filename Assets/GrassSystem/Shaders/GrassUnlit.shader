@@ -32,6 +32,11 @@ Shader "GrassSystem/GrassUnlit"
         _AmbientBoost ("Ambient Boost", Range(0, 2)) = 1.0
         _LightProbeInfluence ("Light Probe Influence", Range(0, 1)) = 1.0
         
+        [Header(Depth Perception)]
+        _InstanceColorVariation ("Instance Color Variation", Range(0, 0.3)) = 0.1
+        _HeightDarkening ("Height Darkening", Range(0, 0.5)) = 0.2
+        _BackfaceDarkening ("Backface Darkening", Range(0, 0.5)) = 0.3
+        
         [Header(Custom Mesh Mode)]
         [Toggle] _UseOnlyAlbedoColor ("Use Only Albedo Color", Float) = 0
         [Toggle] _UseUniformScale ("Use Uniform Scale", Float) = 0
@@ -95,6 +100,9 @@ Shader "GrassSystem/GrassUnlit"
                 float _WindFrequency;
                 float _AmbientBoost;
                 float _LightProbeInfluence;
+                float _InstanceColorVariation;
+                float _HeightDarkening;
+                float _BackfaceDarkening;
                 float _UseOnlyAlbedoColor;
                 float _UseUniformScale;
                 float4 _MeshRotation;
@@ -119,6 +127,7 @@ Shader "GrassSystem/GrassUnlit"
                 half3 grassColor : TEXCOORD3;
                 float patternMask : TEXCOORD4;
                 half fogFactor : TEXCOORD5;
+                half instanceVariation : TEXCOORD6;
             };
             
             Varyings vert(Attributes input)
@@ -175,10 +184,13 @@ Shader "GrassSystem/GrassUnlit"
                 output.positionWS = worldPos;
                 output.positionCS = TransformWorldToHClip(worldPos);
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
-                output.normalWS = float3(0, 1, 0); // Simple up normal for SH sampling
+                output.normalWS = float3(0, 1, 0);
                 output.grassColor = grassData.color;
                 output.patternMask = grassData.patternMask;
                 output.fogFactor = ComputeFogFactor(output.positionCS.z);
+                
+                // Per-instance variation for depth perception (uses existing hash, very cheap)
+                output.instanceVariation = Hash(grassData.position.xz + float2(5.123, 7.456));
                 
                 return output;
             }
@@ -223,13 +235,24 @@ Shader "GrassSystem/GrassUnlit"
                 
                 // Light Probes (Spherical Harmonics) - cheap ambient lighting
                 half3 ambient = SampleSH(input.normalWS) * _LightProbeInfluence;
-                ambient = max(ambient, 0.1); // Minimum ambient to avoid pure black
+                ambient = max(ambient, 0.1);
                 ambient *= _AmbientBoost;
                 
-                // Backface darkening for depth perception
+                // === DEPTH PERCEPTION TECHNIQUES (all very cheap - no texture samples) ===
+                
+                // 1. Per-instance color variation - breaks up uniformity
+                half instanceOffset = (input.instanceVariation - 0.5) * 2.0 * _InstanceColorVariation;
+                baseColor *= (1.0 + instanceOffset);
+                
+                // 2. Height-based darkening - darker at base, helps ground blades
+                half heightFactor = saturate(input.uv.y);
+                half heightDark = lerp(1.0 - _HeightDarkening, 1.0, heightFactor * heightFactor);
+                baseColor *= heightDark;
+                
+                // 3. Backface darkening - stronger contrast for crossing blades
                 if (!isFrontFace)
                 {
-                    baseColor *= 0.7;
+                    baseColor *= (1.0 - _BackfaceDarkening);
                 }
                 
                 half3 finalColor = baseColor * ambient;

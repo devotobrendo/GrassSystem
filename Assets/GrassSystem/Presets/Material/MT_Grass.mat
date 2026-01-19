@@ -21,7 +21,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: MT_Grass
-  m_Shader: {fileID: 4800000, guid: 26757bbd9590f4b40aba4555a862fbb4, type: 3}
+  m_Shader: {fileID: 4800000, guid: c50817197e759754b855045b75b0f50a, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -114,6 +114,7 @@ Material:
     - _AlphaCutoff: 0.5
     - _AlphaToMask: 0
     - _AmbientBoost: 1
+    - _BackfaceDarkening: 0.3
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
     - _BumpScale: 1
@@ -129,6 +130,8 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
+    - _HeightDarkening: 0.2
+    - _InstanceColorVariation: 0.1
     - _LightProbeInfluence: 1
     - _MaxTiltAngle: 0.26
     - _Metallic: 0
