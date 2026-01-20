@@ -21,7 +21,6 @@ A high-performance, GPU-based grass rendering system for **Unity URP**, inspired
 - **Grass Painter** - Paint, erase, and modify grass directly in Scene view
 - **ScriptableObject Settings** - Create and swap grass presets easily
 - **Performance Overlay** - Built-in FPS and instance count monitoring
-- **Stress Test Tool** - Validate performance with configurable grass density
 
 ### Optimization
 - **Console-Ready** - Optimized for Nintendo Switch (30 FPS target)
@@ -51,13 +50,6 @@ A high-performance, GPU-based grass rendering system for **Unity URP**, inspired
 1. Copy the `GrassSystem` folder to your project's `Packages/` directory
 2. Unity will automatically detect and import the package
 
-### Example Scenes
-After installation, import the example scenes via:
-1. Open **Window > Package Manager**
-2. Find "BotW-Style Grass System"
-3. Expand **Samples**
-4. Click **Import** on "Example Scenes"
-
 ---
 
 ## Quick Start
@@ -69,6 +61,8 @@ Right-click in Project > **Create > Grass System > Grass Settings**
 1. Create an empty GameObject
 2. Add the `GrassRenderer` component
 3. Assign your Grass Settings asset
+4. Assign the culling shader (Shaders/GrassCulling.compute)
+5. Assign a grass material (create one using Shaders/GrassLit or GrassUnlit)
 
 ### 3. Paint Grass
 1. Open **Window > Grass System > Grass Painter**
@@ -202,38 +196,6 @@ Displays real-time performance metrics for debugging and optimization.
 
 ---
 
-### GrassStressTest
-
-Automated performance testing tool to find the maximum sustainable grass count.
-
-**Setup:**
-1. Add to a GameObject in your scene
-2. Assign the GrassRenderer reference
-3. Use Context Menu (right-click component header) > "Start Stress Test"
-
-**Inspector Properties:**
-
-| Property | Description |
-|----------|-------------|
-| **Target FPS** | FPS threshold to maintain |
-| **Grass Per Step** | How many grass to add each iteration |
-| **Stabilization Time** | Seconds to wait between iterations |
-| **Spawn Area Size** | Size of the test area |
-| **Target Mesh** | Optional mesh for raycasting heights |
-
-**Context Menu Actions:**
-- **Start Stress Test** - Begin automated testing
-- **Stop Test** - Halt current test
-- **Reset** - Clear all test grass
-
-**Output:**
-Results are logged to the Console with:
-- Maximum sustainable grass count at target FPS
-- Hardware information
-- Recommendations for your target platform
-
----
-
 ### SO_GrassSettings
 
 ScriptableObject that holds all configuration for grass appearance and behavior.
@@ -287,7 +249,6 @@ GrassSystem/
 │   ├── GrassInteractor.cs
 │   ├── GrassData.cs
 │   ├── GrassPerformanceOverlay.cs
-│   ├── GrassStressTest.cs
 │   └── SO_GrassSettings.cs
 ├── Editor/           # Editor tools and inspectors
 │   ├── GrassPainterWindow.cs
@@ -299,8 +260,7 @@ GrassSystem/
 │   ├── GrassCulling.compute
 │   └── GrassCommon.hlsl
 ├── Textures/         # Default grass textures
-├── Presets/          # Example settings and materials
-└── Samples~/         # Example scenes (import via Package Manager)
+└── Presets/          # Example settings and materials
 ```
 
 ---

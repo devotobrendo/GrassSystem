@@ -25,14 +25,6 @@
     ],
     "author": {
         "name": "Brendo Otavio Carvalho de Matos",
-        "email": "devotobrendo@github.com",
-        "url": "https://github.com/devotobrendo"
-    },
-    "samples": [
-        {
-            "displayName": "Example Scenes",
-            "description": "Example scenes demonstrating grass painting and rendering",
-            "path": "Samples~"
-        }
-    ]
+        "email": "devotobrendo@github.com"
+    }
 }

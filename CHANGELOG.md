@@ -16,12 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LOD System - Distance-based level-of-detail for performance scaling
 - Grass Painter Tool - Intuitive editor window for painting grass in Scene view
 - ScriptableObject Settings - Modular grass configuration via SO_GrassSettings
-- Performance Overlay - Built-in FPS, draw call, and instance monitoring
-- Stress Test Tool - Configurable density testing for performance validation
+- Performance Overlay - Built-in FPS and instance monitoring
 - Lit and Unlit Shaders - Two shader variants for different visual needs
 - Custom Inspector - Enhanced settings editor with visual feedback
 - Memory Management - Proper buffer cleanup and leak prevention
-- Example Scenes - Ready-to-use demonstration scenes
 
 ### Technical Highlights
 - Optimized for Nintendo Switch (30 FPS target with 100k+ instances)
