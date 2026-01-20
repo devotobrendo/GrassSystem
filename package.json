@@ -5,9 +5,9 @@
     "description": "High-performance GPU-based grass rendering system for Unity URP, inspired by The Legend of Zelda: Breath of the Wild. Features GPU instancing, LOD culling, wind simulation, player interaction, and an intuitive painting tool.",
     "unity": "2022.3",
     "unityRelease": "0f1",
-    "documentationUrl": "",
-    "changelogUrl": "",
-    "licensesUrl": "",
+    "documentationUrl": "https://github.com/devotobrendo/GrassSystem",
+    "changelogUrl": "https://github.com/devotobrendo/GrassSystem/blob/main/CHANGELOG.md",
+    "licensesUrl": "https://github.com/devotobrendo/GrassSystem/blob/main/LICENSE.md",
     "dependencies": {
         "com.unity.render-pipelines.universal": "14.0.0",
         "com.unity.inputsystem": "1.0.0"
@@ -24,15 +24,15 @@
         "terrain"
     ],
     "author": {
-        "name": "Your Name",
-        "email": "your.email@example.com",
-        "url": ""
+        "name": "Brendo Otavio Carvalho de Matos",
+        "email": "devotobrendo@github.com",
+        "url": "https://github.com/devotobrendo"
     },
     "samples": [
         {
-            "displayName": "Demo Scene",
-            "description": "Example scene with grass painting demonstration",
-            "path": "Samples~/DemoScene"
+            "displayName": "Example Scenes",
+            "description": "Example scenes demonstrating grass painting and rendering",
+            "path": "Samples~"
         }
     ]
 }
