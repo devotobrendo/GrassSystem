@@ -108,5 +108,37 @@ namespace GrassSystem
             maxBladesPerCluster = 6;
             clusterRadius = 0.1f;
         }
+        
+        // ========================================
+        // ADVANCED LIMITS
+        // ========================================
+        
+        [Header("Advanced Limits")]
+        [Tooltip("Customize slider maximum values for extended ranges")]
+        public bool showAdvancedLimits = false;
+        
+        [Header("Brush Limits")]
+        [Min(1f)]
+        public float maxBrushSizeLimit = 50f;
+        [Min(1f)]
+        public float maxDensityLimit = 10f;
+        
+        [Header("Cluster Limits")]
+        [Min(1)]
+        public int maxBladesPerClusterLimit = 10;
+        [Min(0.1f)]
+        public float maxClusterRadiusLimit = 0.5f;
+        
+        [Header("Blade Dimension Limits")]
+        [Min(0.1f)]
+        public float maxBladeWidthLimit = 0.5f;
+        [Min(0.5f)]
+        public float maxBladeHeightLimit = 2f;
+        [Min(1f)]
+        public float maxBladeSizeLimit = 3f;
+        
+        [Header("Height Brush Limit")]
+        [Min(0.5f)]
+        public float maxHeightBrushLimit = 2f;
     }
 }

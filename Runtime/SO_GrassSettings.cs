@@ -156,5 +156,47 @@ namespace GrassSystem
             // Default mode: always use procedural Zelda-style blade
             return GrassMeshUtility.GetZeldaStyleBlade();
         }
+        
+        // ========================================
+        // ADVANCED LIMITS
+        // ========================================
+        
+        [Header("Advanced Limits")]
+        [Tooltip("Customize slider maximum values for extended ranges")]
+        public bool showAdvancedLimits = false;
+        
+        [Header("Size Limits")]
+        [Min(0.5f)]
+        public float maxSizeLimit = 3f;
+        [Min(0.1f)]
+        public float maxBladeWidthLimit = 0.3f;
+        [Min(0.5f)]
+        public float maxBladeHeightLimit = 1.5f;
+        
+        [Header("Wind Limits")]
+        [Min(1f)]
+        public float maxWindSpeedLimit = 5f;
+        [Min(0.5f)]
+        public float maxWindStrengthLimit = 1f;
+        
+        [Header("LOD Limits")]
+        [Min(50f)]
+        public float maxDrawDistanceLimit = 200f;
+        [Min(30f)]
+        public float maxFadeDistanceLimit = 150f;
+        
+        [Header("Tilt Limits")]
+        [Min(15f)]
+        public float maxTiltAngleLimit = 45f;
+        
+        [Header("Interaction Limits")]
+        [Min(1f)]
+        public float maxInteractorStrengthLimit = 2f;
+        [Min(8)]
+        public int maxInteractorsLimit = 16;
+        
+        [Header("Pattern Limits")]
+        [Min(5f)]
+        public float maxPatternScaleLimit = 10f;
     }
 }

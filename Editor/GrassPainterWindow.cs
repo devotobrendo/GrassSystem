@@ -153,11 +153,11 @@ namespace GrassSystem
             }
             
             EditorGUILayout.LabelField("Brush Settings", EditorStyles.boldLabel);
-            toolSettings.brushSize = EditorGUILayout.Slider("Brush Size", toolSettings.brushSize, 0.1f, 50f);
+            toolSettings.brushSize = EditorGUILayout.Slider("Brush Size", toolSettings.brushSize, 0.1f, toolSettings.maxBrushSizeLimit);
             
             if (currentMode == PaintMode.Add)
             {
-                toolSettings.density = EditorGUILayout.Slider("Density", toolSettings.density, 0.1f, 10f);
+                toolSettings.density = EditorGUILayout.Slider("Density", toolSettings.density, 0.1f, toolSettings.maxDensityLimit);
                 toolSettings.normalLimit = EditorGUILayout.Slider("Normal Limit", toolSettings.normalLimit, 0f, 1f);
                 
                 EditorGUILayout.Space(5);
@@ -175,15 +175,15 @@ namespace GrassSystem
                     EditorGUILayout.LabelField("Blade Size", EditorStyles.boldLabel);
                     if (toolSettings.useCustomSize)
                     {
-                        toolSettings.minBladeSize = EditorGUILayout.Slider("Min Size", toolSettings.minBladeSize, 0.1f, 3f);
-                        toolSettings.maxBladeSize = EditorGUILayout.Slider("Max Size", toolSettings.maxBladeSize, 0.1f, 3f);
+                        toolSettings.minBladeSize = EditorGUILayout.Slider("Min Size", toolSettings.minBladeSize, 0.1f, toolSettings.maxBladeSizeLimit);
+                        toolSettings.maxBladeSize = EditorGUILayout.Slider("Max Size", toolSettings.maxBladeSize, 0.1f, toolSettings.maxBladeSizeLimit);
                     }
                     else
                     {
                         var settings = targetRenderer.settings;
                         EditorGUI.BeginDisabledGroup(true);
-                        EditorGUILayout.Slider("Min Size (from Settings)", settings.minSize, 0.1f, 3f);
-                        EditorGUILayout.Slider("Max Size (from Settings)", settings.maxSize, 0.1f, 3f);
+                        EditorGUILayout.Slider("Min Size (from Settings)", settings.minSize, 0.1f, toolSettings.maxBladeSizeLimit);
+                        EditorGUILayout.Slider("Max Size (from Settings)", settings.maxSize, 0.1f, toolSettings.maxBladeSizeLimit);
                         EditorGUI.EndDisabledGroup();
                         EditorGUILayout.HelpBox("Enable 'Use Custom Size' to override.", MessageType.Info);
                     }
@@ -193,10 +193,10 @@ namespace GrassSystem
                     EditorGUILayout.LabelField("Blade Dimensions", EditorStyles.boldLabel);
                     if (toolSettings.useCustomSize)
                     {
-                        toolSettings.minBladeWidth = EditorGUILayout.Slider("Min Width", toolSettings.minBladeWidth, 0.01f, 0.5f);
-                        toolSettings.maxBladeWidth = EditorGUILayout.Slider("Max Width", toolSettings.maxBladeWidth, 0.01f, 0.5f);
-                        toolSettings.minBladeHeight = EditorGUILayout.Slider("Min Height", toolSettings.minBladeHeight, 0.1f, 2f);
-                        toolSettings.maxBladeHeight = EditorGUILayout.Slider("Max Height", toolSettings.maxBladeHeight, 0.1f, 2f);
+                        toolSettings.minBladeWidth = EditorGUILayout.Slider("Min Width", toolSettings.minBladeWidth, 0.01f, toolSettings.maxBladeWidthLimit);
+                        toolSettings.maxBladeWidth = EditorGUILayout.Slider("Max Width", toolSettings.maxBladeWidth, 0.01f, toolSettings.maxBladeWidthLimit);
+                        toolSettings.minBladeHeight = EditorGUILayout.Slider("Min Height", toolSettings.minBladeHeight, 0.1f, toolSettings.maxBladeHeightLimit);
+                        toolSettings.maxBladeHeight = EditorGUILayout.Slider("Max Height", toolSettings.maxBladeHeight, 0.1f, toolSettings.maxBladeHeightLimit);
                     }
                     else
                     {
@@ -239,9 +239,9 @@ namespace GrassSystem
                 if (toolSettings.useClusterSpawning)
                 {
                     EditorGUI.indentLevel++;
-                    toolSettings.minBladesPerCluster = EditorGUILayout.IntSlider("Min Blades", toolSettings.minBladesPerCluster, 1, 10);
-                    toolSettings.maxBladesPerCluster = EditorGUILayout.IntSlider("Max Blades", toolSettings.maxBladesPerCluster, 1, 10);
-                    toolSettings.clusterRadius = EditorGUILayout.Slider("Cluster Radius", toolSettings.clusterRadius, 0.01f, 0.5f);
+                    toolSettings.minBladesPerCluster = EditorGUILayout.IntSlider("Min Blades", toolSettings.minBladesPerCluster, 1, toolSettings.maxBladesPerClusterLimit);
+                    toolSettings.maxBladesPerCluster = EditorGUILayout.IntSlider("Max Blades", toolSettings.maxBladesPerCluster, 1, toolSettings.maxBladesPerClusterLimit);
+                    toolSettings.clusterRadius = EditorGUILayout.Slider("Cluster Radius", toolSettings.clusterRadius, 0.01f, toolSettings.maxClusterRadiusLimit);
                     EditorGUI.indentLevel--;
                 }
             }
@@ -256,7 +256,7 @@ namespace GrassSystem
                 }
                 else
                 {
-                    toolSettings.heightBrushValue = EditorGUILayout.Slider("Height Value", toolSettings.heightBrushValue, 0.1f, 2f);
+                    toolSettings.heightBrushValue = EditorGUILayout.Slider("Height Value", toolSettings.heightBrushValue, 0.1f, toolSettings.maxHeightBrushLimit);
                 }
             }
             else if (currentMode == PaintMode.Pattern)
@@ -285,7 +285,7 @@ namespace GrassSystem
             
             if (e.type == EventType.ScrollWheel && e.control)
             {
-                toolSettings.brushSize = Mathf.Clamp(toolSettings.brushSize - e.delta.y * 0.5f, 0.1f, 50f);
+                toolSettings.brushSize = Mathf.Clamp(toolSettings.brushSize - e.delta.y * 0.5f, 0.1f, toolSettings.maxBrushSizeLimit);
                 e.Use();
                 Repaint();
             }
