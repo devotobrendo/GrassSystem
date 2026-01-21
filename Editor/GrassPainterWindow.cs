@@ -135,6 +135,35 @@ namespace GrassSystem
                 "Scroll wheel to adjust brush size.",
                 MessageType.Info);
             
+            EditorGUILayout.Space(10);
+            
+            // === ADVANCED LIMITS ===
+            toolSettings.showAdvancedLimits = EditorGUILayout.Foldout(toolSettings.showAdvancedLimits, "Advanced Limits", true, EditorStyles.foldoutHeader);
+            if (toolSettings.showAdvancedLimits)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.HelpBox("Customize slider maximum values for extended ranges.", MessageType.Info);
+                
+                EditorGUILayout.Space(3);
+                EditorGUILayout.LabelField("Brush Limits", EditorStyles.miniLabel);
+                toolSettings.maxBrushSizeLimit = EditorGUILayout.FloatField("Max Brush Size", toolSettings.maxBrushSizeLimit);
+                toolSettings.maxDensityLimit = EditorGUILayout.FloatField("Max Density", toolSettings.maxDensityLimit);
+                
+                EditorGUILayout.Space(3);
+                EditorGUILayout.LabelField("Cluster Limits", EditorStyles.miniLabel);
+                toolSettings.maxBladesPerClusterLimit = EditorGUILayout.IntField("Max Blades/Cluster", toolSettings.maxBladesPerClusterLimit);
+                toolSettings.maxClusterRadiusLimit = EditorGUILayout.FloatField("Max Cluster Radius", toolSettings.maxClusterRadiusLimit);
+                
+                EditorGUILayout.Space(3);
+                EditorGUILayout.LabelField("Blade Dimension Limits", EditorStyles.miniLabel);
+                toolSettings.maxBladeWidthLimit = EditorGUILayout.FloatField("Max Blade Width", toolSettings.maxBladeWidthLimit);
+                toolSettings.maxBladeHeightLimit = EditorGUILayout.FloatField("Max Blade Height", toolSettings.maxBladeHeightLimit);
+                toolSettings.maxBladeSizeLimit = EditorGUILayout.FloatField("Max Blade Size", toolSettings.maxBladeSizeLimit);
+                toolSettings.maxHeightBrushLimit = EditorGUILayout.FloatField("Max Height Brush", toolSettings.maxHeightBrushLimit);
+                
+                EditorGUI.indentLevel--;
+            }
+            
             EditorGUILayout.EndScrollView();
             
             if (GUI.changed && toolSettings != null)
