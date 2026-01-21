@@ -80,6 +80,20 @@ namespace GrassSystem
         // Debug
         private SerializedProperty drawCullingBounds;
         
+        // Advanced Limits
+        private SerializedProperty showAdvancedLimits;
+        private SerializedProperty maxSizeLimit;
+        private SerializedProperty maxBladeWidthLimit;
+        private SerializedProperty maxBladeHeightLimit;
+        private SerializedProperty maxWindSpeedLimit;
+        private SerializedProperty maxWindStrengthLimit;
+        private SerializedProperty maxDrawDistanceLimit;
+        private SerializedProperty maxFadeDistanceLimit;
+        private SerializedProperty maxTiltAngleLimit;
+        private SerializedProperty maxInteractorStrengthLimit;
+        private SerializedProperty maxInteractorsLimit;
+        private SerializedProperty maxPatternScaleLimit;
+        
         private void OnEnable()
         {
             grassMode = serializedObject.FindProperty("grassMode");
@@ -138,6 +152,20 @@ namespace GrassSystem
             receiveShadows = serializedObject.FindProperty("receiveShadows");
             
             drawCullingBounds = serializedObject.FindProperty("drawCullingBounds");
+            
+            // Advanced Limits
+            showAdvancedLimits = serializedObject.FindProperty("showAdvancedLimits");
+            maxSizeLimit = serializedObject.FindProperty("maxSizeLimit");
+            maxBladeWidthLimit = serializedObject.FindProperty("maxBladeWidthLimit");
+            maxBladeHeightLimit = serializedObject.FindProperty("maxBladeHeightLimit");
+            maxWindSpeedLimit = serializedObject.FindProperty("maxWindSpeedLimit");
+            maxWindStrengthLimit = serializedObject.FindProperty("maxWindStrengthLimit");
+            maxDrawDistanceLimit = serializedObject.FindProperty("maxDrawDistanceLimit");
+            maxFadeDistanceLimit = serializedObject.FindProperty("maxFadeDistanceLimit");
+            maxTiltAngleLimit = serializedObject.FindProperty("maxTiltAngleLimit");
+            maxInteractorStrengthLimit = serializedObject.FindProperty("maxInteractorStrengthLimit");
+            maxInteractorsLimit = serializedObject.FindProperty("maxInteractorsLimit");
+            maxPatternScaleLimit = serializedObject.FindProperty("maxPatternScaleLimit");
         }
         
         public override void OnInspectorGUI()
@@ -172,8 +200,8 @@ namespace GrassSystem
             {
                 EditorGUILayout.LabelField("Custom Mesh Settings", EditorStyles.boldLabel);
                 EditorGUILayout.PropertyField(customMeshes, true);
-                EditorGUILayout.PropertyField(minSize);
-                EditorGUILayout.PropertyField(maxSize);
+                minSize.floatValue = EditorGUILayout.Slider("Min Size", minSize.floatValue, 0.1f, settings.maxSizeLimit);
+                maxSize.floatValue = EditorGUILayout.Slider("Max Size", maxSize.floatValue, 0.1f, settings.maxSizeLimit);
                 EditorGUILayout.PropertyField(meshRotationOffset, new GUIContent("Rotation Offset (Degrees)"));
                 EditorGUILayout.PropertyField(useOnlyAlbedoColor, new GUIContent("Use Only Albedo Color"));
                 
@@ -194,10 +222,10 @@ namespace GrassSystem
                 // Default mode: simple procedural blade, no textures needed
                 EditorGUILayout.LabelField("Blade Dimensions", EditorStyles.boldLabel);
                 EditorGUILayout.HelpBox("Procedural Zelda-style triangular blade (no texture needed)", MessageType.None);
-                EditorGUILayout.PropertyField(minWidth);
-                EditorGUILayout.PropertyField(maxWidth);
-                EditorGUILayout.PropertyField(minHeight);
-                EditorGUILayout.PropertyField(maxHeight);
+                minWidth.floatValue = EditorGUILayout.Slider("Min Width", minWidth.floatValue, 0.01f, settings.maxBladeWidthLimit);
+                maxWidth.floatValue = EditorGUILayout.Slider("Max Width", maxWidth.floatValue, 0.01f, settings.maxBladeWidthLimit);
+                minHeight.floatValue = EditorGUILayout.Slider("Min Height", minHeight.floatValue, 0.05f, settings.maxBladeHeightLimit);
+                maxHeight.floatValue = EditorGUILayout.Slider("Max Height", maxHeight.floatValue, 0.05f, settings.maxBladeHeightLimit);
             }
             
             EditorGUILayout.Space(10);
@@ -219,23 +247,23 @@ namespace GrassSystem
             
             // === WIND ===
             EditorGUILayout.LabelField("Wind Settings", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(windSpeed);
-            EditorGUILayout.PropertyField(windStrength);
+            windSpeed.floatValue = EditorGUILayout.Slider("Wind Speed", windSpeed.floatValue, 0f, settings.maxWindSpeedLimit);
+            windStrength.floatValue = EditorGUILayout.Slider("Wind Strength", windStrength.floatValue, 0f, settings.maxWindStrengthLimit);
             EditorGUILayout.PropertyField(windFrequency);
             
             EditorGUILayout.Space(10);
             
             // === NATURAL VARIATION ===
             EditorGUILayout.LabelField("Natural Variation", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(maxTiltAngle, new GUIContent("Max Tilt Angle", "Maximum random tilt angle in degrees for natural clump look"));
+            maxTiltAngle.floatValue = EditorGUILayout.Slider(new GUIContent("Max Tilt Angle", "Maximum random tilt angle in degrees for natural clump look"), maxTiltAngle.floatValue, 0f, settings.maxTiltAngleLimit);
             EditorGUILayout.PropertyField(tiltVariation, new GUIContent("Tilt Variation", "How much the tilt varies between grass instances (0 = no tilt, 1 = full random)"));
             
             EditorGUILayout.Space(10);
             
             // === LOD & CULLING ===
             EditorGUILayout.LabelField("LOD & Culling", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(minFadeDistance);
-            EditorGUILayout.PropertyField(maxDrawDistance);
+            minFadeDistance.floatValue = EditorGUILayout.Slider("Min Fade Distance", minFadeDistance.floatValue, 0f, settings.maxFadeDistanceLimit);
+            maxDrawDistance.floatValue = EditorGUILayout.Slider("Max Draw Distance", maxDrawDistance.floatValue, 10f, settings.maxDrawDistanceLimit);
             EditorGUILayout.PropertyField(cullingTreeDepth);
             
             EditorGUILayout.Space(10);
@@ -248,7 +276,7 @@ namespace GrassSystem
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(patternColorA);
                 EditorGUILayout.PropertyField(patternColorB);
-                EditorGUILayout.PropertyField(patternScale);
+                patternScale.floatValue = EditorGUILayout.Slider("Pattern Scale", patternScale.floatValue, 0.5f, settings.maxPatternScaleLimit);
                 EditorGUI.indentLevel--;
             }
             
@@ -282,8 +310,8 @@ namespace GrassSystem
             
             // === INTERACTION ===
             EditorGUILayout.LabelField("Interaction", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(interactorStrength);
-            EditorGUILayout.PropertyField(maxInteractors);
+            interactorStrength.floatValue = EditorGUILayout.Slider("Interactor Strength", interactorStrength.floatValue, 0f, settings.maxInteractorStrengthLimit);
+            maxInteractors.intValue = EditorGUILayout.IntSlider("Max Interactors", maxInteractors.intValue, 1, settings.maxInteractorsLimit);
             
             EditorGUILayout.Space(10);
             
@@ -297,6 +325,41 @@ namespace GrassSystem
             // === DEBUG ===
             EditorGUILayout.LabelField("Debug", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(drawCullingBounds);
+            
+            EditorGUILayout.Space(10);
+            
+            // === ADVANCED LIMITS ===
+            showAdvancedLimits.boolValue = EditorGUILayout.Foldout(showAdvancedLimits.boolValue, "Advanced Limits", true, EditorStyles.foldoutHeader);
+            if (showAdvancedLimits.boolValue)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.HelpBox("Customize slider maximum values for extended ranges. Changes take effect immediately.", MessageType.Info);
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("Size Limits", EditorStyles.miniLabel);
+                EditorGUILayout.PropertyField(maxSizeLimit, new GUIContent("Max Size Limit"));
+                EditorGUILayout.PropertyField(maxBladeWidthLimit, new GUIContent("Max Blade Width Limit"));
+                EditorGUILayout.PropertyField(maxBladeHeightLimit, new GUIContent("Max Blade Height Limit"));
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("Wind Limits", EditorStyles.miniLabel);
+                EditorGUILayout.PropertyField(maxWindSpeedLimit, new GUIContent("Max Wind Speed Limit"));
+                EditorGUILayout.PropertyField(maxWindStrengthLimit, new GUIContent("Max Wind Strength Limit"));
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("LOD Limits", EditorStyles.miniLabel);
+                EditorGUILayout.PropertyField(maxFadeDistanceLimit, new GUIContent("Max Fade Distance Limit"));
+                EditorGUILayout.PropertyField(maxDrawDistanceLimit, new GUIContent("Max Draw Distance Limit"));
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("Other Limits", EditorStyles.miniLabel);
+                EditorGUILayout.PropertyField(maxTiltAngleLimit, new GUIContent("Max Tilt Angle Limit"));
+                EditorGUILayout.PropertyField(maxInteractorStrengthLimit, new GUIContent("Max Interactor Strength Limit"));
+                EditorGUILayout.PropertyField(maxInteractorsLimit, new GUIContent("Max Interactors Limit"));
+                EditorGUILayout.PropertyField(maxPatternScaleLimit, new GUIContent("Max Pattern Scale Limit"));
+                
+                EditorGUI.indentLevel--;
+            }
             
             serializedObject.ApplyModifiedProperties();
         }

@@ -20,8 +20,8 @@ MonoBehaviour:
   maxBladeWidth: 0.08
   minBladeHeight: 0.15
   maxBladeHeight: 0.35
-  minBladeSize: 0.6
-  maxBladeSize: 1.28
+  minBladeSize: 0.155
+  maxBladeSize: 0.504
   heightBrushValue: 0.5
   brushColor: {r: 1, g: 1, b: 1, a: 1}
   colorVariationR: 0.1
@@ -35,8 +35,17 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   useClusterSpawning: 1
-  minBladesPerCluster: 3
+  minBladesPerCluster: 5
   maxBladesPerCluster: 10
-  clusterRadius: 0.1
+  clusterRadius: 0.5
   maxGrassToGenerate: 100000
   generationDensity: 0.5
+  showAdvancedLimits: 1
+  maxBrushSizeLimit: 50
+  maxDensityLimit: 10
+  maxBladesPerClusterLimit: 10
+  maxClusterRadiusLimit: 0.5
+  maxBladeWidthLimit: 0.5
+  maxBladeHeightLimit: 2
+  maxBladeSizeLimit: 3
+  maxHeightBrushLimit: 2

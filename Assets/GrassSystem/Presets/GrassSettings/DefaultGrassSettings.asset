@@ -24,8 +24,8 @@ MonoBehaviour:
   maxSize: 0.82
   useOnlyAlbedoColor: 1
   meshRotationOffset: {x: 90, y: 90, z: 0}
-  maxTiltAngle: 35.6
-  tiltVariation: 1
+  maxTiltAngle: 26.11
+  tiltVariation: 0.343
   minWidth: 0.1
   maxWidth: 0.1
   minHeight: 1.5
@@ -51,9 +51,21 @@ MonoBehaviour:
   useAlignedNormals: 1
   useTerrainLightmap: 0
   terrain: {fileID: 0}
-  terrainLightmapInfluence: 0.5
+  terrainLightmapInfluence: 0.579
   interactorStrength: 1
   maxInteractors: 8
   castShadows: 0
   receiveShadows: 1
   drawCullingBounds: 0
+  showAdvancedLimits: 1
+  maxSizeLimit: 3
+  maxBladeWidthLimit: 0.3
+  maxBladeHeightLimit: 1.5
+  maxWindSpeedLimit: 5
+  maxWindStrengthLimit: 1
+  maxDrawDistanceLimit: 200
+  maxFadeDistanceLimit: 150
+  maxTiltAngleLimit: 45
+  maxInteractorStrengthLimit: 2
+  maxInteractorsLimit: 16
+  maxPatternScaleLimit: 10
