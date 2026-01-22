@@ -1,0 +1,51 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 36596aba45ff8de498fed149a9a9a7db, type: 3}
+  m_Name: GrassToolSettings
+  m_EditorClassIdentifier: GrassSystem.Editor::GrassSystem.SO_GrassToolSettings
+  brushSize: 50
+  density: 10
+  normalLimit: 0.8
+  useCustomSize: 1
+  minBladeWidth: 0.03
+  maxBladeWidth: 0.08
+  minBladeHeight: 0.15
+  maxBladeHeight: 0.35
+  minBladeSize: 0.155
+  maxBladeSize: 0.504
+  heightBrushValue: 0.5
+  brushColor: {r: 1, g: 1, b: 1, a: 1}
+  colorVariationR: 0.1
+  colorVariationG: 0.15
+  colorVariationB: 0.1
+  patternBrushValue: 0
+  paintMask:
+    serializedVersion: 2
+    m_Bits: 7
+  blockMask:
+    serializedVersion: 2
+    m_Bits: 0
+  useClusterSpawning: 1
+  minBladesPerCluster: 5
+  maxBladesPerCluster: 10
+  clusterRadius: 0.5
+  maxGrassToGenerate: 100000
+  generationDensity: 0.5
+  showAdvancedLimits: 1
+  maxBrushSizeLimit: 50
+  maxDensityLimit: 10
+  maxBladesPerClusterLimit: 10
+  maxClusterRadiusLimit: 0.5
+  maxBladeWidthLimit: 0.5
+  maxBladeHeightLimit: 2
+  maxBladeSizeLimit: 3
+  maxHeightBrushLimit: 2
