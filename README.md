@@ -172,30 +172,101 @@ public class Player : MonoBehaviour
 
 ### GrassPerformanceOverlay
 
-Displays real-time performance metrics for debugging and optimization.
+Displays real-time performance metrics for debugging and optimization. **Works on all platforms including Nintendo Switch.**
 
 **Setup:**
 1. Add to any GameObject in your scene
-2. Press F1 to toggle the overlay during play mode
+2. Press F1 (keyboard) or Minus button (Switch) to toggle the overlay
+
+**Display Modes:**
+
+| Mode | Description | Recommended For |
+|------|-------------|-----------------|
+| **Full** | Complete stats: FPS, frame time, grass counts, culling % | PC Development |
+| **Minimal** | FPS only (lightweight) | Switch / Console |
+
+**Controls:**
+
+| Action | Keyboard | Gamepad (Switch) |
+|--------|----------|------------------|
+| Toggle Overlay | **F1** | **Select / Minus (-)** |
+| Switch Mode | **F2** | **Start / Plus (+)** |
 
 **Inspector Properties:**
 
 | Property | Description |
 |----------|-------------|
-| **Toggle Key** | Key to show/hide overlay (default: F1) |
+| **Display Mode** | Full (all stats) or Minimal (FPS only) |
+| **Toggle Key** | Keyboard key to show/hide overlay (default: F1) |
+| **Switch Mode Key** | Keyboard key to change display mode (default: F2) |
+| **Gamepad Toggle Button** | Controller button to show/hide overlay (Select, Start, LeftShoulder, RightShoulder, LeftStick, RightStick) |
+| **Gamepad Switch Mode Button** | Controller button to change display mode |
 | **Anchor** | Screen position of the overlay |
 | **Font Size** | Text size (12 - 32) |
 | **Background Alpha** | Panel transparency (0 - 1) |
-| **Target FPS** | Target framerate for color coding |
-| **Log Lifecycle Events** | Enable console logging for debug |
+| **Log Lifecycle Events** | Enable console logging for debug (also accessible via `LogLifecycleEventsEnabled` static property) |
 
-**Displayed Metrics:**
-- Current FPS (color-coded: green/yellow/red based on target)
+**Displayed Metrics (Full Mode):**
+- Current FPS (color-coded: green ≥30, yellow ≥24, red <24)
 - Frame time in milliseconds
 - Min/Max FPS recorded
 - Total grass count
 - Visible grass count (after culling)
 - Culling percentage
+
+**Public API:**
+
+```csharp
+// Reset min/max FPS statistics
+GrassPerformanceOverlay overlay = GetComponent<GrassPerformanceOverlay>();
+overlay.ResetStats();
+
+// Check if lifecycle logging is enabled (static)
+bool loggingEnabled = GrassPerformanceOverlay.LogLifecycleEventsEnabled;
+```
+
+---
+
+### SimplePlayerController
+
+Simple first-person controller for testing the Grass System. **Supports keyboard/mouse and gamepad (including Nintendo Switch).**
+
+**Setup:**
+1. Add to a GameObject with a `CharacterController` component
+2. Assign a camera to the `Camera Transform` field
+3. Optionally add a `GrassInteractor` to the same object
+
+**Controls:**
+
+| Action | Keyboard | Gamepad (Switch) |
+|--------|----------|------------------|
+| Move | **WASD** | **Left Stick** |
+| Look | **Mouse** | **Right Stick** |
+| Jump | **Space** | **A (South)** |
+| Sprint | **Left Shift** | **L Trigger/Shoulder** |
+| Pause/Menu | **Escape** | **Start (+)** |
+
+**Inspector Properties:**
+
+| Property | Description |
+|----------|-------------|
+| **Move Speed** | Base movement speed (default: 5) |
+| **Sprint Multiplier** | Speed multiplier when sprinting (default: 2x) |
+| **Jump Height** | Jump height in units (default: 1.5) |
+| **Gravity** | Gravity force (default: -20) |
+| **Mouse Sensitivity** | Mouse look sensitivity (default: 100) |
+| **Gamepad Look Sensitivity** | Right stick look sensitivity (default: 150) |
+| **Camera Transform** | Reference to the camera for look rotation |
+| **Invert Gamepad Y** | Invert Y axis on gamepad right stick |
+| **Stick Deadzone** | Deadzone for analog sticks (0.1 - 0.9) |
+
+**Public API:**
+
+```csharp
+// Check if player is using gamepad
+SimplePlayerController player = GetComponent<SimplePlayerController>();
+bool usingGamepad = player.IsUsingGamepad;
+```
 
 ---
 
@@ -240,6 +311,70 @@ Right-click in Project > **Create > Grass System > Grass Settings**
 | **Lighting** | Top Tint, Bottom Tint, Translucency |
 | **Interaction** | Interactor Strength, Max Interactors |
 | **Rendering** | Cast Shadows, Receive Shadows |
+
+**Advanced Limits:**
+
+Enable `Show Advanced Limits` in the Inspector to customize slider maximum values beyond default ranges.
+
+| Category | Limit Property | Default | Description |
+|----------|----------------|---------|-------------|
+| **Size** | Max Size Limit | 3.0 | Maximum uniform scale for custom meshes |
+| **Size** | Max Blade Width Limit | 0.3 | Maximum blade width (Default mode) |
+| **Size** | Max Blade Height Limit | 1.5 | Maximum blade height (Default mode) |
+| **Wind** | Max Wind Speed Limit | 5.0 | Maximum wind speed |
+| **Wind** | Max Wind Strength Limit | 1.0 | Maximum wind strength |
+| **LOD** | Max Draw Distance Limit | 200 | Maximum draw distance |
+| **LOD** | Max Fade Distance Limit | 150 | Maximum fade start distance |
+| **Tilt** | Max Tilt Angle Limit | 45° | Maximum random tilt angle |
+| **Interaction** | Max Interactor Strength Limit | 2.0 | Maximum interactor strength |
+| **Interaction** | Max Interactors Limit | 16 | Maximum number of interactors |
+| **Pattern** | Max Pattern Scale Limit | 10.0 | Maximum checkered pattern scale |
+
+---
+
+### SO_GrassToolSettings
+
+ScriptableObject that holds Grass Painter tool configuration. Created automatically when opening the Grass Painter window.
+
+**Brush Properties:**
+
+| Property | Description |
+|----------|-------------|
+| **Brush Size** | Size of the painting brush (0.1 - 50) |
+| **Density** | Grass density per brush stroke (0.1 - 10) |
+| **Normal Limit** | Maximum surface angle for painting (0 - 1) |
+
+**Size Override:**
+
+| Property | Description |
+|----------|-------------|
+| **Use Custom Size** | Enable to override settings with tool-specific values |
+| **Min/Max Blade Width** | Custom blade width range (Default mode) |
+| **Min/Max Blade Height** | Custom blade height range (Default mode) |
+| **Min/Max Blade Size** | Custom uniform scale range (Custom Mesh mode) |
+
+**Cluster Spawning:**
+
+| Property | Description |
+|----------|-------------|
+| **Use Cluster Spawning** | Spawn multiple blades in natural clusters |
+| **Min/Max Blades Per Cluster** | Number of blades per cluster (1 - 10) |
+| **Cluster Radius** | Radius of each cluster (0.01 - 0.5) |
+
+**Advanced Limits (Tool):**
+
+Enable `Show Advanced Limits` in the Grass Painter window to customize tool slider ranges.
+
+| Category | Limit Property | Default | Description |
+|----------|----------------|---------|-------------|
+| **Brush** | Max Brush Size Limit | 50 | Maximum brush size |
+| **Brush** | Max Density Limit | 10 | Maximum brush density |
+| **Cluster** | Max Blades Per Cluster Limit | 10 | Maximum blades per cluster |
+| **Cluster** | Max Cluster Radius Limit | 0.5 | Maximum cluster radius |
+| **Blade** | Max Blade Width Limit | 0.5 | Maximum blade width |
+| **Blade** | Max Blade Height Limit | 2.0 | Maximum blade height |
+| **Blade** | Max Blade Size Limit | 3.0 | Maximum uniform scale |
+| **Height** | Max Height Brush Limit | 2.0 | Maximum height brush value |
 
 ---
 
