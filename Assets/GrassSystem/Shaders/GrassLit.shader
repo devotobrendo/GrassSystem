@@ -328,6 +328,7 @@ Shader "GrassSystem/GrassLit"
             #pragma multi_compile_instancing
             
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
             #include "GrassCommon.hlsl"
             
