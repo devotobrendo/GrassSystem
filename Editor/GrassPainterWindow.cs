@@ -44,17 +44,29 @@ namespace GrassSystem
         
         private void LoadOrCreateSettings()
         {
-            string path = "Assets/GrassSystem/Editor/GrassToolSettings.asset";
-            toolSettings = AssetDatabase.LoadAssetAtPath<SO_GrassToolSettings>(path);
-            
-            if (toolSettings == null)
+            // First, try to find existing settings anywhere in the project
+            string[] guids = AssetDatabase.FindAssets("t:SO_GrassToolSettings");
+            if (guids.Length > 0)
             {
-                toolSettings = CreateInstance<SO_GrassToolSettings>();
-                if (!AssetDatabase.IsValidFolder("Assets/GrassSystem/Editor"))
-                    AssetDatabase.CreateFolder("Assets/GrassSystem", "Editor");
-                AssetDatabase.CreateAsset(toolSettings, path);
-                AssetDatabase.SaveAssets();
+                string existingPath = AssetDatabase.GUIDToAssetPath(guids[0]);
+                toolSettings = AssetDatabase.LoadAssetAtPath<SO_GrassToolSettings>(existingPath);
+                if (toolSettings != null) return;
             }
+            
+            // Create new settings in a user-accessible location (not in Packages)
+            string settingsFolder = "Assets/GrassSystem/Editor";
+            string path = settingsFolder + "/GrassToolSettings.asset";
+            
+            // Ensure folder exists
+            if (!AssetDatabase.IsValidFolder("Assets/GrassSystem"))
+                AssetDatabase.CreateFolder("Assets", "GrassSystem");
+            if (!AssetDatabase.IsValidFolder(settingsFolder))
+                AssetDatabase.CreateFolder("Assets/GrassSystem", "Editor");
+            
+            toolSettings = CreateInstance<SO_GrassToolSettings>();
+            AssetDatabase.CreateAsset(toolSettings, path);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[GrassSystem] Created tool settings at: {path}");
         }
         
         private void OnGUI()
