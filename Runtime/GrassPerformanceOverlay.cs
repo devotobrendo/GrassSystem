@@ -6,10 +6,50 @@ using System.Text;
 
 namespace GrassSystem
 {
+    /// <summary>
+    /// Performance overlay modes: Full shows all stats, Minimal shows only FPS (lighter on performance)
+    /// </summary>
+    public enum OverlayDisplayMode
+    {
+        Full,       // Complete stats display
+        Minimal     // FPS only (recommended for Switch)
+    }
+    
+    /// <summary>
+    /// Gamepad buttons that can be used to toggle the overlay
+    /// </summary>
+    public enum GamepadButton
+    {
+        Select,         // Minus button on Switch
+        Start,          // Plus button on Switch
+        LeftShoulder,   // L button
+        RightShoulder,  // R button
+        LeftStick,      // Press left stick
+        RightStick      // Press right stick
+    }
+    
+    /// <summary>
+    /// In-game performance overlay for the Grass System.
+    /// Works on all platforms including Nintendo Switch.
+    /// 
+    /// Controls:
+    /// - F1 (keyboard) or Select/Minus (gamepad): Toggle overlay on/off
+    /// - F2 (keyboard) or Start/Plus (gamepad): Switch between Full and Minimal mode
+    /// </summary>
     public class GrassPerformanceOverlay : MonoBehaviour
     {
         [Header("Display Settings")]
+        [Tooltip("Display mode: Full shows all stats, Minimal shows only FPS (lighter for Switch)")]
+        public OverlayDisplayMode displayMode = OverlayDisplayMode.Full;
+        
         public Key toggleKey = Key.F1;
+        public Key switchModeKey = Key.F2;
+        
+        [Tooltip("Gamepad button to toggle overlay (Select = minus button on Switch)")]
+        public GamepadButton gamepadToggleButton = GamepadButton.Select;
+        [Tooltip("Gamepad button to switch display mode (Start = plus button on Switch)")]
+        public GamepadButton gamepadSwitchModeButton = GamepadButton.Start;
+        
         public TextAnchor anchor = TextAnchor.UpperLeft;
         [Range(12, 32)]
         public int fontSize = 18;
@@ -24,9 +64,6 @@ namespace GrassSystem
         /// Static accessor for other scripts to check if logging is enabled
         /// </summary>
         public static bool LogLifecycleEventsEnabled { get; private set; }
-        
-        [Header("Target Benchmarks")]
-        public int targetFPS = 30;
         
         private bool showOverlay = true;
         private GUIStyle boxStyle;
@@ -52,23 +89,42 @@ namespace GrassSystem
         private void Start()
         {
             grassRenderer = FindAnyObjectByType<GrassRenderer>();
-            Application.targetFrameRate = targetFPS;
             LogLifecycleEventsEnabled = logLifecycleEvents;
         }
         
         private void OnValidate()
         {
-            // Update static flag when inspector value changes
             LogLifecycleEventsEnabled = logLifecycleEvents;
         }
         
         private void Update()
         {
-            if (Keyboard.current != null && Keyboard.current.f1Key.wasPressedThisFrame)
-                showOverlay = !showOverlay;
+            HandleInput();
             
             if (!showOverlay) return;
             
+            UpdateMetrics();
+        }
+        
+        private void HandleInput()
+        {
+            // Toggle overlay: F1 (keyboard) or Select (gamepad)
+            bool keyboardToggle = Keyboard.current != null && Keyboard.current[toggleKey].wasPressedThisFrame;
+            bool gamepadToggle = Gamepad.current != null && GetGamepadButton(gamepadToggleButton).wasPressedThisFrame;
+            
+            if (keyboardToggle || gamepadToggle)
+                showOverlay = !showOverlay;
+            
+            // Switch display mode: F2 (keyboard) or Start (gamepad)
+            bool keyboardSwitchMode = Keyboard.current != null && Keyboard.current[switchModeKey].wasPressedThisFrame;
+            bool gamepadSwitchMode = Gamepad.current != null && GetGamepadButton(gamepadSwitchModeButton).wasPressedThisFrame;
+            
+            if (keyboardSwitchMode || gamepadSwitchMode)
+                displayMode = displayMode == OverlayDisplayMode.Full ? OverlayDisplayMode.Minimal : OverlayDisplayMode.Full;
+        }
+        
+        private void UpdateMetrics()
+        {
             float deltaTime = Time.unscaledDeltaTime;
             frameTimes[frameTimeIndex] = deltaTime * 1000f;
             frameTimeIndex = (frameTimeIndex + 1) % frameTimes.Length;
@@ -106,8 +162,36 @@ namespace GrassSystem
             
             InitStyles();
             
+            if (displayMode == OverlayDisplayMode.Minimal)
+                DrawMinimalOverlay();
+            else
+                DrawFullOverlay();
+        }
+        
+        private void DrawMinimalOverlay()
+        {
+            float width = 150;
+            float height = 40;
+            float x = 10;
+            float y = 10;
+            
+            if (anchor == TextAnchor.UpperRight || anchor == TextAnchor.MiddleRight || anchor == TextAnchor.LowerRight)
+                x = Screen.width - width - 10;
+            if (anchor == TextAnchor.LowerLeft || anchor == TextAnchor.LowerCenter || anchor == TextAnchor.LowerRight)
+                y = Screen.height - height - 10;
+            
+            GUI.Box(new Rect(x, y, width, height), "", boxStyle);
+            
+            string fpsColor = smoothFPS >= 30f ? "#00FF00" : (smoothFPS >= 24f ? "#FFFF00" : "#FF4444");
+            string text = $"<color={fpsColor}><b>FPS: {smoothFPS:F1}</b></color>";
+            
+            GUI.Label(new Rect(x + 10, y + 8, width - 20, height - 16), text, labelStyle);
+        }
+        
+        private void DrawFullOverlay()
+        {
             float width = 300;
-            float height = 200;
+            float height = 180;
             float x = 10;
             float y = 10;
             
@@ -122,12 +206,9 @@ namespace GrassSystem
             sb.AppendLine("<b>GRASS SYSTEM</b>");
             sb.AppendLine("─────────────────────");
             
-            string fpsColor = smoothFPS >= targetFPS ? "#00FF00" : (smoothFPS >= targetFPS * 0.8f ? "#FFFF00" : "#FF4444");
+            string fpsColor = smoothFPS >= 30f ? "#00FF00" : (smoothFPS >= 24f ? "#FFFF00" : "#FF4444");
             sb.AppendLine($"<color={fpsColor}><b>FPS: {smoothFPS:F1}</b></color>  (Min: {minFPS:F0} / Max: {maxFPS:F0})");
-            
-            float targetMs = 1000f / targetFPS;
-            string frameColor = avgFrameTime <= targetMs ? "#00FF00" : "#FF4444";
-            sb.AppendLine($"<color={frameColor}>Frame: {avgFrameTime:F2}ms</color>  (Target: {targetMs:F1}ms)");
+            sb.AppendLine($"Frame: {avgFrameTime:F2}ms");
             
             sb.AppendLine();
             sb.AppendLine($"Total Grass: <b>{totalGrassCount:N0}</b>");
@@ -142,7 +223,9 @@ namespace GrassSystem
             }
             
             sb.AppendLine();
-            sb.AppendLine("<size=11><color=#666666>[F1] toggle</color></size>");
+            bool hasGamepad = Gamepad.current != null;
+            string toggleHint = hasGamepad ? $"[-] toggle  [+] mode" : "[F1] toggle  [F2] mode";
+            sb.AppendLine($"<size=11><color=#666666>{toggleHint}</color></size>");
             
             GUI.Label(new Rect(x + 10, y + 5, width - 20, height - 10), sb.ToString(), labelStyle);
         }
@@ -168,7 +251,6 @@ namespace GrassSystem
         
         private void OnDisable()
         {
-            // Cleanup to prevent texture leak
             if (bgTexture != null)
             {
                 if (Application.isPlaying)
@@ -186,6 +268,21 @@ namespace GrassSystem
             minFPS = float.MaxValue;
             maxFPS = 0;
             frameCount = 0;
+        }
+        
+        private UnityEngine.InputSystem.Controls.ButtonControl GetGamepadButton(GamepadButton button)
+        {
+            var gp = Gamepad.current;
+            return button switch
+            {
+                GamepadButton.Select => gp.selectButton,
+                GamepadButton.Start => gp.startButton,
+                GamepadButton.LeftShoulder => gp.leftShoulder,
+                GamepadButton.RightShoulder => gp.rightShoulder,
+                GamepadButton.LeftStick => gp.leftStickButton,
+                GamepadButton.RightStick => gp.rightStickButton,
+                _ => gp.selectButton
+            };
         }
     }
 }

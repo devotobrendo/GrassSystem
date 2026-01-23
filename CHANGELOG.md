@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-21
+
+### Added
+- **Dual Display Modes for Performance Overlay** - Full mode (all stats) and Minimal mode (FPS only, lightweight for consoles)
+- **Gamepad Support for Performance Overlay** - Toggle with Minus button, switch modes with Plus button (Switch compatible)
+- **Gamepad Support for SimplePlayerController** - Full controller support including left/right sticks, triggers, and face buttons
+- **Configurable Gamepad Settings** - Sensitivity, deadzone, and invert Y axis options
+
+### Changed
+- Removed `targetFPS` from Performance Overlay - Now measures native FPS without comparison to target
+- Removed `Application.targetFrameRate` setting from overlay component
+- Performance Overlay now shows dynamic control hints based on input device
+
+### Fixed
+- Minimal FPS overlay display size increased to properly show the FPS value
+
 ## [1.0.0] - 2026-01-20
 
 ### Added
