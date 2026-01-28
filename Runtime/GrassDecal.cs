@@ -24,9 +24,13 @@ namespace GrassSystem
         [Tooltip("Blend strength of the decal. 0 = invisible, 1 = fully visible.")]
         public float blend = 1f;
         
-        [Header("Surface Decal")]
+        [Header("Surface Decal (Terrain)")]
         [Tooltip("Also project the decal onto the terrain/surface below the grass using URP Decal Projector.")]
         public bool paintSurface = false;
+        
+        [Range(0f, 1f)]
+        [Tooltip("Opacity of the surface decal. Lower values make it more subtle under the grass.")]
+        public float surfaceBlend = 0.3f;
         
         [Tooltip("Material for the surface decal. If null, a default URP Decal material will be created.")]
         public Material surfaceDecalMaterial;
@@ -186,7 +190,7 @@ namespace GrassSystem
             
             // Update projector properties
             _surfaceProjector.size = new Vector3(size.x, projectionDepth, size.y);
-            _surfaceProjector.fadeFactor = blend;
+            _surfaceProjector.fadeFactor = surfaceBlend;
             
             // Update material texture
             Material projMat = GetOrCreateProjectorMaterial();
