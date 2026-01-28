@@ -67,6 +67,11 @@ namespace GrassSystem
         
         public int VisibleGrassCount => lastVisibleCount;
         
+        /// <summary>
+        /// Gets the material instance used for rendering. Used by GrassDecal for applying decals.
+        /// </summary>
+        public Material MaterialInstance => materialInstance;
+        
         public void RebuildBuffers()
         {
             Cleanup();
