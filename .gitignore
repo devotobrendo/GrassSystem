@@ -8,6 +8,11 @@
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
 
+# Unity project folders (not part of UPM package)
+[Aa]ssets/
+[Pp]ackages/
+[Pp]roject[Ss]ettings/
+
 # Asset meta data (uncomment if not tracking)
 # *.meta
 
