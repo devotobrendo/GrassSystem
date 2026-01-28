@@ -49,7 +49,16 @@ namespace GrassSystem
         
         private void Update()
         {
-            // Update decal properties every frame (for live editing in editor)
+            // Try to find renderer if not set
+            if (targetRenderer == null)
+            {
+                targetRenderer = FindFirstObjectByType<GrassRenderer>();
+            }
+        }
+        
+        private void LateUpdate()
+        {
+            // Apply decal in LateUpdate to ensure GrassRenderer has initialized its material
             if (enabled && decalTexture != null)
             {
                 ApplyDecal();
@@ -70,8 +79,17 @@ namespace GrassSystem
         /// </summary>
         public void ApplyDecal()
         {
-            if (targetRenderer == null || targetRenderer.MaterialInstance == null)
+            if (targetRenderer == null)
+            {
+                Debug.LogWarning("[GrassDecal] No targetRenderer assigned or found!", this);
                 return;
+            }
+            
+            if (targetRenderer.MaterialInstance == null)
+            {
+                // Material not ready yet, will be applied next frame
+                return;
+            }
             
             Material mat = targetRenderer.MaterialInstance;
             
