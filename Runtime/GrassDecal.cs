@@ -212,15 +212,17 @@ namespace GrassSystem
                 if (_surfaceProjector != null) return;
             }
             
-            // Create new projector as child
+            // Create new projector as child (visible and editable)
             GameObject projectorObj = new GameObject("SurfaceDecalProjector");
             projectorObj.transform.SetParent(transform);
             projectorObj.transform.localPosition = Vector3.zero;
-            projectorObj.hideFlags = HideFlags.DontSave;
             
             _surfaceProjector = projectorObj.AddComponent<DecalProjector>();
             _surfaceProjector.pivot = new Vector3(0f, 1f, 0f);
             _surfaceProjector.scaleMode = DecalScaleMode.ScaleInvariant;
+            _surfaceProjector.drawDistance = 1000f;
+            _surfaceProjector.startAngleFade = 180f;
+            _surfaceProjector.endAngleFade = 180f;
         }
         
         private Material GetOrCreateProjectorMaterial()
