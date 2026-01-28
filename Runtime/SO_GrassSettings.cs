@@ -101,10 +101,13 @@ namespace GrassSystem
         public float terrainLightmapInfluence = 0.5f;
         
         [Header("Interaction")]
-        [Range(0f, 2f)]
-        public float interactorStrength = 1f;
+        [Range(0f, 5f)]
+        public float interactorStrength = 2f;
         [Range(1, 16)]
         public int maxInteractors = 8;
+        [Range(30f, 90f)]
+        [Tooltip("Maximum bend angle when grass is stepped on (degrees)")]
+        public float maxBendAngle = 90f;
         
         [Header("Rendering")]
         public ShadowCastingMode castShadows = ShadowCastingMode.Off;
