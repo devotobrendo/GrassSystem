@@ -48,6 +48,13 @@ Shader "GrassSystem/GrassLit"
         [Header(Natural Variation)]
         _MaxTiltAngle ("Max Tilt Angle (Radians)", Float) = 0.26
         _TiltVariation ("Tilt Variation", Range(0, 1)) = 0.7
+        
+        [Header(Decal Projection)]
+        [Toggle] _DecalEnabled ("Enable Decal", Float) = 0
+        _DecalTex ("Decal Texture", 2D) = "white" {}
+        _DecalBounds ("Decal Bounds (centerX, centerZ, sizeX, sizeZ)", Vector) = (0, 0, 10, 10)
+        _DecalRotation ("Decal Rotation (radians)", Float) = 0
+        _DecalBlend ("Decal Blend", Range(0, 1)) = 1
     }
     
     SubShader
@@ -88,10 +95,12 @@ Shader "GrassSystem/GrassLit"
             TEXTURE2D(_NormalMap);
             TEXTURE2D(_TipMask);
             TEXTURE2D(_TerrainLightmap);
+            TEXTURE2D(_DecalTex);
             SAMPLER(sampler_MainTex);
             SAMPLER(sampler_NormalMap);
             SAMPLER(sampler_TipMask);
             SAMPLER(sampler_TerrainLightmap);
+            SAMPLER(sampler_DecalTex);
             
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
@@ -119,6 +128,10 @@ Shader "GrassSystem/GrassLit"
                 float _MaxTiltAngle;
                 float _TiltVariation;
                 float _MaxBendAngle;
+                float _DecalEnabled;
+                float4 _DecalBounds;
+                float _DecalRotation;
+                float _DecalBlend;
             CBUFFER_END
             
             struct Attributes
@@ -311,6 +324,31 @@ Shader "GrassSystem/GrassLit"
                     float useMask = lerp(checker, input.patternMask, 0.5);
                     half3 patternColor = lerp(_PatternColorA.rgb, _PatternColorB.rgb, useMask);
                     baseColor *= patternColor;
+                }
+                
+                // Decal projection
+                if (_DecalEnabled > 0.5)
+                {
+                    // Calculate position relative to decal center
+                    float2 relPos = input.positionWS.xz - _DecalBounds.xy;
+                    
+                    // Apply rotation
+                    float cosR = cos(-_DecalRotation);
+                    float sinR = sin(-_DecalRotation);
+                    float2 rotatedPos = float2(
+                        relPos.x * cosR - relPos.y * sinR,
+                        relPos.x * sinR + relPos.y * cosR
+                    );
+                    
+                    // Convert to UV (0-1 range)
+                    float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
+                    
+                    // Check if inside decal bounds
+                    if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                    {
+                        half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
+                        baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                    }
                 }
                 
                 // Only apply albedo texture in Custom Mesh mode
