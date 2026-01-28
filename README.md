@@ -4,6 +4,9 @@ A high-performance, GPU-based grass rendering system for **Unity URP**, inspired
 
 ---
 
+## Media
+- [Click here to watch the Technical Showcase](https://youtu.be/YUdifIoGrvY)
+
 ## Features
 
 ### Rendering
