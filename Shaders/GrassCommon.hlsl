@@ -74,7 +74,8 @@ float3 TransformGrassVertex(
     float useUniformScale,
     float3 meshRotation,
     float maxTiltAngle,
-    float tiltVariation
+    float tiltVariation,
+    float maxBendAngle
 )
 {
     float3 scaledPos = localPos;
@@ -132,7 +133,7 @@ float3 TransformGrassVertex(
     float interactMagnitude = length(interactionOffset.xz) * bendInfluence;
     if (interactMagnitude > 0.001)
     {
-        float interactBendAngle = min(interactMagnitude * 0.8, 0.8);
+        float interactBendAngle = min(interactMagnitude * maxBendAngle, maxBendAngle);
         float2 interactDir = normalize(interactionOffset.xz);
         
         // Rotate to local space
@@ -166,7 +167,34 @@ float3 TransformGrassVertex(
         localPos, worldPivot, surfaceNormal,
         width, height, distanceScale,
         windOffset, interactionOffset, uvY,
-        0.0, float3(0, 0, 0), 0.0, 0.0
+        0.0, float3(0, 0, 0), 0.0, 0.0,
+        1.4 // Default ~80 degrees
+    );
+}
+
+// 13-parameter version for backward compatibility
+float3 TransformGrassVertex(
+    float3 localPos,
+    float3 worldPivot,
+    float3 surfaceNormal,
+    float width,
+    float height,
+    float distanceScale,
+    float2 windOffset,
+    float3 interactionOffset,
+    float uvY,
+    float useUniformScale,
+    float3 meshRotation,
+    float maxTiltAngle,
+    float tiltVariation
+)
+{
+    return TransformGrassVertex(
+        localPos, worldPivot, surfaceNormal,
+        width, height, distanceScale,
+        windOffset, interactionOffset, uvY,
+        useUniformScale, meshRotation, maxTiltAngle, tiltVariation,
+        1.4 // Default ~80 degrees
     );
 }
 
