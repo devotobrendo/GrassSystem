@@ -118,6 +118,7 @@ Shader "GrassSystem/GrassLit"
                 float4 _MeshRotation;
                 float _MaxTiltAngle;
                 float _TiltVariation;
+                float _MaxBendAngle;
             CBUFFER_END
             
             struct Attributes
@@ -158,6 +159,11 @@ Shader "GrassSystem/GrassLit"
                 );
                 
                 float3 interactionOffset = float3(0, 0, 0);
+                float maxInfluence = 0;
+                
+                float grassHeight = grassData.widthHeight.y;
+                float grassBase = grassData.position.y;
+                
                 [loop]
                 for (int i = 0; i < _InteractorCount; i++)
                 {
@@ -166,18 +172,49 @@ Shader "GrassSystem/GrassLit"
                     
                     if (radius > 0)
                     {
-                        float3 toGrass = grassData.position - interactorPos;
-                        float dist = length(toGrass.xz);
+                        // Distance on XZ plane
+                        float distXZ = length(grassData.position.xz - interactorPos.xz);
                         
-                        if (dist < radius && dist > 0.001)
+                        // Vertical distance: how far above grass base is the interactor?
+                        float heightAboveBase = interactorPos.y - grassBase;
+                        
+                        // Check horizontal range
+                        if (distXZ < radius)
                         {
-                            float influence = 1.0 - saturate(dist / radius);
-                            influence = influence * influence;
-                            float3 pushDir = normalize(float3(toGrass.x, 0, toGrass.z));
-                            interactionOffset += pushDir * influence * _InteractorStrength;
+                            // Horizontal influence
+                            float hInfluence = 1.0 - (distXZ / radius);
+                            hInfluence = hInfluence * hInfluence;
+                            
+                            // Vertical influence: full when at/below base, fades as we go up
+                            float vInfluence = 1.0 - saturate(heightAboveBase / grassHeight);
+                            
+                            float influence = hInfluence * vInfluence;
+                            
+                            if (influence > 0.01)
+                            {
+                                maxInfluence = max(maxInfluence, influence);
+                                
+                                float3 pushDir;
+                                if (distXZ > 0.001)
+                                {
+                                    pushDir = normalize(float3(grassData.position.x - interactorPos.x, 0, grassData.position.z - interactorPos.z));
+                                }
+                                else
+                                {
+                                    float angle = Hash(grassData.position.xz) * 6.28318;
+                                    pushDir = float3(cos(angle), 0, sin(angle));
+                                }
+                                
+                                // Boost the strength for more dramatic flattening
+                                interactionOffset += pushDir * influence * _InteractorStrength * 2.0;
+                            }
                         }
                     }
                 }
+                
+                // Reduce wind based on interaction (grass under object stops moving)
+                float windReduction = 1.0 - maxInfluence;
+                windOffset *= windReduction;
                 
                 float3 worldPos = TransformGrassVertex(
                     input.positionOS.xyz,
@@ -192,7 +229,8 @@ Shader "GrassSystem/GrassLit"
                     _UseUniformScale,
                     _MeshRotation.xyz,
                     _MaxTiltAngle,
-                    _TiltVariation
+                    _TiltVariation,
+                    _MaxBendAngle
                 );
                 
                 output.positionWS = worldPos;

@@ -269,6 +269,7 @@ namespace GrassSystem
             materialInstance.SetFloat("_AlignNormals", settings.useAlignedNormals ? 1 : 0);
             
             materialInstance.SetFloat(PropInteractorStrength, settings.interactorStrength);
+            materialInstance.SetFloat("_MaxBendAngle", settings.maxBendAngle * Mathf.Deg2Rad);
             
             materialInstance.SetFloat("_UseTerrainLightmap", settings.useTerrainLightmap ? 1 : 0);
             materialInstance.SetFloat("_TerrainLightmapInfluence", settings.terrainLightmapInfluence);
