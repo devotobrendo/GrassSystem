@@ -33,9 +33,9 @@ Shader "GrassSystem/GrassUnlit"
         _LightProbeInfluence ("Light Probe Influence", Range(0, 1)) = 1.0
         
         [Header(Depth Perception)]
-        _InstanceColorVariation ("Instance Color Variation", Range(0, 0.3)) = 0.1
-        _HeightDarkening ("Height Darkening", Range(0, 0.5)) = 0.2
-        _BackfaceDarkening ("Backface Darkening", Range(0, 0.5)) = 0.3
+        _InstanceColorVariation ("Instance Color Variation", Range(0, 0.3)) = 0
+        _HeightDarkening ("Height Darkening", Range(0, 0.5)) = 0
+        _BackfaceDarkening ("Backface Darkening", Range(0, 0.5)) = 0
         
         [Header(Custom Mesh Mode)]
         [Toggle] _UseOnlyAlbedoColor ("Use Only Albedo Color", Float) = 0
@@ -277,8 +277,9 @@ Shader "GrassSystem/GrassUnlit"
                     baseColor *= patternColor;
                 }
                 
-                // Albedo texture (Custom Mesh mode)
-                if (_UseUniformScale > 0.5)
+                // Albedo texture - apply when in Custom Mesh mode OR when Use Only Albedo Color is enabled
+                // This ensures the albedo color is always applied faithfully when the user wants it
+                if (_UseUniformScale > 0.5 || _UseOnlyAlbedoColor > 0.5)
                 {
                     half4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                     baseColor *= albedo.rgb;
@@ -310,11 +311,17 @@ Shader "GrassSystem/GrassUnlit"
                 }
                 
                 // Light Probes (Spherical Harmonics) - cheap ambient lighting
-                half3 ambient = SampleSH(input.normalWS) * _LightProbeInfluence;
-                ambient = max(ambient, 0.1);
-                ambient *= _AmbientBoost;
+                half3 ambient = half3(1, 1, 1);
+                if (_UseOnlyAlbedoColor < 0.5)
+                {
+                    // Only apply lighting when not using pure albedo color
+                    ambient = SampleSH(input.normalWS) * _LightProbeInfluence;
+                    ambient = max(ambient, 0.1);
+                    ambient *= _AmbientBoost;
+                }
                 
                 // === DEPTH PERCEPTION TECHNIQUES (all very cheap - no texture samples) ===
+                // These work independently of UseOnlyAlbedoColor
                 
                 // 1. Per-instance color variation - breaks up uniformity
                 half instanceOffset = (input.instanceVariation - 0.5) * 2.0 * _InstanceColorVariation;

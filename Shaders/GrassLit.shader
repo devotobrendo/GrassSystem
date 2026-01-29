@@ -276,7 +276,9 @@ Shader "GrassSystem/GrassLit"
                 half4 albedo = half4(1, 1, 1, 1);
                 half3 normalTS = half3(0, 0, 1);
                 
-                if (!isDefaultMode)
+                // Sample textures when in Custom Mesh mode OR when Use Only Albedo Color is enabled
+                bool shouldSampleTextures = !isDefaultMode || _UseOnlyAlbedoColor > 0.5;
+                if (shouldSampleTextures)
                 {
                     albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                     normalTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, input.uv));
@@ -351,10 +353,20 @@ Shader "GrassSystem/GrassLit"
                     }
                 }
                 
-                // Only apply albedo texture in Custom Mesh mode
-                if (!isDefaultMode)
+                // Apply albedo texture when in Custom Mesh mode OR when Use Only Albedo Color is enabled
+                // This ensures the albedo color is always applied faithfully when the user wants it
+                bool shouldApplyAlbedo = !isDefaultMode || _UseOnlyAlbedoColor > 0.5;
+                if (shouldApplyAlbedo)
                 {
                     baseColor *= albedo.rgb;
+                }
+                
+                // When using only albedo color, skip PBR lighting to preserve pure color
+                if (_UseOnlyAlbedoColor > 0.5)
+                {
+                    half3 finalColor = baseColor;
+                    finalColor = MixFog(finalColor, input.fogFactor);
+                    return half4(finalColor, 1.0);
                 }
                 
                 InputData inputData = (InputData)0;
