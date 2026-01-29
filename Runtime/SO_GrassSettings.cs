@@ -12,6 +12,13 @@ namespace GrassSystem
         CustomMesh       // Imported meshes with uniform scale
     }
     
+    public enum ZonePatternType
+    {
+        Stripes,         // Directional stripes like baseball fields
+        Checkerboard,    // Classic checkerboard pattern
+        Noise            // Organic noise-based variation
+    }
+    
     [CreateAssetMenu(fileName = "GrassSettings", menuName = "Grass System/Grass Settings")]
     public class SO_GrassSettings : ScriptableObject
     {
@@ -69,12 +76,26 @@ namespace GrassSystem
         [Range(1, 8)]
         public int cullingTreeDepth = 4;
         
-        [Header("Checkered Pattern")]
-        public bool useCheckeredPattern = false;
-        public Color patternColorA = new Color(0.2f, 0.5f, 0.1f);
-        public Color patternColorB = new Color(0.15f, 0.45f, 0.08f);
-        [Range(0.5f, 10f)]
-        public float patternScale = 2f;
+        [Header("Color Zones")]
+        [Tooltip("Enable alternating color zones like baseball/soccer fields")]
+        public bool useColorZones = false;
+        public ZonePatternType zonePatternType = ZonePatternType.Stripes;
+        [Tooltip("Lighter zone color (the brighter stripes)")]
+        public Color zoneColorLight = new Color(0.5f, 0.8f, 0.3f);
+        [Tooltip("Darker zone color (the darker stripes)")]
+        public Color zoneColorDark = new Color(0.3f, 0.55f, 0.2f);
+        [Range(1f, 50f)]
+        [Tooltip("Size of each zone/stripe in world units")]
+        public float zoneScale = 5f;
+        [Range(0f, 360f)]
+        [Tooltip("Direction of stripes in degrees (0 = along X axis)")]
+        public float zoneDirection = 0f;
+        [Range(0f, 1f)]
+        [Tooltip("How soft/blended the edges between zones are")]
+        public float zoneSoftness = 0.1f;
+        [Range(0.5f, 3f)]
+        [Tooltip("Contrast for noise pattern (higher = more distinct zones)")]
+        public float zoneContrast = 1.5f;
         
         [Header("Tip Customization")]
         public bool useTipCutout = false;
@@ -211,8 +232,8 @@ namespace GrassSystem
         [Min(8)]
         public int maxInteractorsLimit = 16;
         
-        [Header("Pattern Limits")]
-        [Min(5f)]
-        public float maxPatternScaleLimit = 10f;
+        [Header("Zone Limits")]
+        [Min(10f)]
+        public float maxZoneScaleLimit = 50f;
     }
 }
