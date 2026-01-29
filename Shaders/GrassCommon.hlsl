@@ -32,6 +32,32 @@ float CalculateCheckerPattern(float3 worldPos, float scale)
     return checker;
 }
 
+// Stripe pattern with direction and soft edges (for baseball/soccer field effect)
+float CalculateStripePattern(float3 worldPos, float scale, float direction, float softness)
+{
+    float dirRad = direction * 0.0174533; // degrees to radians
+    float2 rotatedPos = float2(
+        worldPos.x * cos(dirRad) - worldPos.z * sin(dirRad),
+        worldPos.x * sin(dirRad) + worldPos.z * cos(dirRad)
+    );
+    float stripe = frac(rotatedPos.x / scale);
+    // Soft edges using smoothstep
+    float edge = softness * 0.5;
+    return smoothstep(0.5 - edge, 0.5 + edge, abs(stripe * 2.0 - 1.0));
+}
+
+// Procedural noise pattern for organic zone variation
+float CalculateNoisePattern(float3 worldPos, float scale, float contrast)
+{
+    float2 p = worldPos.xz / scale;
+    // Multi-octave noise for more natural look
+    float n1 = frac(sin(dot(floor(p), float2(127.1, 311.7))) * 43758.5453);
+    float n2 = frac(sin(dot(floor(p * 0.5), float2(269.5, 183.3))) * 43758.5453);
+    float noise = lerp(n1, n2, 0.5);
+    // Apply contrast to create more distinct zones
+    return saturate((noise - 0.5) * contrast + 0.5);
+}
+
 float3x3 RotationY(float angle)
 {
     float s = sin(angle);
