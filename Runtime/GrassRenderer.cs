@@ -316,6 +316,21 @@ namespace GrassSystem
             // Natural variation - convert degrees to radians
             materialInstance.SetFloat("_MaxTiltAngle", settings.maxTiltAngle * Mathf.Deg2Rad);
             materialInstance.SetFloat("_TiltVariation", settings.tiltVariation);
+            
+            // Depth Perception settings (Unlit shader) - only apply if enabled
+            if (settings.useDepthPerception)
+            {
+                materialInstance.SetFloat("_InstanceColorVariation", settings.instanceColorVariation);
+                materialInstance.SetFloat("_HeightDarkening", settings.heightDarkening);
+                materialInstance.SetFloat("_BackfaceDarkening", settings.backfaceDarkening);
+            }
+            else
+            {
+                // Disabled: set all to 0 to prevent any effect
+                materialInstance.SetFloat("_InstanceColorVariation", 0f);
+                materialInstance.SetFloat("_HeightDarkening", 0f);
+                materialInstance.SetFloat("_BackfaceDarkening", 0f);
+            }
         }
         
         private void UpdateBounds()

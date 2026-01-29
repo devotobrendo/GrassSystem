@@ -113,6 +113,19 @@ namespace GrassSystem
         public ShadowCastingMode castShadows = ShadowCastingMode.Off;
         public bool receiveShadows = true;
         
+        [Header("Depth Perception (Unlit Shader)")]
+        [Tooltip("Enable depth perception effects for more visual depth")]
+        public bool useDepthPerception = false;
+        [Tooltip("Per-instance color variation to break up uniformity (0 = disabled)")]
+        [Range(0f, 0.3f)]
+        public float instanceColorVariation = 0f;
+        [Tooltip("Darkens the base of grass blades (0 = disabled)")]
+        [Range(0f, 0.5f)]
+        public float heightDarkening = 0f;
+        [Tooltip("Darkens the backface of grass blades (0 = disabled)")]
+        [Range(0f, 0.5f)]
+        public float backfaceDarkening = 0f;
+        
         [Header("Debug")]
         public bool drawCullingBounds = false;
         

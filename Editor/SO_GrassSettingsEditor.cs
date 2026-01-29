@@ -77,6 +77,12 @@ namespace GrassSystem
         private SerializedProperty castShadows;
         private SerializedProperty receiveShadows;
         
+        // Depth Perception
+        private SerializedProperty useDepthPerception;
+        private SerializedProperty instanceColorVariation;
+        private SerializedProperty heightDarkening;
+        private SerializedProperty backfaceDarkening;
+        
         // Debug
         private SerializedProperty drawCullingBounds;
         
@@ -150,6 +156,11 @@ namespace GrassSystem
             
             castShadows = serializedObject.FindProperty("castShadows");
             receiveShadows = serializedObject.FindProperty("receiveShadows");
+            
+            instanceColorVariation = serializedObject.FindProperty("instanceColorVariation");
+            heightDarkening = serializedObject.FindProperty("heightDarkening");
+            backfaceDarkening = serializedObject.FindProperty("backfaceDarkening");
+            useDepthPerception = serializedObject.FindProperty("useDepthPerception");
             
             drawCullingBounds = serializedObject.FindProperty("drawCullingBounds");
             
@@ -319,6 +330,20 @@ namespace GrassSystem
             EditorGUILayout.LabelField("Rendering", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(castShadows);
             EditorGUILayout.PropertyField(receiveShadows);
+            
+            EditorGUILayout.Space(10);
+            
+            // === DEPTH PERCEPTION (Unlit Shader) ===
+            EditorGUILayout.LabelField("Depth Perception (Unlit Shader)", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(useDepthPerception, new GUIContent("Enable Depth Perception", "Enable depth perception effects for more visual depth"));
+            if (settings.useDepthPerception)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(instanceColorVariation, new GUIContent("Instance Color Variation", "Per-instance color variation to break up uniformity"));
+                EditorGUILayout.PropertyField(heightDarkening, new GUIContent("Height Darkening", "Darkens the base of grass blades"));
+                EditorGUILayout.PropertyField(backfaceDarkening, new GUIContent("Backface Darkening", "Darkens the backface of grass blades"));
+                EditorGUI.indentLevel--;
+            }
             
             EditorGUILayout.Space(10);
             
