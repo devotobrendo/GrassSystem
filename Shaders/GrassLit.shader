@@ -15,9 +15,15 @@ Shader "GrassSystem/GrassLit"
         _PatternColorA ("Pattern Color A", Color) = (0.2, 0.5, 0.1, 1)
         _PatternColorB ("Pattern Color B", Color) = (0.15, 0.45, 0.08, 1)
         
-        [Header(Pattern)]
-        [Toggle] _UsePattern ("Use Checkered Pattern", Float) = 0
-        _PatternScale ("Pattern Scale", Range(0.5, 10)) = 2
+        [Header(Color Zones)]
+        [Toggle] _UseColorZones ("Enable Color Zones", Float) = 0
+        [Enum(Stripes,0,Checkerboard,1,Noise,2)] _ZonePatternType ("Pattern Type", Float) = 0
+        _ZoneColorLight ("Light Zone Color", Color) = (0.5, 0.8, 0.3, 1)
+        _ZoneColorDark ("Dark Zone Color", Color) = (0.3, 0.55, 0.2, 1)
+        _ZoneScale ("Zone Scale", Range(1, 50)) = 5
+        _ZoneDirection ("Direction (Stripes)", Range(0, 360)) = 0
+        _ZoneSoftness ("Edge Softness", Range(0, 1)) = 0.1
+        _ZoneContrast ("Contrast (Noise)", Range(0.5, 3)) = 1.5
         
         [Header(Tip Cutout)]
         [Toggle] _UseTipCutout ("Use Tip Cutout", Float) = 0
@@ -108,8 +114,14 @@ Shader "GrassSystem/GrassLit"
                 float4 _BottomTint;
                 float4 _PatternColorA;
                 float4 _PatternColorB;
-                float _UsePattern;
-                float _PatternScale;
+                float _UseColorZones;
+                float _ZonePatternType;
+                float4 _ZoneColorLight;
+                float4 _ZoneColorDark;
+                float _ZoneScale;
+                float _ZoneDirection;
+                float _ZoneSoftness;
+                float _ZoneContrast;
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;
@@ -320,12 +332,32 @@ Shader "GrassSystem/GrassLit"
                     baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                 }
                 
-                if (_UsePattern > 0.5)
+                // Color Zones (stripes, checkerboard, noise)
+                if (_UseColorZones > 0.5)
                 {
-                    float checker = CalculateCheckerPattern(input.positionWS, _PatternScale);
-                    float useMask = lerp(checker, input.patternMask, 0.5);
-                    half3 patternColor = lerp(_PatternColorA.rgb, _PatternColorB.rgb, useMask);
-                    baseColor *= patternColor;
+                    float zoneMask = 0;
+                    
+                    if (_ZonePatternType < 0.5)
+                    {
+                        // Stripes pattern
+                        zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
+                    }
+                    else if (_ZonePatternType < 1.5)
+                    {
+                        // Checkerboard pattern
+                        float checker = CalculateCheckerPattern(input.positionWS, _ZoneScale);
+                        // Apply softness via lerp with noise
+                        float soft = lerp(checker, 0.5, _ZoneSoftness * 0.5);
+                        zoneMask = checker;
+                    }
+                    else
+                    {
+                        // Noise pattern
+                        zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
+                    }
+                    
+                    half3 zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                    baseColor *= zoneColor;
                 }
                 
                 // Decal projection
@@ -432,8 +464,14 @@ Shader "GrassSystem/GrassLit"
                 float4 _BottomTint;
                 float4 _PatternColorA;
                 float4 _PatternColorB;
-                float _UsePattern;
-                float _PatternScale;
+                float _UseColorZones;
+                float _ZonePatternType;
+                float4 _ZoneColorLight;
+                float4 _ZoneColorDark;
+                float _ZoneScale;
+                float _ZoneDirection;
+                float _ZoneSoftness;
+                float _ZoneContrast;
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;
