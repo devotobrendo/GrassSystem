@@ -142,8 +142,8 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             EditorGUILayout.HelpBox(
-                "Hold Right Mouse Button in Scene View to paint.\n" +
-                "Shift + RMB to remove.\n" +
+                "Hold Left Mouse Button in Scene View to paint.\n" +
+                "Shift + LMB to remove.\n" +
                 "Scroll wheel to adjust brush size.",
                 MessageType.Info);
             
@@ -344,13 +344,13 @@ namespace GrassSystem
             Handles.color = new Color(Handles.color.r, Handles.color.g, Handles.color.b, 0.2f);
             Handles.DrawSolidDisc(hitPoint, hitNormal, toolSettings.brushSize);
             
-            if (e.type == EventType.MouseDown && e.button == 1)
+            if (e.type == EventType.MouseDown && e.button == 0)
             {
                 isPainting = true;
                 lastPaintPos = hitPoint;
                 e.Use();
             }
-            else if (e.type == EventType.MouseUp && e.button == 1)
+            else if (e.type == EventType.MouseUp && e.button == 0)
             {
                 isPainting = false;
                 e.Use();
@@ -358,7 +358,7 @@ namespace GrassSystem
                 EditorUtility.SetDirty(targetRenderer);
             }
             
-            if (isPainting && e.type == EventType.MouseDrag && e.button == 1)
+            if (isPainting && e.type == EventType.MouseDrag && e.button == 0)
             {
                 if (Vector3.Distance(hitPoint, lastPaintPos) > minPaintDistance)
                 {
@@ -399,8 +399,7 @@ namespace GrassSystem
                 case PaintMode.Pattern: EditPattern(position, grassList); break;
                 case PaintMode.Color: EditColor(position, grassList); break;
             }
-            
-            Undo.RecordObject(targetRenderer, "Paint Grass");
+            // Skipping Undo.RecordObject for performance - it's too slow with large grass counts
         }
         
         private void AddGrass(Vector3 center, Vector3 normal, List<GrassData> grassList)
@@ -694,7 +693,7 @@ namespace GrassSystem
         private void ClearAllGrass()
         {
             if (targetRenderer == null) return;
-            Undo.RecordObject(targetRenderer, "Clear Grass");
+            // Skipping Undo.RecordObject for performance - clearing large grass counts would be too slow
             targetRenderer.ClearGrass();
             EditorUtility.SetDirty(targetRenderer);
         }
