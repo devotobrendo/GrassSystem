@@ -404,9 +404,10 @@ namespace GrassSystem
         
         private void AddGrass(Vector3 center, Vector3 normal, List<GrassData> grassList)
         {
-            // Calculate based on brush area (πr²) and density (instances per square meter)
-            float brushArea = Mathf.PI * toolSettings.brushSize * toolSettings.brushSize;
-            int count = Mathf.Max(1, Mathf.RoundToInt(brushArea * toolSettings.density));
+            // Density control: density defines clusters per unit of brush radius
+            // This gives linear, predictable scaling that's intuitive for users
+            // density 1 with brushSize 5 = 5 clusters, density 2 = 10 clusters
+            int count = Mathf.Max(1, Mathf.RoundToInt(toolSettings.brushSize * toolSettings.density));
             
             // Determine if we're in custom mesh mode
             bool isCustomMeshMode = targetRenderer != null && 
