@@ -259,11 +259,19 @@ namespace GrassSystem
             
             materialInstance.SetColor("_TopTint", settings.topTint);
             materialInstance.SetColor("_BottomTint", settings.bottomTint);
-            materialInstance.SetColor("_PatternColorA", settings.patternColorA);
-            materialInstance.SetColor("_PatternColorB", settings.patternColorB);
             
-            materialInstance.SetFloat("_UsePattern", settings.useCheckeredPattern ? 1 : 0);
-            materialInstance.SetFloat("_PatternScale", settings.patternScale);
+            // Color Zones (stripes, checkerboard, noise, organic)
+            materialInstance.SetFloat("_UseColorZones", settings.useColorZones ? 1 : 0);
+            materialInstance.SetFloat("_ZonePatternType", (float)settings.zonePatternType);
+            materialInstance.SetColor("_ZoneColorLight", settings.zoneColorLight);
+            materialInstance.SetColor("_ZoneColorDark", settings.zoneColorDark);
+            materialInstance.SetFloat("_ZoneScale", settings.zoneScale);
+            materialInstance.SetFloat("_ZoneDirection", settings.zoneDirection);
+            materialInstance.SetFloat("_ZoneSoftness", settings.zoneSoftness);
+            materialInstance.SetFloat("_ZoneContrast", settings.zoneContrast);
+            materialInstance.SetColor("_OrganicAccentColor", settings.organicAccentColor);
+            materialInstance.SetFloat("_OrganicClumpiness", settings.organicClumpiness);
+            
             materialInstance.SetFloat("_UseTipCutout", settings.useTipCutout ? 1 : 0);
             materialInstance.SetFloat("_TipCutoff", settings.tipCutoffHeight);
             

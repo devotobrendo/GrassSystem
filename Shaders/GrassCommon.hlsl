@@ -25,6 +25,134 @@ float2 CalculateWind(float3 worldPos, float time, float speed, float strength, f
     return wind1 + wind2;
 }
 
+// =====================================================
+// ORGANIC NOISE FUNCTIONS FOR NATURAL GRASS VARIATION
+// =====================================================
+
+// Gradient noise for smooth organic variation (Perlin-like)
+float2 GradientNoise2D(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    
+    // Smooth interpolation curve
+    float2 u = f * f * (3.0 - 2.0 * f);
+    
+    return u;
+}
+
+// Simplex-like noise for organic shapes
+float PerlinNoise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    
+    // Quintic smooth interpolation
+    float2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    
+    // Four corners
+    float a = Hash(i + float2(0.0, 0.0));
+    float b = Hash(i + float2(1.0, 0.0));
+    float c = Hash(i + float2(0.0, 1.0));
+    float d = Hash(i + float2(1.0, 1.0));
+    
+    // Bilinear interpolation
+    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+}
+
+// Fractal Brownian Motion (FBM) for organic clump shapes
+float FBMNoise(float2 p, int octaves, float persistence, float lacunarity)
+{
+    float value = 0.0;
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float maxValue = 0.0;
+    
+    for (int i = 0; i < octaves; i++)
+    {
+        value += PerlinNoise(p * frequency) * amplitude;
+        maxValue += amplitude;
+        amplitude *= persistence;
+        frequency *= lacunarity;
+    }
+    
+    return value / maxValue;
+}
+
+// Worley/Cellular noise for organic blob/clump shapes
+float WorleyNoise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    
+    float minDist = 1.0;
+    
+    // Check 3x3 neighborhood
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            float2 neighbor = float2(x, y);
+            float2 offset = float2(neighbor);
+            
+            // Random point position in neighboring cell
+            float2 cellPoint = float2(
+                Hash(i + neighbor),
+                Hash(i + neighbor + float2(127.1, 311.7))
+            );
+            
+            float2 diff = neighbor + cellPoint - f;
+            float dist = length(diff);
+            minDist = min(minDist, dist);
+        }
+    }
+    
+    return minDist;
+}
+
+// Main organic variation function - creates natural irregular color patches
+// Like natural grass fields with soft blended areas of different shades
+// Returns 0-1 value used to interpolate between min/max color range
+float CalculateOrganicVariation(float3 worldPos, float scale, float clumpiness, float contrast, float edgeSoftness)
+{
+    float2 p = worldPos.xz / scale;
+    
+    // Layer 1: Large-scale blotchy variation (main patches)
+    float large = FBMNoise(p * 0.3, 3, 0.5, 2.0);
+    
+    // Layer 2: Medium patches overlapping
+    float medium = FBMNoise(p * 0.6 + float2(31.7, 47.3), 3, 0.5, 2.0);
+    
+    // Layer 3: Smaller detail variation
+    float small = FBMNoise(p * 1.2 + float2(73.1, 89.7), 2, 0.5, 2.0);
+    
+    // Layer 4: Subtle Worley for occasional darker spots (like worn areas)
+    float spots = 1.0 - WorleyNoise(p * 0.5 + float2(17.3, 29.1)) * 0.4;
+    
+    // Combine layers with organic blending
+    // clumpiness affects the weight of distinct patches vs smooth blend
+    float baseBlend = large * 0.45 + medium * 0.35 + small * 0.2;
+    
+    // Add darker spots based on clumpiness
+    baseBlend = baseBlend * lerp(1.0, spots, clumpiness * 0.5);
+    
+    // Apply soft S-curve for natural transitions
+    // Edge softness controls how gradual the color transitions are
+    float softness = lerp(0.8, 0.3, edgeSoftness);
+    baseBlend = smoothstep(0.5 - softness, 0.5 + softness, baseBlend);
+    
+    // Apply contrast for more or less distinct patches
+    baseBlend = saturate((baseBlend - 0.5) * contrast + 0.5);
+    
+    // Very subtle per-blade micro variation
+    float micro = Hash(worldPos.xz * 20.0) * 0.06 - 0.03;
+    baseBlend = saturate(baseBlend + micro);
+    
+    return baseBlend;
+}
+
+// Original geometric pattern functions
+
 float CalculateCheckerPattern(float3 worldPos, float scale)
 {
     float2 patternUV = worldPos.xz / scale;
@@ -46,7 +174,7 @@ float CalculateStripePattern(float3 worldPos, float scale, float direction, floa
     return smoothstep(0.5 - edge, 0.5 + edge, abs(stripe * 2.0 - 1.0));
 }
 
-// Procedural noise pattern for organic zone variation
+// Simple noise pattern for zone variation
 float CalculateNoisePattern(float3 worldPos, float scale, float contrast)
 {
     float2 p = worldPos.xz / scale;
@@ -56,6 +184,44 @@ float CalculateNoisePattern(float3 worldPos, float scale, float contrast)
     float noise = lerp(n1, n2, 0.5);
     // Apply contrast to create more distinct zones
     return saturate((noise - 0.5) * contrast + 0.5);
+}
+
+// NEW: Organic pattern using FBM + Worley noise for natural grass clumps
+float CalculateOrganicPattern(float3 worldPos, float scale, float clumpiness, float softness)
+{
+    return CalculateOrganicVariation(worldPos, scale, clumpiness, 2.0, softness);
+}
+
+// NEW: Patches pattern - creates visible circular irregular patches
+// Like worn grass areas or natural color variation spots
+float CalculatePatchesPattern(float3 worldPos, float scale, float clumpiness, float softness)
+{
+    float2 p = worldPos.xz / scale;
+    
+    // Main circular patches using Worley noise (creates cell-like circles)
+    float cells1 = WorleyNoise(p * 0.5);
+    float cells2 = WorleyNoise(p * 0.3 + float2(13.7, 29.3));
+    
+    // Combine for irregular circles
+    float patches = min(cells1, cells2 * 1.2);
+    
+    // Invert so patches are darker in the center
+    patches = 1.0 - patches;
+    
+    // Apply threshold to make distinct circular spots
+    // Clumpiness controls how many and how defined the patches are
+    float threshold = lerp(0.4, 0.6, clumpiness);
+    patches = smoothstep(threshold - 0.15, threshold + 0.15, patches);
+    
+    // Apply edge softness
+    float soft = lerp(1.0, 0.6, softness);
+    patches = lerp(0.5, patches, soft);
+    
+    // Add subtle variation within patches
+    float detail = Hash(worldPos.xz * 8.0) * 0.1;
+    patches = saturate(patches + detail - 0.05);
+    
+    return patches;
 }
 
 float3x3 RotationY(float angle)

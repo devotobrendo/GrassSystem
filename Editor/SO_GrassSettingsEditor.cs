@@ -43,11 +43,17 @@ namespace GrassSystem
         private SerializedProperty maxDrawDistance;
         private SerializedProperty cullingTreeDepth;
         
-        // Checkered Pattern
-        private SerializedProperty useCheckeredPattern;
-        private SerializedProperty patternColorA;
-        private SerializedProperty patternColorB;
-        private SerializedProperty patternScale;
+        // Color Zones
+        private SerializedProperty useColorZones;
+        private SerializedProperty zonePatternType;
+        private SerializedProperty zoneColorLight;
+        private SerializedProperty zoneColorDark;
+        private SerializedProperty zoneScale;
+        private SerializedProperty zoneDirection;
+        private SerializedProperty zoneSoftness;
+        private SerializedProperty zoneContrast;
+        private SerializedProperty organicAccentColor;
+        private SerializedProperty organicClumpiness;
         
         // Tip Customization
         private SerializedProperty useTipCutout;
@@ -98,7 +104,7 @@ namespace GrassSystem
         private SerializedProperty maxTiltAngleLimit;
         private SerializedProperty maxInteractorStrengthLimit;
         private SerializedProperty maxInteractorsLimit;
-        private SerializedProperty maxPatternScaleLimit;
+        private SerializedProperty maxZoneScaleLimit;
         
         private void OnEnable()
         {
@@ -130,10 +136,16 @@ namespace GrassSystem
             maxDrawDistance = serializedObject.FindProperty("maxDrawDistance");
             cullingTreeDepth = serializedObject.FindProperty("cullingTreeDepth");
             
-            useCheckeredPattern = serializedObject.FindProperty("useCheckeredPattern");
-            patternColorA = serializedObject.FindProperty("patternColorA");
-            patternColorB = serializedObject.FindProperty("patternColorB");
-            patternScale = serializedObject.FindProperty("patternScale");
+            useColorZones = serializedObject.FindProperty("useColorZones");
+            zonePatternType = serializedObject.FindProperty("zonePatternType");
+            zoneColorLight = serializedObject.FindProperty("zoneColorLight");
+            zoneColorDark = serializedObject.FindProperty("zoneColorDark");
+            zoneScale = serializedObject.FindProperty("zoneScale");
+            zoneDirection = serializedObject.FindProperty("zoneDirection");
+            zoneSoftness = serializedObject.FindProperty("zoneSoftness");
+            zoneContrast = serializedObject.FindProperty("zoneContrast");
+            organicAccentColor = serializedObject.FindProperty("organicAccentColor");
+            organicClumpiness = serializedObject.FindProperty("organicClumpiness");
             
             useTipCutout = serializedObject.FindProperty("useTipCutout");
             tipMaskTexture = serializedObject.FindProperty("tipMaskTexture");
@@ -176,7 +188,7 @@ namespace GrassSystem
             maxTiltAngleLimit = serializedObject.FindProperty("maxTiltAngleLimit");
             maxInteractorStrengthLimit = serializedObject.FindProperty("maxInteractorStrengthLimit");
             maxInteractorsLimit = serializedObject.FindProperty("maxInteractorsLimit");
-            maxPatternScaleLimit = serializedObject.FindProperty("maxPatternScaleLimit");
+            maxZoneScaleLimit = serializedObject.FindProperty("maxZoneScaleLimit");
         }
         
         public override void OnInspectorGUI()
@@ -279,15 +291,49 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             
-            // === CHECKERED PATTERN ===
-            EditorGUILayout.LabelField("Checkered Pattern", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(useCheckeredPattern);
-            if (settings.useCheckeredPattern)
+            // === COLOR ZONES ===
+            EditorGUILayout.LabelField("Color Zones", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(useColorZones, new GUIContent("Enable Color Zones", "Creates alternating color zones like baseball/soccer fields or organic clumps"));
+            if (settings.useColorZones)
             {
                 EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(patternColorA);
-                EditorGUILayout.PropertyField(patternColorB);
-                patternScale.floatValue = EditorGUILayout.Slider("Pattern Scale", patternScale.floatValue, 0.5f, settings.maxPatternScaleLimit);
+                EditorGUILayout.PropertyField(zonePatternType, new GUIContent("Pattern Type"));
+                EditorGUILayout.PropertyField(zoneColorLight, new GUIContent("Light Zone Color"));
+                EditorGUILayout.PropertyField(zoneColorDark, new GUIContent("Dark Zone Color"));
+                zoneScale.floatValue = EditorGUILayout.Slider(new GUIContent("Zone Scale (meters)", "Size of each zone/stripe in world units"), zoneScale.floatValue, 1f, settings.maxZoneScaleLimit);
+                
+                // Only show direction for Stripes pattern
+                if (settings.zonePatternType == ZonePatternType.Stripes)
+                {
+                    EditorGUILayout.PropertyField(zoneDirection, new GUIContent("Stripe Direction (°)", "Direction of stripes in degrees (0 = along X axis)"));
+                }
+                
+                EditorGUILayout.PropertyField(zoneSoftness, new GUIContent("Edge Softness", "How soft/blended the edges between zones are"));
+                
+                // Only show contrast for Noise pattern
+                if (settings.zonePatternType == ZonePatternType.Noise)
+                {
+                    EditorGUILayout.PropertyField(zoneContrast, new GUIContent("Noise Contrast", "Higher values create more distinct zones"));
+                }
+                
+                // Show organic-specific options
+                if (settings.zonePatternType == ZonePatternType.Organic)
+                {
+                    EditorGUILayout.Space(5);
+                    EditorGUILayout.LabelField("Organic Settings", EditorStyles.miniLabel);
+                    EditorGUILayout.PropertyField(organicAccentColor, new GUIContent("Accent Color", "Third color for variety (yellows, browns, etc)"));
+                    EditorGUILayout.PropertyField(organicClumpiness, new GUIContent("Clumpiness", "0 = smooth noise, 1 = distinct blob-like clumps"));
+                }
+                
+                // Show patches-specific options
+                if (settings.zonePatternType == ZonePatternType.Patches)
+                {
+                    EditorGUILayout.Space(5);
+                    EditorGUILayout.LabelField("Patches Settings", EditorStyles.miniLabel);
+                    EditorGUILayout.PropertyField(organicAccentColor, new GUIContent("Accent Color", "Color for the darkest patch centers"));
+                    EditorGUILayout.PropertyField(organicClumpiness, new GUIContent("Patch Density", "0 = few large patches, 1 = many small patches"));
+                }
+                
                 EditorGUI.indentLevel--;
             }
             
@@ -381,7 +427,7 @@ namespace GrassSystem
                 EditorGUILayout.PropertyField(maxTiltAngleLimit, new GUIContent("Max Tilt Angle Limit"));
                 EditorGUILayout.PropertyField(maxInteractorStrengthLimit, new GUIContent("Max Interactor Strength Limit"));
                 EditorGUILayout.PropertyField(maxInteractorsLimit, new GUIContent("Max Interactors Limit"));
-                EditorGUILayout.PropertyField(maxPatternScaleLimit, new GUIContent("Max Pattern Scale Limit"));
+                EditorGUILayout.PropertyField(maxZoneScaleLimit, new GUIContent("Max Zone Scale Limit"));
                 
                 EditorGUI.indentLevel--;
             }

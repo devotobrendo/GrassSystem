@@ -16,13 +16,15 @@ Shader "GrassSystem/GrassUnlit"
         
         [Header(Color Zones)]
         [Toggle] _UseColorZones ("Enable Color Zones", Float) = 0
-        [Enum(Stripes,0,Checkerboard,1,Noise,2)] _ZonePatternType ("Pattern Type", Float) = 0
+        [Enum(Stripes,0,Checkerboard,1,Noise,2,Organic,3,Patches,4)] _ZonePatternType ("Pattern Type", Float) = 0
         _ZoneColorLight ("Light Zone Color", Color) = (0.5, 0.8, 0.3, 1)
         _ZoneColorDark ("Dark Zone Color", Color) = (0.3, 0.55, 0.2, 1)
         _ZoneScale ("Zone Scale", Range(1, 50)) = 5
         _ZoneDirection ("Direction (Stripes)", Range(0, 360)) = 0
         _ZoneSoftness ("Edge Softness", Range(0, 1)) = 0.1
         _ZoneContrast ("Contrast (Noise)", Range(0.5, 3)) = 1.5
+        _OrganicAccentColor ("Accent Color (Organic)", Color) = (0.55, 0.6, 0.2, 1)
+        _OrganicClumpiness ("Clumpiness (Organic)", Range(0, 1)) = 0.5
         
         [Header(Tip Cutout)]
         [Toggle] _UseTipCutout ("Use Tip Cutout", Float) = 0
@@ -113,6 +115,8 @@ Shader "GrassSystem/GrassUnlit"
                 float _ZoneDirection;
                 float _ZoneSoftness;
                 float _ZoneContrast;
+                float4 _OrganicAccentColor;
+                float _OrganicClumpiness;
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;
@@ -280,29 +284,72 @@ Shader "GrassSystem/GrassUnlit"
                     baseColor *= input.grassColor;
                 }
                 
-                // Color Zones (stripes, checkerboard, noise)
+                // Color Zones (stripes, checkerboard, noise, organic, patches)
                 if (_UseColorZones > 0.5)
                 {
                     float zoneMask = 0;
+                    half3 zoneColor;
                     
                     if (_ZonePatternType < 0.5)
                     {
                         // Stripes pattern
                         zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
                     }
                     else if (_ZonePatternType < 1.5)
                     {
                         // Checkerboard pattern
-                        float checker = CalculateCheckerPattern(input.positionWS, _ZoneScale);
-                        zoneMask = checker;
+                        zoneMask = CalculateCheckerPattern(input.positionWS, _ZoneScale);
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
                     }
-                    else
+                    else if (_ZonePatternType < 2.5)
                     {
                         // Noise pattern
                         zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                    }
+                    else if (_ZonePatternType < 3.5)
+                    {
+                        // Organic pattern (soft natural blending)
+                        float organic = CalculateOrganicPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                        
+                        // Get a second noise sample for accent color distribution
+                        float accentNoise = CalculateOrganicVariation(
+                            input.positionWS + float3(100, 0, 100),
+                            _ZoneScale * 1.5,
+                            _OrganicClumpiness * 0.7,
+                            1.5,
+                            0.6
+                        );
+                        
+                        // Create natural color blending with 3 colors
+                        if (organic < 0.5)
+                        {
+                            float t = organic * 2.0;
+                            zoneColor = lerp(_ZoneColorDark.rgb, lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), t);
+                        }
+                        else
+                        {
+                            float t = (organic - 0.5) * 2.0;
+                            zoneColor = lerp(lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), _ZoneColorLight.rgb, t);
+                        }
+                        
+                        // Mix in accent color at specific areas
+                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentNoise * 0.3);
+                    }
+                    else
+                    {
+                        // Patches pattern (circular irregular spots)
+                        float patches = CalculatePatchesPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                        
+                        // Strong contrast between light and dark patches
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, patches);
+                        
+                        // Add accent color in the darkest spots
+                        float accentMask = saturate((1.0 - patches) * 2.0 - 0.5);
+                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentMask * 0.4);
                     }
                     
-                    half3 zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
                     baseColor *= zoneColor;
                 }
                 
@@ -414,6 +461,8 @@ Shader "GrassSystem/GrassUnlit"
                 float _ZoneDirection;
                 float _ZoneSoftness;
                 float _ZoneContrast;
+                float4 _OrganicAccentColor;
+                float _OrganicClumpiness;
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;

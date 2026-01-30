@@ -16,7 +16,9 @@ namespace GrassSystem
     {
         Stripes,         // Directional stripes like baseball fields
         Checkerboard,    // Classic checkerboard pattern
-        Noise            // Organic noise-based variation
+        Noise,           // Simple noise-based variation
+        Organic,         // Natural organic blending (soft transitions)
+        Patches          // Circular irregular patches (like worn grass spots)
     }
     
     [CreateAssetMenu(fileName = "GrassSettings", menuName = "Grass System/Grass Settings")]
@@ -96,6 +98,13 @@ namespace GrassSystem
         [Range(0.5f, 3f)]
         [Tooltip("Contrast for noise pattern (higher = more distinct zones)")]
         public float zoneContrast = 1.5f;
+        
+        [Header("Organic Pattern Settings (when Pattern Type = Organic)")]
+        [Tooltip("Accent color for variety in organic patterns (yellows, browns, etc)")]
+        public Color organicAccentColor = new Color(0.55f, 0.6f, 0.2f);
+        [Range(0f, 1f)]
+        [Tooltip("How clumpy vs random the organic variation is (1 = distinct blobs, 0 = smooth noise)")]
+        public float organicClumpiness = 0.5f;
         
         [Header("Tip Customization")]
         public bool useTipCutout = false;
