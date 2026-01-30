@@ -259,11 +259,19 @@ namespace GrassSystem
             
             materialInstance.SetColor("_TopTint", settings.topTint);
             materialInstance.SetColor("_BottomTint", settings.bottomTint);
-            materialInstance.SetColor("_PatternColorA", settings.patternColorA);
-            materialInstance.SetColor("_PatternColorB", settings.patternColorB);
             
-            materialInstance.SetFloat("_UsePattern", settings.useCheckeredPattern ? 1 : 0);
-            materialInstance.SetFloat("_PatternScale", settings.patternScale);
+            // Color Zones (stripes, checkerboard, noise, organic)
+            materialInstance.SetFloat("_UseColorZones", settings.useColorZones ? 1 : 0);
+            materialInstance.SetFloat("_ZonePatternType", (float)settings.zonePatternType);
+            materialInstance.SetColor("_ZoneColorLight", settings.zoneColorLight);
+            materialInstance.SetColor("_ZoneColorDark", settings.zoneColorDark);
+            materialInstance.SetFloat("_ZoneScale", settings.zoneScale);
+            materialInstance.SetFloat("_ZoneDirection", settings.zoneDirection);
+            materialInstance.SetFloat("_ZoneSoftness", settings.zoneSoftness);
+            materialInstance.SetFloat("_ZoneContrast", settings.zoneContrast);
+            materialInstance.SetColor("_OrganicAccentColor", settings.organicAccentColor);
+            materialInstance.SetFloat("_OrganicClumpiness", settings.organicClumpiness);
+            
             materialInstance.SetFloat("_UseTipCutout", settings.useTipCutout ? 1 : 0);
             materialInstance.SetFloat("_TipCutoff", settings.tipCutoffHeight);
             
@@ -316,6 +324,21 @@ namespace GrassSystem
             // Natural variation - convert degrees to radians
             materialInstance.SetFloat("_MaxTiltAngle", settings.maxTiltAngle * Mathf.Deg2Rad);
             materialInstance.SetFloat("_TiltVariation", settings.tiltVariation);
+            
+            // Depth Perception settings (Unlit shader) - only apply if enabled
+            if (settings.useDepthPerception)
+            {
+                materialInstance.SetFloat("_InstanceColorVariation", settings.instanceColorVariation);
+                materialInstance.SetFloat("_HeightDarkening", settings.heightDarkening);
+                materialInstance.SetFloat("_BackfaceDarkening", settings.backfaceDarkening);
+            }
+            else
+            {
+                // Disabled: set all to 0 to prevent any effect
+                materialInstance.SetFloat("_InstanceColorVariation", 0f);
+                materialInstance.SetFloat("_HeightDarkening", 0f);
+                materialInstance.SetFloat("_BackfaceDarkening", 0f);
+            }
         }
         
         private void UpdateBounds()

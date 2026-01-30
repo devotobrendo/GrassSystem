@@ -15,9 +15,17 @@ Shader "GrassSystem/GrassLit"
         _PatternColorA ("Pattern Color A", Color) = (0.2, 0.5, 0.1, 1)
         _PatternColorB ("Pattern Color B", Color) = (0.15, 0.45, 0.08, 1)
         
-        [Header(Pattern)]
-        [Toggle] _UsePattern ("Use Checkered Pattern", Float) = 0
-        _PatternScale ("Pattern Scale", Range(0.5, 10)) = 2
+        [Header(Color Zones)]
+        [Toggle] _UseColorZones ("Enable Color Zones", Float) = 0
+        [Enum(Stripes,0,Checkerboard,1,Noise,2,Organic,3,Patches,4)] _ZonePatternType ("Pattern Type", Float) = 0
+        _ZoneColorLight ("Light Zone Color", Color) = (0.5, 0.8, 0.3, 1)
+        _ZoneColorDark ("Dark Zone Color", Color) = (0.3, 0.55, 0.2, 1)
+        _ZoneScale ("Zone Scale", Range(1, 50)) = 5
+        _ZoneDirection ("Direction (Stripes)", Range(0, 360)) = 0
+        _ZoneSoftness ("Edge Softness", Range(0, 1)) = 0.1
+        _ZoneContrast ("Contrast (Noise)", Range(0.5, 3)) = 1.5
+        _OrganicAccentColor ("Accent Color (Organic)", Color) = (0.55, 0.6, 0.2, 1)
+        _OrganicClumpiness ("Clumpiness (Organic)", Range(0, 1)) = 0.5
         
         [Header(Tip Cutout)]
         [Toggle] _UseTipCutout ("Use Tip Cutout", Float) = 0
@@ -108,8 +116,16 @@ Shader "GrassSystem/GrassLit"
                 float4 _BottomTint;
                 float4 _PatternColorA;
                 float4 _PatternColorB;
-                float _UsePattern;
-                float _PatternScale;
+                float _UseColorZones;
+                float _ZonePatternType;
+                float4 _ZoneColorLight;
+                float4 _ZoneColorDark;
+                float _ZoneScale;
+                float _ZoneDirection;
+                float _ZoneSoftness;
+                float _ZoneContrast;
+                float4 _OrganicAccentColor;
+                float _OrganicClumpiness;
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;
@@ -276,7 +292,9 @@ Shader "GrassSystem/GrassLit"
                 half4 albedo = half4(1, 1, 1, 1);
                 half3 normalTS = half3(0, 0, 1);
                 
-                if (!isDefaultMode)
+                // Sample textures when in Custom Mesh mode OR when Use Only Albedo Color is enabled
+                bool shouldSampleTextures = !isDefaultMode || _UseOnlyAlbedoColor > 0.5;
+                if (shouldSampleTextures)
                 {
                     albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                     normalTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, input.uv));
@@ -318,12 +336,73 @@ Shader "GrassSystem/GrassLit"
                     baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                 }
                 
-                if (_UsePattern > 0.5)
+                // Color Zones (stripes, checkerboard, noise, organic, patches)
+                if (_UseColorZones > 0.5)
                 {
-                    float checker = CalculateCheckerPattern(input.positionWS, _PatternScale);
-                    float useMask = lerp(checker, input.patternMask, 0.5);
-                    half3 patternColor = lerp(_PatternColorA.rgb, _PatternColorB.rgb, useMask);
-                    baseColor *= patternColor;
+                    float zoneMask = 0;
+                    half3 zoneColor;
+                    
+                    if (_ZonePatternType < 0.5)
+                    {
+                        // Stripes pattern
+                        zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                    }
+                    else if (_ZonePatternType < 1.5)
+                    {
+                        // Checkerboard pattern
+                        zoneMask = CalculateCheckerPattern(input.positionWS, _ZoneScale);
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                    }
+                    else if (_ZonePatternType < 2.5)
+                    {
+                        // Noise pattern
+                        zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                    }
+                    else if (_ZonePatternType < 3.5)
+                    {
+                        // Organic pattern (soft natural blending)
+                        float organic = CalculateOrganicPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                        
+                        // Get a second noise sample for accent color distribution
+                        float accentNoise = CalculateOrganicVariation(
+                            input.positionWS + float3(100, 0, 100),
+                            _ZoneScale * 1.5,
+                            _OrganicClumpiness * 0.7,
+                            1.5,
+                            0.6
+                        );
+                        
+                        // Create natural color blending with 3 colors
+                        if (organic < 0.5)
+                        {
+                            float t = organic * 2.0;
+                            zoneColor = lerp(_ZoneColorDark.rgb, lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), t);
+                        }
+                        else
+                        {
+                            float t = (organic - 0.5) * 2.0;
+                            zoneColor = lerp(lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), _ZoneColorLight.rgb, t);
+                        }
+                        
+                        // Mix in accent color at specific areas
+                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentNoise * 0.3);
+                    }
+                    else
+                    {
+                        // Patches pattern (circular irregular spots)
+                        float patches = CalculatePatchesPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                        
+                        // Strong contrast between light and dark patches
+                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, patches);
+                        
+                        // Add accent color in the darkest spots
+                        float accentMask = saturate((1.0 - patches) * 2.0 - 0.5);
+                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentMask * 0.4);
+                    }
+                    
+                    baseColor *= zoneColor;
                 }
                 
                 // Decal projection
@@ -351,10 +430,20 @@ Shader "GrassSystem/GrassLit"
                     }
                 }
                 
-                // Only apply albedo texture in Custom Mesh mode
-                if (!isDefaultMode)
+                // Apply albedo texture when in Custom Mesh mode OR when Use Only Albedo Color is enabled
+                // This ensures the albedo color is always applied faithfully when the user wants it
+                bool shouldApplyAlbedo = !isDefaultMode || _UseOnlyAlbedoColor > 0.5;
+                if (shouldApplyAlbedo)
                 {
                     baseColor *= albedo.rgb;
+                }
+                
+                // When using only albedo color, skip PBR lighting to preserve pure color
+                if (_UseOnlyAlbedoColor > 0.5)
+                {
+                    half3 finalColor = baseColor;
+                    finalColor = MixFog(finalColor, input.fogFactor);
+                    return half4(finalColor, 1.0);
                 }
                 
                 InputData inputData = (InputData)0;
@@ -420,8 +509,16 @@ Shader "GrassSystem/GrassLit"
                 float4 _BottomTint;
                 float4 _PatternColorA;
                 float4 _PatternColorB;
-                float _UsePattern;
-                float _PatternScale;
+                float _UseColorZones;
+                float _ZonePatternType;
+                float4 _ZoneColorLight;
+                float4 _ZoneColorDark;
+                float _ZoneScale;
+                float _ZoneDirection;
+                float _ZoneSoftness;
+                float _ZoneContrast;
+                float4 _OrganicAccentColor;
+                float _OrganicClumpiness;
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;
