@@ -12,6 +12,15 @@ namespace GrassSystem
         CustomMesh       // Imported meshes with uniform scale
     }
     
+    public enum ZonePatternType
+    {
+        Stripes,         // Directional stripes like baseball fields
+        Checkerboard,    // Classic checkerboard pattern
+        Noise,           // Simple noise-based variation
+        Organic,         // Natural organic blending (soft transitions)
+        Patches          // Circular irregular patches (like worn grass spots)
+    }
+    
     [CreateAssetMenu(fileName = "GrassSettings", menuName = "Grass System/Grass Settings")]
     public class SO_GrassSettings : ScriptableObject
     {
@@ -69,12 +78,33 @@ namespace GrassSystem
         [Range(1, 8)]
         public int cullingTreeDepth = 4;
         
-        [Header("Checkered Pattern")]
-        public bool useCheckeredPattern = false;
-        public Color patternColorA = new Color(0.2f, 0.5f, 0.1f);
-        public Color patternColorB = new Color(0.15f, 0.45f, 0.08f);
-        [Range(0.5f, 10f)]
-        public float patternScale = 2f;
+        [Header("Color Zones")]
+        [Tooltip("Enable alternating color zones like baseball/soccer fields")]
+        public bool useColorZones = false;
+        public ZonePatternType zonePatternType = ZonePatternType.Stripes;
+        [Tooltip("Lighter zone color (the brighter stripes)")]
+        public Color zoneColorLight = new Color(0.5f, 0.8f, 0.3f);
+        [Tooltip("Darker zone color (the darker stripes)")]
+        public Color zoneColorDark = new Color(0.3f, 0.55f, 0.2f);
+        [Range(1f, 50f)]
+        [Tooltip("Size of each zone/stripe in world units")]
+        public float zoneScale = 5f;
+        [Range(0f, 360f)]
+        [Tooltip("Direction of stripes in degrees (0 = along X axis)")]
+        public float zoneDirection = 0f;
+        [Range(0f, 1f)]
+        [Tooltip("How soft/blended the edges between zones are")]
+        public float zoneSoftness = 0.1f;
+        [Range(0.5f, 3f)]
+        [Tooltip("Contrast for noise pattern (higher = more distinct zones)")]
+        public float zoneContrast = 1.5f;
+        
+        [Header("Organic Pattern Settings (when Pattern Type = Organic)")]
+        [Tooltip("Accent color for variety in organic patterns (yellows, browns, etc)")]
+        public Color organicAccentColor = new Color(0.55f, 0.6f, 0.2f);
+        [Range(0f, 1f)]
+        [Tooltip("How clumpy vs random the organic variation is (1 = distinct blobs, 0 = smooth noise)")]
+        public float organicClumpiness = 0.5f;
         
         [Header("Tip Customization")]
         public bool useTipCutout = false;
@@ -101,14 +131,30 @@ namespace GrassSystem
         public float terrainLightmapInfluence = 0.5f;
         
         [Header("Interaction")]
-        [Range(0f, 2f)]
-        public float interactorStrength = 1f;
+        [Range(0f, 5f)]
+        public float interactorStrength = 2f;
         [Range(1, 16)]
         public int maxInteractors = 8;
+        [Range(30f, 90f)]
+        [Tooltip("Maximum bend angle when grass is stepped on (degrees)")]
+        public float maxBendAngle = 90f;
         
         [Header("Rendering")]
         public ShadowCastingMode castShadows = ShadowCastingMode.Off;
         public bool receiveShadows = true;
+        
+        [Header("Depth Perception (Unlit Shader)")]
+        [Tooltip("Enable depth perception effects for more visual depth")]
+        public bool useDepthPerception = false;
+        [Tooltip("Per-instance color variation to break up uniformity (0 = disabled)")]
+        [Range(0f, 0.3f)]
+        public float instanceColorVariation = 0f;
+        [Tooltip("Darkens the base of grass blades (0 = disabled)")]
+        [Range(0f, 0.5f)]
+        public float heightDarkening = 0f;
+        [Tooltip("Darkens the backface of grass blades (0 = disabled)")]
+        [Range(0f, 0.5f)]
+        public float backfaceDarkening = 0f;
         
         [Header("Debug")]
         public bool drawCullingBounds = false;
@@ -195,8 +241,8 @@ namespace GrassSystem
         [Min(8)]
         public int maxInteractorsLimit = 16;
         
-        [Header("Pattern Limits")]
-        [Min(5f)]
-        public float maxPatternScaleLimit = 10f;
+        [Header("Zone Limits")]
+        [Min(10f)]
+        public float maxZoneScaleLimit = 50f;
     }
 }
