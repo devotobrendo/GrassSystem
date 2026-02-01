@@ -36,10 +36,16 @@ MonoBehaviour:
   minFadeDistance: 30
   maxDrawDistance: 50
   cullingTreeDepth: 4
-  useCheckeredPattern: 0
-  patternColorA: {r: 0.2, g: 0.5, b: 0.1, a: 1}
-  patternColorB: {r: 0.15, g: 0.45, b: 0.08, a: 1}
-  patternScale: 2
+  useColorZones: 0
+  zonePatternType: 4
+  zoneColorLight: {r: 0.5, g: 0.8, b: 0.3, a: 1}
+  zoneColorDark: {r: 0.3, g: 0.55, b: 0.2, a: 1}
+  zoneScale: 15.5
+  zoneDirection: 0
+  zoneSoftness: 0.5
+  zoneContrast: 2.681
+  organicAccentColor: {r: 0.55, g: 0.6, b: 0.2, a: 1}
+  organicClumpiness: 0.762
   useTipCutout: 0
   tipMaskTexture: {fileID: 0}
   tipCutoffHeight: 0.8
@@ -52,12 +58,17 @@ MonoBehaviour:
   useTerrainLightmap: 0
   terrain: {fileID: 0}
   terrainLightmapInfluence: 0.579
-  interactorStrength: 1
+  interactorStrength: 1.992
   maxInteractors: 8
+  maxBendAngle: 90
   castShadows: 0
   receiveShadows: 1
+  useDepthPerception: 0
+  instanceColorVariation: 0.3
+  heightDarkening: 0.314
+  backfaceDarkening: 0
   drawCullingBounds: 0
-  showAdvancedLimits: 1
+  showAdvancedLimits: 0
   maxSizeLimit: 3
   maxBladeWidthLimit: 0.3
   maxBladeHeightLimit: 1.5
@@ -68,4 +79,4 @@ MonoBehaviour:
   maxTiltAngleLimit: 45
   maxInteractorStrengthLimit: 2
   maxInteractorsLimit: 16
-  maxPatternScaleLimit: 10
+  maxZoneScaleLimit: 50
