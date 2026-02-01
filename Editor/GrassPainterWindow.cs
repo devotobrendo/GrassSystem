@@ -21,6 +21,12 @@ namespace GrassSystem
         private Vector3 lastPaintPos;
         private float minPaintDistance = 0.1f;
         
+        // Renderer dropdown cache
+        private GrassRenderer[] sceneRenderers;
+        private string[] rendererNames;
+        private int selectedRendererIndex;
+        private GrassRenderer previousRenderer;  // Track previous renderer to save data when switching
+        
         [MenuItem("Tools/Grass Painter")]
         public static void ShowWindow()
         {
@@ -35,6 +41,8 @@ namespace GrassSystem
             LoadOrCreateSettings();
             if (targetRenderer == null)
                 targetRenderer = FindAnyObjectByType<GrassRenderer>();
+            previousRenderer = targetRenderer;  // Initialize previous renderer tracking
+            RefreshSceneRenderers();
         }
         
         private void OnDisable()
@@ -42,31 +50,74 @@ namespace GrassSystem
             SceneView.duringSceneGui -= OnSceneGUI;
         }
         
-        private void LoadOrCreateSettings()
+        /// <summary>
+        /// Refreshes the cached list of all GrassRenderers in the scene for dropdown selection.
+        /// </summary>
+        private void RefreshSceneRenderers()
         {
-            // First, try to find existing settings anywhere in the project
-            string[] guids = AssetDatabase.FindAssets("t:SO_GrassToolSettings");
-            if (guids.Length > 0)
+            sceneRenderers = FindObjectsByType<GrassRenderer>(FindObjectsSortMode.None);
+            rendererNames = new string[sceneRenderers.Length];
+            
+            for (int i = 0; i < sceneRenderers.Length; i++)
             {
-                string existingPath = AssetDatabase.GUIDToAssetPath(guids[0]);
-                toolSettings = AssetDatabase.LoadAssetAtPath<SO_GrassToolSettings>(existingPath);
-                if (toolSettings != null) return;
+                int count = sceneRenderers[i].GrassDataList?.Count ?? 0;
+                string settingsName = sceneRenderers[i].settings != null 
+                    ? sceneRenderers[i].settings.name 
+                    : "No Settings";
+                rendererNames[i] = $"{sceneRenderers[i].gameObject.name} ({count:N0}) - {settingsName}";
             }
             
-            // Create new settings in a user-accessible location (not in Packages)
-            string settingsFolder = "Assets/GrassSystem/Editor";
-            string path = settingsFolder + "/GrassToolSettings.asset";
+            // Update selected index to match current target
+            selectedRendererIndex = System.Array.IndexOf(sceneRenderers, targetRenderer);
+            if (selectedRendererIndex < 0) selectedRendererIndex = 0;
+        }
+        
+        /// <summary>
+        /// Called when switching between GrassRenderers to ensure proper buffer management.
+        /// Saves current renderer's data and prepares the new renderer.
+        /// </summary>
+        private void OnRendererChanged(GrassRenderer newRenderer)
+        {
+            // Save data on the previous renderer before switching
+            if (previousRenderer != null && previousRenderer != newRenderer)
+            {
+                // Ensure previous renderer's buffers are up to date
+                if (previousRenderer.GrassDataList != null && previousRenderer.GrassDataList.Count > 0)
+                {
+                    previousRenderer.RebuildBuffers();
+                    EditorUtility.SetDirty(previousRenderer);
+                }
+            }
             
-            // Ensure folder exists
-            if (!AssetDatabase.IsValidFolder("Assets/GrassSystem"))
-                AssetDatabase.CreateFolder("Assets", "GrassSystem");
-            if (!AssetDatabase.IsValidFolder(settingsFolder))
-                AssetDatabase.CreateFolder("Assets/GrassSystem", "Editor");
+            previousRenderer = newRenderer;
+            targetRenderer = newRenderer;
             
-            toolSettings = CreateInstance<SO_GrassToolSettings>();
-            AssetDatabase.CreateAsset(toolSettings, path);
-            AssetDatabase.SaveAssets();
-            Debug.Log($"[GrassSystem] Created tool settings at: {path}");
+            // Validate and prepare the new renderer
+            if (targetRenderer != null && targetRenderer.settings != null)
+            {
+                // Validate settings before allowing painting
+                if (!targetRenderer.settings.Validate(out string error))
+                {
+                    Debug.LogWarning($"GrassRenderer settings issue: {error}. Please fix before painting.");
+                }
+            }
+            
+            RefreshSceneRenderers();
+        }
+        
+        private void LoadOrCreateSettings()
+        {
+            string path = "Assets/GrassSystem/Editor/GrassToolSettings.asset";
+            toolSettings = AssetDatabase.LoadAssetAtPath<SO_GrassToolSettings>(path);
+            
+            if (toolSettings == null)
+            {
+                toolSettings = CreateInstance<SO_GrassToolSettings>();
+                if (!AssetDatabase.IsValidFolder("Assets/GrassSystem/Editor"))
+                    AssetDatabase.CreateFolder("Assets/GrassSystem", "Editor");
+                AssetDatabase.CreateAsset(toolSettings, path);
+                AssetDatabase.SaveAssets();
+            }
         }
         
         private void OnGUI()
@@ -77,11 +128,41 @@ namespace GrassSystem
             EditorGUILayout.LabelField("Grass Painter", EditorStyles.boldLabel);
             EditorGUILayout.Space(5);
             
+            // === RENDERER SELECTION ===
+            EditorGUILayout.LabelField("Target Renderer", EditorStyles.boldLabel);
+            
+            // Dropdown for quick switching between renderers
+            if (sceneRenderers != null && sceneRenderers.Length > 0)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUI.BeginChangeCheck();
+                selectedRendererIndex = EditorGUILayout.Popup(selectedRendererIndex, rendererNames);
+                if (EditorGUI.EndChangeCheck() && selectedRendererIndex < sceneRenderers.Length)
+                {
+                    OnRendererChanged(sceneRenderers[selectedRendererIndex]);
+                }
+                
+                if (GUILayout.Button("↻", GUILayout.Width(25)))
+                    RefreshSceneRenderers();
+                EditorGUILayout.EndHorizontal();
+            }
+            else
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.HelpBox("No GrassRenderers in scene", MessageType.Info);
+                if (GUILayout.Button("↻", GUILayout.Width(25)))
+                    RefreshSceneRenderers();
+                EditorGUILayout.EndHorizontal();
+            }
+            
+            // Manual object field for drag-drop assignment
             EditorGUI.BeginChangeCheck();
-            targetRenderer = (GrassRenderer)EditorGUILayout.ObjectField(
-                "Target Renderer", targetRenderer, typeof(GrassRenderer), true);
-            if (EditorGUI.EndChangeCheck() && targetRenderer == null)
-                targetRenderer = FindAnyObjectByType<GrassRenderer>();
+            var newRenderer = (GrassRenderer)EditorGUILayout.ObjectField(
+                "Manual Assign", targetRenderer, typeof(GrassRenderer), true);
+            if (EditorGUI.EndChangeCheck() && newRenderer != targetRenderer)
+            {
+                OnRendererChanged(newRenderer);
+            }
             
             if (targetRenderer == null)
             {
@@ -102,7 +183,15 @@ namespace GrassSystem
             EditorGUILayout.Space(10);
             
             int grassCount = targetRenderer.GrassDataList?.Count ?? 0;
+            int avgBladesPerCluster = toolSettings.useClusterSpawning 
+                ? (toolSettings.minBladesPerCluster + toolSettings.maxBladesPerCluster) / 2 
+                : 1;
+            int estimatedClusters = avgBladesPerCluster > 0 ? grassCount / avgBladesPerCluster : grassCount;
+            
+            EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField($"Total Grass: {grassCount:N0}", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField($"(~{estimatedClusters:N0} clusters)", EditorStyles.miniLabel);
+            EditorGUILayout.EndHorizontal();
             
             EditorGUILayout.Space(10);
             
@@ -142,8 +231,8 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             EditorGUILayout.HelpBox(
-                "Hold Right Mouse Button in Scene View to paint.\n" +
-                "Shift + RMB to remove.\n" +
+                "Hold Left Mouse Button in Scene View to paint.\n" +
+                "Shift + LMB to remove.\n" +
                 "Scroll wheel to adjust brush size.",
                 MessageType.Info);
             
@@ -159,7 +248,8 @@ namespace GrassSystem
                 EditorGUILayout.Space(3);
                 EditorGUILayout.LabelField("Brush Limits", EditorStyles.miniLabel);
                 toolSettings.maxBrushSizeLimit = EditorGUILayout.FloatField("Max Brush Size", toolSettings.maxBrushSizeLimit);
-                toolSettings.maxDensityLimit = EditorGUILayout.FloatField("Max Density", toolSettings.maxDensityLimit);
+                toolSettings.maxDensityLimit = EditorGUILayout.FloatField("Max Density (legacy)", toolSettings.maxDensityLimit);
+                toolSettings.maxDensityPerM2Limit = EditorGUILayout.FloatField("Max Density/m²", toolSettings.maxDensityPerM2Limit);
                 
                 EditorGUILayout.Space(3);
                 EditorGUILayout.LabelField("Cluster Limits", EditorStyles.miniLabel);
@@ -198,7 +288,50 @@ namespace GrassSystem
             
             if (currentMode == PaintMode.Add)
             {
-                toolSettings.density = EditorGUILayout.Slider("Density", toolSettings.density, 0.1f, toolSettings.maxDensityLimit);
+                // Density mode selector
+                toolSettings.densityMode = (DensityMode)EditorGUILayout.EnumPopup("Density Mode", toolSettings.densityMode);
+                
+                // Show contextual density control based on mode
+                switch (toolSettings.densityMode)
+                {
+                    case DensityMode.PerUnitRadius:
+                        toolSettings.density = EditorGUILayout.Slider("Density (legacy)", toolSettings.density, 0.1f, toolSettings.maxDensityLimit);
+                        EditorGUILayout.HelpBox($"Count = BrushSize × Density = {toolSettings.brushSize:F1} × {toolSettings.density:F1} = {Mathf.RoundToInt(toolSettings.brushSize * toolSettings.density)} clusters", MessageType.None);
+                        break;
+                        
+                    case DensityMode.InstancesPerM2:
+                    case DensityMode.ClustersPerM2:
+                        // Shared controls for per-m² modes
+                        string label = toolSettings.densityMode == DensityMode.InstancesPerM2 ? "Instances" : "Clusters";
+                        toolSettings.densityPerM2 = EditorGUILayout.Slider($"{label} per Area Unit", toolSettings.densityPerM2, 1f, toolSettings.maxDensityPerM2Limit);
+                        toolSettings.areaUnit = EditorGUILayout.Slider("Area Unit (m²)", toolSettings.areaUnit, 0.5f, 10f);
+                        
+                        // Calculate and show debug info
+                        float brushArea = Mathf.PI * toolSettings.brushSize * toolSettings.brushSize;
+                        float effectiveDensity = toolSettings.densityPerM2 / toolSettings.areaUnit;
+                        int avgBlades = toolSettings.useClusterSpawning 
+                            ? (toolSettings.minBladesPerCluster + toolSettings.maxBladesPerCluster) / 2 
+                            : 1;
+                        
+                        int clusters, instances;
+                        if (toolSettings.densityMode == DensityMode.InstancesPerM2)
+                        {
+                            instances = Mathf.RoundToInt(effectiveDensity * brushArea);
+                            clusters = Mathf.Max(1, instances / avgBlades);
+                        }
+                        else
+                        {
+                            clusters = Mathf.Max(1, Mathf.RoundToInt(effectiveDensity * brushArea));
+                            instances = clusters * avgBlades;
+                        }
+                        
+                        EditorGUILayout.HelpBox(
+                            $"Brush area: {brushArea:F1}m² | {toolSettings.densityPerM2:F0} {label.ToLower()} / {toolSettings.areaUnit:F1}m²\n" +
+                            $"Per click: ~{clusters} clusters, ~{instances} instances", 
+                            MessageType.None);
+                        break;
+                }
+                
                 toolSettings.normalLimit = EditorGUILayout.Slider("Normal Limit", toolSettings.normalLimit, 0f, 1f);
                 
                 EditorGUILayout.Space(5);
@@ -286,6 +419,13 @@ namespace GrassSystem
                     EditorGUI.indentLevel--;
                 }
             }
+            else if (currentMode == PaintMode.Remove)
+            {
+                EditorGUILayout.LabelField("Removal Settings", EditorStyles.boldLabel);
+                toolSettings.removalStrength = EditorGUILayout.Slider("Removal Strength", toolSettings.removalStrength, 0.01f, 1f);
+                int percent = Mathf.RoundToInt(toolSettings.removalStrength * 100f);
+                EditorGUILayout.HelpBox($"Removes ~{percent}% of grass in brush area each stroke", MessageType.None);
+            }
             else if (currentMode == PaintMode.Height)
             {
                 bool isCustomMeshMode = targetRenderer != null && 
@@ -344,13 +484,16 @@ namespace GrassSystem
             Handles.color = new Color(Handles.color.r, Handles.color.g, Handles.color.b, 0.2f);
             Handles.DrawSolidDisc(hitPoint, hitNormal, toolSettings.brushSize);
             
-            if (e.type == EventType.MouseDown && e.button == 1)
+            if (e.type == EventType.MouseDown && e.button == 0)
             {
                 isPainting = true;
                 lastPaintPos = hitPoint;
+                // Paint immediately on first click
+                PaintMode mode = e.shift ? PaintMode.Remove : currentMode;
+                Paint(hitPoint, hitNormal, mode);
                 e.Use();
             }
-            else if (e.type == EventType.MouseUp && e.button == 1)
+            else if (e.type == EventType.MouseUp && e.button == 0)
             {
                 isPainting = false;
                 e.Use();
@@ -358,9 +501,12 @@ namespace GrassSystem
                 EditorUtility.SetDirty(targetRenderer);
             }
             
-            if (isPainting && e.type == EventType.MouseDrag && e.button == 1)
+            if (isPainting && e.type == EventType.MouseDrag && e.button == 0)
             {
-                if (Vector3.Distance(hitPoint, lastPaintPos) > minPaintDistance)
+                // Use brush diameter as minimum distance to prevent overlapping circles
+                // This ensures each drag step paints a new, non-overlapping area
+                float dynamicMinDistance = toolSettings.brushSize * 2f;
+                if (Vector3.Distance(hitPoint, lastPaintPos) > dynamicMinDistance)
                 {
                     PaintMode mode = e.shift ? PaintMode.Remove : currentMode;
                     Paint(hitPoint, hitNormal, mode);
@@ -389,6 +535,19 @@ namespace GrassSystem
         {
             if (targetRenderer == null) return;
             
+            // Validate settings before painting to prevent GPU crashes
+            if (targetRenderer.settings == null)
+            {
+                Debug.LogError("Cannot paint: GrassRenderer has no settings assigned!");
+                return;
+            }
+            
+            if (!targetRenderer.settings.Validate(out string error))
+            {
+                Debug.LogError($"Cannot paint: {error}");
+                return;
+            }
+            
             var grassList = targetRenderer.GrassDataList;
             
             switch (mode)
@@ -399,13 +558,13 @@ namespace GrassSystem
                 case PaintMode.Pattern: EditPattern(position, grassList); break;
                 case PaintMode.Color: EditColor(position, grassList); break;
             }
-            
-            Undo.RecordObject(targetRenderer, "Paint Grass");
+            // Skipping Undo.RecordObject for performance - it's too slow with large grass counts
         }
         
         private void AddGrass(Vector3 center, Vector3 normal, List<GrassData> grassList)
         {
-            int count = Mathf.RoundToInt(toolSettings.brushSize * toolSettings.density);
+            // Calculate cluster count based on density mode
+            int count = CalculateClusterCount();
             
             // Determine if we're in custom mesh mode
             bool isCustomMeshMode = targetRenderer != null && 
@@ -485,16 +644,51 @@ namespace GrassSystem
             }
         }
         
+        /// <summary>
+        /// Calculates the number of clusters to spawn based on the current density mode.
+        /// </summary>
+        private int CalculateClusterCount()
+        {
+            float brushArea = Mathf.PI * toolSettings.brushSize * toolSettings.brushSize;
+            
+            switch (toolSettings.densityMode)
+            {
+                case DensityMode.InstancesPerM2:
+                    // Calculate total instances, then divide by average blades per cluster
+                    // effectiveDensity = densityPerM2 / areaUnit (e.g., 10 per 2m² = 5 per 1m²)
+                    float effectiveDensity = toolSettings.densityPerM2 / toolSettings.areaUnit;
+                    int totalInstances = Mathf.RoundToInt(effectiveDensity * brushArea);
+                    int avgBladesPerCluster = toolSettings.useClusterSpawning 
+                        ? (toolSettings.minBladesPerCluster + toolSettings.maxBladesPerCluster) / 2 
+                        : 1;
+                    return Mathf.Max(1, totalInstances / avgBladesPerCluster);
+                    
+                case DensityMode.ClustersPerM2:
+                    float effectiveDensityC = toolSettings.densityPerM2 / toolSettings.areaUnit;
+                    return Mathf.Max(1, Mathf.RoundToInt(effectiveDensityC * brushArea));
+                    
+                case DensityMode.PerUnitRadius:
+                default:
+                    // Legacy behavior: count = brushSize × density
+                    return Mathf.Max(1, Mathf.RoundToInt(toolSettings.brushSize * toolSettings.density));
+            }
+        }
+        
         private void RemoveGrass(Vector3 center, List<GrassData> grassList)
         {
             float sqrRadius = toolSettings.brushSize * toolSettings.brushSize;
+            float removalChance = toolSettings.removalStrength;
             
             for (int i = grassList.Count - 1; i >= 0; i--)
             {
                 Vector3 diff = grassList[i].position - center;
                 diff.y = 0;
                 if (diff.sqrMagnitude < sqrRadius)
-                    grassList.RemoveAt(i);
+                {
+                    // Partial removal: only remove if random check passes
+                    if (removalChance >= 1f || Random.value < removalChance)
+                        grassList.RemoveAt(i);
+                }
             }
         }
         
@@ -694,7 +888,7 @@ namespace GrassSystem
         private void ClearAllGrass()
         {
             if (targetRenderer == null) return;
-            Undo.RecordObject(targetRenderer, "Clear Grass");
+            // Skipping Undo.RecordObject for performance - clearing large grass counts would be too slow
             targetRenderer.ClearGrass();
             EditorUtility.SetDirty(targetRenderer);
         }
