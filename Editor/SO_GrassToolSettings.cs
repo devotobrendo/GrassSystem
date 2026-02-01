@@ -4,6 +4,19 @@ using UnityEngine;
 
 namespace GrassSystem
 {
+    /// <summary>
+    /// Determines how brush density is calculated during painting.
+    /// </summary>
+    public enum DensityMode
+    {
+        /// <summary>Legacy mode: count = brushSize × density</summary>
+        PerUnitRadius,
+        /// <summary>Grass instances per square meter of brush area</summary>
+        InstancesPerM2,
+        /// <summary>Grass clusters per square meter of brush area</summary>
+        ClustersPerM2
+    }
+    
     [System.Serializable]
     public class SO_GrassToolSettings : ScriptableObject
     {
@@ -11,9 +24,28 @@ namespace GrassSystem
         [Range(0.1f, 50f)]
         public float brushSize = 5f;
         
+        [Header("Density Settings")]
+        [Tooltip("How density is calculated: legacy (per unit radius), instances/m², or clusters/m²")]
+        public DensityMode densityMode = DensityMode.InstancesPerM2;
+        
         [Range(0.1f, 10f)]
+        [Tooltip("Legacy density multiplier (used when mode is PerUnitRadius)")]
         public float density = 1f;
         
+        [Range(1f, 200f)]
+        [Tooltip("Number of instances or clusters per area unit (used for PerM2 modes)")]
+        public float densityPerM2 = 20f;
+        
+        [Range(0.5f, 10f)]
+        [Tooltip("Area unit in square meters (e.g., 1 = per 1m², 2 = per 2m²)")]
+        public float areaUnit = 1f;
+        
+        [Header("Removal Settings")]
+        [Range(0.01f, 1f)]
+        [Tooltip("Removal strength: 1 = remove all grass in brush, 0.5 = remove 50% randomly, 0.1 = remove 10%")]
+        public float removalStrength = 1f;
+        
+        [Header("Surface Filter")]
         [Range(0f, 1f)]
         public float normalLimit = 0.8f;
         
@@ -86,7 +118,12 @@ namespace GrassSystem
         public void ResetToDefaults()
         {
             brushSize = 5f;
-            density = 2f;  // Higher density for Zelda-style grass fields
+            // Density settings
+            densityMode = DensityMode.InstancesPerM2;
+            density = 2f;  // Legacy mode multiplier
+            densityPerM2 = 20f;  // 20 instances per area unit is a good default
+            areaUnit = 1f;  // Per 1m² by default
+            removalStrength = 1f;  // Remove all by default
             normalLimit = 0.8f;
             useCustomSize = false;
             // Zelda BOTW-style blade dimensions
@@ -122,6 +159,8 @@ namespace GrassSystem
         public float maxBrushSizeLimit = 50f;
         [Min(1f)]
         public float maxDensityLimit = 10f;
+        [Min(50f)]
+        public float maxDensityPerM2Limit = 200f;
         
         [Header("Cluster Limits")]
         [Min(1)]
