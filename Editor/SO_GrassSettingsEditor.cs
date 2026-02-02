@@ -76,13 +76,6 @@ namespace GrassSystem
         private SerializedProperty albedoBlendAmount;
         private SerializedProperty useNormalMap;
         
-        // Ground Shader
-        private SerializedProperty useGroundShader;
-        private SerializedProperty groundMaterial;
-        private SerializedProperty groundTextureResolution;
-        private SerializedProperty groundBlendStrength;
-        private SerializedProperty groundBlendRadius;
-        
         // Tip Customization
         private SerializedProperty useTipCutout;
         private SerializedProperty tipMaskTexture;
@@ -195,12 +188,6 @@ namespace GrassSystem
             albedoBlendAmount = serializedObject.FindProperty("albedoBlendAmount");
             useNormalMap = serializedObject.FindProperty("useNormalMap");
             
-            // Ground Shader
-            useGroundShader = serializedObject.FindProperty("useGroundShader");
-            groundMaterial = serializedObject.FindProperty("groundMaterial");
-            groundTextureResolution = serializedObject.FindProperty("groundTextureResolution");
-            groundBlendStrength = serializedObject.FindProperty("groundBlendStrength");
-            groundBlendRadius = serializedObject.FindProperty("groundBlendRadius");
             
             useTipCutout = serializedObject.FindProperty("useTipCutout");
             tipMaskTexture = serializedObject.FindProperty("tipMaskTexture");
@@ -451,20 +438,6 @@ namespace GrassSystem
             maxDrawDistance.floatValue = EditorGUILayout.Slider("Max Draw Distance", maxDrawDistance.floatValue, 10f, settings.maxDrawDistanceLimit);
             EditorGUILayout.PropertyField(cullingTreeDepth);
             
-            EditorGUILayout.Space(10);
-            
-            // === GROUND SHADER ===
-            EditorGUILayout.LabelField("Ground Shader", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(useGroundShader, new GUIContent("Enable Ground Blend", "Create color patches on terrain under grass"));
-            if (settings.useGroundShader)
-            {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(groundMaterial, new GUIContent("Ground Material", "Material receiving the grass color blend"));
-                EditorGUILayout.PropertyField(groundTextureResolution, new GUIContent("Texture Resolution", "Quality of ground color texture (higher = more detail)"));
-                EditorGUILayout.PropertyField(groundBlendStrength, new GUIContent("Blend Strength", "How much grass color affects ground"));
-                EditorGUILayout.PropertyField(groundBlendRadius, new GUIContent("Blend Radius", "Radius of color influence around each blade"));
-                EditorGUI.indentLevel--;
-            }
             
             EditorGUILayout.Space(10);
             

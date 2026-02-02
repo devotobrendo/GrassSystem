@@ -34,14 +34,6 @@ namespace GrassSystem
         Stochastic   // Irregular, non-repeating pattern
     }
     
-    public enum GroundTextureResolution
-    {
-        Resolution128 = 128,
-        Resolution256 = 256,
-        Resolution512 = 512,
-        Resolution1024 = 1024
-    }
-    
     [CreateAssetMenu(fileName = "GrassSettings", menuName = "Grass System/Grass Settings")]
     public class SO_GrassSettings : ScriptableObject
     {
@@ -177,22 +169,7 @@ namespace GrassSystem
         public bool useNormalMap = false;
         
         // ========================================
-        // GROUND SHADER
-        // ========================================
         
-        [Header("Ground Shader")]
-        [Tooltip("Enable ground color blending based on grass positions")]
-        public bool useGroundShader = false;
-        [Tooltip("Material to apply ground blending effect")]
-        public Material groundMaterial;
-        [Tooltip("Resolution of ground color texture")]
-        public GroundTextureResolution groundTextureResolution = GroundTextureResolution.Resolution256;
-        [Range(0f, 1f)]
-        [Tooltip("How much the grass color affects the ground")]
-        public float groundBlendStrength = 0.5f;
-        [Range(0.5f, 5f)]
-        [Tooltip("Radius of color influence around each grass blade")]
-        public float groundBlendRadius = 1.5f;
         
         [Header("Tip Customization")]
         public bool useTipCutout = false;

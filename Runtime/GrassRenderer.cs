@@ -245,11 +245,8 @@ namespace GrassSystem
         
         private void Initialize()
         {
-            // Safety: cleanup any existing buffers before reinitializing
-            if (sourceBuffer != null || visibleBuffer != null || argsBuffer != null)
-            {
-                Cleanup();
-            }
+            // ALWAYS cleanup any existing resources before reinitializing to prevent memory leaks
+            Cleanup();
             
             if (settings == null)
             {
