@@ -260,17 +260,39 @@ namespace GrassSystem
             materialInstance.SetColor("_TopTint", settings.topTint);
             materialInstance.SetColor("_BottomTint", settings.bottomTint);
             
-            // Color Zones (stripes, checkerboard, noise, organic)
-            materialInstance.SetFloat("_UseColorZones", settings.useColorZones ? 1 : 0);
-            materialInstance.SetFloat("_ZonePatternType", (float)settings.zonePatternType);
-            materialInstance.SetColor("_ZoneColorLight", settings.zoneColorLight);
-            materialInstance.SetColor("_ZoneColorDark", settings.zoneColorDark);
-            materialInstance.SetFloat("_ZoneScale", settings.zoneScale);
-            materialInstance.SetFloat("_ZoneDirection", settings.zoneDirection);
-            materialInstance.SetFloat("_ZoneSoftness", settings.zoneSoftness);
-            materialInstance.SetFloat("_ZoneContrast", settings.zoneContrast);
-            materialInstance.SetColor("_OrganicAccentColor", settings.organicAccentColor);
-            materialInstance.SetFloat("_OrganicClumpiness", settings.organicClumpiness);
+            // Color Mode System (Albedo=0, Tint=1, Patterns=2)
+            materialInstance.SetFloat("_ColorMode", (float)settings.colorMode);
+            
+            // Pattern Mode Settings
+            materialInstance.SetFloat("_PatternType", (float)settings.patternType);
+            materialInstance.SetColor("_PatternATip", settings.patternATip);
+            materialInstance.SetColor("_PatternARoot", settings.patternARoot);
+            materialInstance.SetColor("_PatternBTip", settings.patternBTip);
+            materialInstance.SetColor("_PatternBRoot", settings.patternBRoot);
+            
+            // Natural Blend Colors (3 colors with tip/root each)
+            materialInstance.SetColor("_NaturalColor1Tip", settings.naturalColor1Tip);
+            materialInstance.SetColor("_NaturalColor1Root", settings.naturalColor1Root);
+            materialInstance.SetColor("_NaturalColor2Tip", settings.naturalColor2Tip);
+            materialInstance.SetColor("_NaturalColor2Root", settings.naturalColor2Root);
+            materialInstance.SetColor("_NaturalColor3Tip", settings.naturalColor3Tip);
+            materialInstance.SetColor("_NaturalColor3Root", settings.naturalColor3Root);
+            
+            // Pattern Dimensions
+            materialInstance.SetFloat("_StripeWidth", settings.stripeWidth);
+            materialInstance.SetFloat("_CheckerboardSize", settings.checkerboardSize);
+            materialInstance.SetFloat("_StripeAngle", settings.stripeAngle * Mathf.Deg2Rad);
+            
+            // Natural Blend Settings
+            materialInstance.SetFloat("_NaturalBlendType", (float)settings.naturalBlendType);
+            materialInstance.SetFloat("_NaturalScale", settings.naturalScale);
+            materialInstance.SetFloat("_NaturalSoftness", settings.naturalSoftness);
+            materialInstance.SetFloat("_NaturalContrast", settings.naturalContrast);
+            
+            // Albedo Blend (for Tint and Pattern modes)
+            materialInstance.SetFloat("_UseAlbedoBlend", settings.useAlbedoBlend ? 1 : 0);
+            materialInstance.SetFloat("_AlbedoBlendAmount", settings.albedoBlendAmount);
+            materialInstance.SetFloat("_UseNormalMap", settings.useNormalMap ? 1 : 0);
             
             materialInstance.SetFloat("_UseTipCutout", settings.useTipCutout ? 1 : 0);
             materialInstance.SetFloat("_TipCutoff", settings.tipCutoffHeight);
@@ -307,7 +329,6 @@ namespace GrassSystem
             
             // Custom Mesh Mode settings
             bool isCustomMeshMode = settings.grassMode == GrassMode.CustomMesh;
-            materialInstance.SetFloat("_UseOnlyAlbedoColor", (isCustomMeshMode && settings.useOnlyAlbedoColor) ? 1 : 0);
             materialInstance.SetFloat("_UseUniformScale", isCustomMeshMode ? 1 : 0);
             
             if (isCustomMeshMode)

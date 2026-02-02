@@ -398,22 +398,6 @@ namespace GrassSystem
                     }
                 }
                 
-                EditorGUILayout.Space(5);
-                EditorGUILayout.LabelField("Color", EditorStyles.boldLabel);
-                
-                // Show color options only if not using only albedo color
-                bool useOnlyAlbedo = isCustomMeshMode && targetRenderer.settings.useOnlyAlbedoColor;
-                if (useOnlyAlbedo)
-                {
-                    EditorGUILayout.HelpBox("Color settings disabled: 'Use Only Albedo Color' is enabled in settings.", MessageType.Info);
-                }
-                else
-                {
-                    toolSettings.brushColor = EditorGUILayout.ColorField("Base Color", toolSettings.brushColor);
-                    toolSettings.colorVariationR = EditorGUILayout.Slider("Red Variation", toolSettings.colorVariationR, 0f, 0.3f);
-                    toolSettings.colorVariationG = EditorGUILayout.Slider("Green Variation", toolSettings.colorVariationG, 0f, 0.3f);
-                    toolSettings.colorVariationB = EditorGUILayout.Slider("Blue Variation", toolSettings.colorVariationB, 0f, 0.3f);
-                }
                 
                 EditorGUILayout.Space(5);
                 toolSettings.paintMask = EditorGUILayout.MaskField("Paint Mask", 
@@ -460,13 +444,32 @@ namespace GrassSystem
             else if (currentMode == PaintMode.Color)
             {
                 EditorGUILayout.Space(5);
-                EditorGUILayout.LabelField("Color Brush", EditorStyles.boldLabel);
-                toolSettings.brushColor = EditorGUILayout.ColorField("Target Color", toolSettings.brushColor);
-                EditorGUILayout.HelpBox("Paint this color onto existing grass blades.", MessageType.Info);
+                EditorGUILayout.LabelField("Paint Color Settings", EditorStyles.boldLabel);
                 
-                EditorGUILayout.Space(5);
-                if (GUILayout.Button("Reset Color (paint white)"))
-                    toolSettings.brushColor = Color.white;
+                bool isCustomMeshMode = targetRenderer != null && 
+                                        targetRenderer.settings != null && 
+                                        targetRenderer.settings.grassMode == GrassMode.CustomMesh;
+                
+                // Show color options only if not using only albedo color
+                bool useOnlyAlbedo = isCustomMeshMode && targetRenderer.settings.colorMode == GrassColorMode.Albedo;
+                if (useOnlyAlbedo)
+                {
+                    EditorGUILayout.HelpBox("Color settings disabled: 'Albedo Texture' color mode is enabled in settings.", MessageType.Info);
+                }
+                else
+                {
+                    toolSettings.brushColor = EditorGUILayout.ColorField("Base Color", toolSettings.brushColor);
+                    toolSettings.colorVariationR = EditorGUILayout.Slider("Red Variation", toolSettings.colorVariationR, 0f, 0.3f);
+                    toolSettings.colorVariationG = EditorGUILayout.Slider("Green Variation", toolSettings.colorVariationG, 0f, 0.3f);
+                    toolSettings.colorVariationB = EditorGUILayout.Slider("Blue Variation", toolSettings.colorVariationB, 0f, 0.3f);
+                    
+                    EditorGUILayout.Space(5);
+                    EditorGUILayout.HelpBox("Paint this color onto existing grass blades in the scene.", MessageType.Info);
+                    
+                    EditorGUILayout.Space(5);
+                    if (GUILayout.Button("Reset to White"))
+                        toolSettings.brushColor = Color.white;
+                }
             }
         }
         

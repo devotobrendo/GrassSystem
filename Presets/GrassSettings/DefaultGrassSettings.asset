@@ -22,7 +22,6 @@ MonoBehaviour:
   - {fileID: 4799939183687158410, guid: 5b3d071dcaeaa634ea481e00ef6fc42a, type: 3}
   minSize: 0.49
   maxSize: 0.82
-  useOnlyAlbedoColor: 1
   meshRotationOffset: {x: 90, y: 90, z: 0}
   maxTiltAngle: 26.11
   tiltVariation: 0.343
@@ -36,25 +35,42 @@ MonoBehaviour:
   minFadeDistance: 30
   maxDrawDistance: 50
   cullingTreeDepth: 4
-  useColorZones: 0
-  zonePatternType: 4
-  zoneColorLight: {r: 0.5, g: 0.8, b: 0.3, a: 1}
-  zoneColorDark: {r: 0.3, g: 0.55, b: 0.2, a: 1}
-  zoneScale: 15.5
-  zoneDirection: 0
-  zoneSoftness: 0.5
-  zoneContrast: 2.681
-  organicAccentColor: {r: 0.55, g: 0.6, b: 0.2, a: 1}
-  organicClumpiness: 0.762
+  colorMode: 2
+  topTint: {r: 0.39488173, g: 1, b: 0, a: 1}
+  bottomTint: {r: 0.076403484, g: 0.3490566, b: 0, a: 1}
+  patternType: 2
+  patternATip: {r: 0.45, g: 0.85, b: 0.25, a: 1}
+  patternARoot: {r: 0.15, g: 0.35, b: 0.08, a: 1}
+  patternBTip: {r: 0.5732358, g: 1, b: 0.5707547, a: 1}
+  patternBRoot: {r: 0, g: 0.24528301, b: 0.033146363, a: 1}
+  naturalColor1Tip: {r: 0.45, g: 0.85, b: 0.25, a: 1}
+  naturalColor1Root: {r: 0.15, g: 0.35, b: 0.08, a: 1}
+  naturalColor2Tip: {r: 0.35, g: 0.65, b: 0.2, a: 1}
+  naturalColor2Root: {r: 0.12, g: 0.28, b: 0.06, a: 1}
+  naturalColor3Tip: {r: 0.5, g: 0.7, b: 0.15, a: 1}
+  naturalColor3Root: {r: 0.2, g: 0.3, b: 0.05, a: 1}
+  stripeWidth: 1.3
+  checkerboardSize: 5
+  stripeAngle: 44.6
+  naturalBlendType: 0
+  naturalScale: 5.5
+  naturalSoftness: 1
+  naturalContrast: 1
+  useAlbedoBlend: 1
+  albedoBlendAmount: 0.5
+  useNormalMap: 1
+  useGroundShader: 0
+  groundMaterial: {fileID: 0}
+  groundTextureResolution: 256
+  groundBlendStrength: 0.5
+  groundBlendRadius: 1.5
   useTipCutout: 0
   tipMaskTexture: {fileID: 0}
   tipCutoffHeight: 0.8
   albedoTexture: {fileID: 2800000, guid: 4db7e83740caea34790e437606913c5a, type: 3}
   normalMap: {fileID: 2800000, guid: 50dce4c614b14de4fbc3eb3d2b36739e, type: 3}
-  topTint: {r: 0.39488173, g: 1, b: 0, a: 1}
-  bottomTint: {r: 0.076403484, g: 0.3490566, b: 0, a: 1}
-  translucency: 0.3
-  useAlignedNormals: 1
+  translucency: 0.641
+  useAlignedNormals: 0
   useTerrainLightmap: 0
   terrain: {fileID: 0}
   terrainLightmapInfluence: 0.579
@@ -66,7 +82,7 @@ MonoBehaviour:
   useDepthPerception: 0
   instanceColorVariation: 0.3
   heightDarkening: 0.314
-  backfaceDarkening: 0
+  backfaceDarkening: 0.267
   drawCullingBounds: 0
   showAdvancedLimits: 0
   maxSizeLimit: 3
@@ -79,4 +95,3 @@ MonoBehaviour:
   maxTiltAngleLimit: 45
   maxInteractorStrengthLimit: 2
   maxInteractorsLimit: 16
-  maxZoneScaleLimit: 50

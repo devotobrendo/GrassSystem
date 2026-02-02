@@ -12,13 +12,34 @@ namespace GrassSystem
         CustomMesh       // Imported meshes with uniform scale
     }
     
-    public enum ZonePatternType
+    public enum GrassColorMode
     {
-        Stripes,         // Directional stripes like baseball fields
-        Checkerboard,    // Classic checkerboard pattern
-        Noise,           // Simple noise-based variation
-        Organic,         // Natural organic blending (soft transitions)
-        Patches          // Circular irregular patches (like worn grass spots)
+        Albedo,      // Uses albedo texture directly (no tint)
+        Tint,        // TopTint/BottomTint gradient (default)
+        Patterns     // Advanced patterns: Stripes, Checkerboard, Natural Blend
+    }
+    
+    public enum PatternType
+    {
+        Stripes,      // Alternating stripes with 2 colors
+        Checkerboard, // Checkerboard with 2 colors
+        NaturalBlend  // Natural organic areas with 3 colors + natural distribution
+    }
+    
+    public enum NaturalBlendType
+    {
+        BlueNoise,   // Scattered, uniform distribution without clumping
+        Cluster,     // Natural grass clumps/patches
+        Gradient,    // Smooth natural color transitions
+        Stochastic   // Irregular, non-repeating pattern
+    }
+    
+    public enum GroundTextureResolution
+    {
+        Resolution128 = 128,
+        Resolution256 = 256,
+        Resolution512 = 512,
+        Resolution1024 = 1024
     }
     
     [CreateAssetMenu(fileName = "GrassSettings", menuName = "Grass System/Grass Settings")]
@@ -41,8 +62,6 @@ namespace GrassSystem
         [Range(0.1f, 3f)]
         [Tooltip("Maximum uniform scale for custom meshes")]
         public float maxSize = 1.2f;
-        [Tooltip("Use only the albedo texture color, ignoring tints and grass color")]
-        public bool useOnlyAlbedoColor = false;
         [Tooltip("Rotation offset for custom meshes (degrees)")]
         public Vector3 meshRotationOffset = Vector3.zero;
         
@@ -78,33 +97,102 @@ namespace GrassSystem
         [Range(1, 8)]
         public int cullingTreeDepth = 4;
         
-        [Header("Color Zones")]
-        [Tooltip("Enable alternating color zones like baseball/soccer fields")]
-        public bool useColorZones = false;
-        public ZonePatternType zonePatternType = ZonePatternType.Stripes;
-        [Tooltip("Lighter zone color (the brighter stripes)")]
-        public Color zoneColorLight = new Color(0.5f, 0.8f, 0.3f);
-        [Tooltip("Darker zone color (the darker stripes)")]
-        public Color zoneColorDark = new Color(0.3f, 0.55f, 0.2f);
-        [Range(1f, 50f)]
-        [Tooltip("Size of each zone/stripe in world units")]
-        public float zoneScale = 5f;
-        [Range(0f, 360f)]
-        [Tooltip("Direction of stripes in degrees (0 = along X axis)")]
-        public float zoneDirection = 0f;
-        [Range(0f, 1f)]
-        [Tooltip("How soft/blended the edges between zones are")]
-        public float zoneSoftness = 0.1f;
-        [Range(0.5f, 3f)]
-        [Tooltip("Contrast for noise pattern (higher = more distinct zones)")]
-        public float zoneContrast = 1.5f;
+        // ========================================
+        // COLOR SYSTEM
+        // ========================================
         
-        [Header("Organic Pattern Settings (when Pattern Type = Organic)")]
-        [Tooltip("Accent color for variety in organic patterns (yellows, browns, etc)")]
-        public Color organicAccentColor = new Color(0.55f, 0.6f, 0.2f);
+        [Header("Color Mode")]
+        [Tooltip("How grass color is determined")]
+        public GrassColorMode colorMode = GrassColorMode.Tint;
+        
+        [Header("Tint Mode Settings")]
+        public Color topTint = new Color(0.45f, 0.85f, 0.25f);
+        public Color bottomTint = new Color(0.15f, 0.35f, 0.08f);
+        
+        // ========================================
+        // PATTERN SETTINGS (Patterns mode only)
+        // ========================================
+        
+        [Header("Pattern Type")]
+        [Tooltip("Type of pattern to apply")]
+        public PatternType patternType = PatternType.Stripes;
+        
+        [Header("Pattern Colors - Color A (Stripes/Checkerboard)")]
+        [Tooltip("Tip color for pattern color A")]
+        public Color patternATip = new Color(0.45f, 0.85f, 0.25f);
+        [Tooltip("Root color for pattern color A")]  
+        public Color patternARoot = new Color(0.15f, 0.35f, 0.08f);
+        
+        [Header("Pattern Colors - Color B (Stripes/Checkerboard)")]
+        [Tooltip("Tip color for pattern color B")]
+        public Color patternBTip = new Color(0.35f, 0.65f, 0.20f);
+        [Tooltip("Root color for pattern color B")]
+        public Color patternBRoot = new Color(0.12f, 0.28f, 0.06f);
+        
+        [Header("Natural Blend Colors (3 colors with Tip/Root each)")]
+        [Tooltip("Color 1 at blade tip")]
+        public Color naturalColor1Tip = new Color(0.45f, 0.85f, 0.25f);
+        [Tooltip("Color 1 at blade root")]
+        public Color naturalColor1Root = new Color(0.15f, 0.35f, 0.08f);
+        [Tooltip("Color 2 at blade tip")]
+        public Color naturalColor2Tip = new Color(0.35f, 0.65f, 0.20f);
+        [Tooltip("Color 2 at blade root")]
+        public Color naturalColor2Root = new Color(0.12f, 0.28f, 0.06f);
+        [Tooltip("Color 3 at blade tip")]
+        public Color naturalColor3Tip = new Color(0.50f, 0.70f, 0.15f);
+        [Tooltip("Color 3 at blade root")]
+        public Color naturalColor3Root = new Color(0.20f, 0.30f, 0.05f);
+        
+        [Header("Pattern Dimensions")]
+        [Range(1f, 50f)]
+        [Tooltip("Width of stripes in world units")]
+        public float stripeWidth = 5f;
+        [Range(1f, 50f)]
+        [Tooltip("Size of checkerboard squares in world units")]
+        public float checkerboardSize = 5f;
+        [Range(0f, 90f)]
+        [Tooltip("Rotation angle for stripes (degrees)")]
+        public float stripeAngle = 0f;
+        
+        [Header("Natural Blend Settings")]
+        [Tooltip("Type of natural distribution pattern")]
+        public NaturalBlendType naturalBlendType = NaturalBlendType.BlueNoise;
+        [Range(1f, 50f)]
+        [Tooltip("Scale of natural areas in world units")]
+        public float naturalScale = 8f;
         [Range(0f, 1f)]
-        [Tooltip("How clumpy vs random the organic variation is (1 = distinct blobs, 0 = smooth noise)")]
-        public float organicClumpiness = 0.5f;
+        [Tooltip("Softness of transitions between colors (0 = sharp, 1 = smooth)")]
+        public float naturalSoftness = 0.5f;
+        [Range(0f, 1f)]
+        [Tooltip("Contrast between color areas")]
+        public float naturalContrast = 0.5f;
+        
+        [Header("Texture Options (Tint/Pattern modes)")]
+        [Tooltip("Blend albedo texture with the color mode")]
+        public bool useAlbedoBlend = false;
+        [Range(0f, 1f)]
+        [Tooltip("How much albedo affects final color (0 = pure mode color, 1 = full albedo)")]
+        public float albedoBlendAmount = 0.5f;
+        [Tooltip("Use normal map for lighting (requires normal map texture)")]
+        public bool useNormalMap = false;
+        
+        // ========================================
+        // GROUND SHADER
+        // ========================================
+        
+        [Header("Ground Shader")]
+        [Tooltip("Enable ground color blending based on grass positions")]
+        public bool useGroundShader = false;
+        [Tooltip("Material to apply ground blending effect")]
+        public Material groundMaterial;
+        [Tooltip("Resolution of ground color texture")]
+        public GroundTextureResolution groundTextureResolution = GroundTextureResolution.Resolution256;
+        [Range(0f, 1f)]
+        [Tooltip("How much the grass color affects the ground")]
+        public float groundBlendStrength = 0.5f;
+        [Range(0.5f, 5f)]
+        [Tooltip("Radius of color influence around each grass blade")]
+        public float groundBlendRadius = 1.5f;
         
         [Header("Tip Customization")]
         public bool useTipCutout = false;
@@ -112,14 +200,11 @@ namespace GrassSystem
         [Range(0f, 1f)]
         public float tipCutoffHeight = 0.8f;
         
-        [Header("Textures (Custom Mesh Mode Only)")]
+        [Header("Textures")]
         public Texture2D albedoTexture;
         public Texture2D normalMap;
         
         [Header("Lighting")]
-        // Zelda BOTW-style vibrant green tints
-        public Color topTint = new Color(0.45f, 0.85f, 0.25f);
-        public Color bottomTint = new Color(0.15f, 0.35f, 0.08f);
         [Range(0f, 1f)]
         public float translucency = 0.4f;
         public bool useAlignedNormals = true;
@@ -240,9 +325,5 @@ namespace GrassSystem
         public float maxInteractorStrengthLimit = 2f;
         [Min(8)]
         public int maxInteractorsLimit = 16;
-        
-        [Header("Zone Limits")]
-        [Min(10f)]
-        public float maxZoneScaleLimit = 50f;
     }
 }

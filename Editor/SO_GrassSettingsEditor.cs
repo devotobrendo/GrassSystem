@@ -20,7 +20,6 @@ namespace GrassSystem
         private SerializedProperty customMeshes;
         private SerializedProperty minSize;
         private SerializedProperty maxSize;
-        private SerializedProperty useOnlyAlbedoColor;
         private SerializedProperty meshRotationOffset;
         
         // Natural Variation
@@ -43,17 +42,46 @@ namespace GrassSystem
         private SerializedProperty maxDrawDistance;
         private SerializedProperty cullingTreeDepth;
         
-        // Color Zones
-        private SerializedProperty useColorZones;
-        private SerializedProperty zonePatternType;
-        private SerializedProperty zoneColorLight;
-        private SerializedProperty zoneColorDark;
-        private SerializedProperty zoneScale;
-        private SerializedProperty zoneDirection;
-        private SerializedProperty zoneSoftness;
-        private SerializedProperty zoneContrast;
-        private SerializedProperty organicAccentColor;
-        private SerializedProperty organicClumpiness;
+        // Color Mode
+        private SerializedProperty colorMode;
+        
+        // Pattern Mode
+        private SerializedProperty patternType;
+        private SerializedProperty patternATip;
+        private SerializedProperty patternARoot;
+        private SerializedProperty patternBTip;
+        private SerializedProperty patternBRoot;
+        
+        // Natural Blend Colors (3 colors with tip/root)
+        private SerializedProperty naturalColor1Tip;
+        private SerializedProperty naturalColor1Root;
+        private SerializedProperty naturalColor2Tip;
+        private SerializedProperty naturalColor2Root;
+        private SerializedProperty naturalColor3Tip;
+        private SerializedProperty naturalColor3Root;
+        
+        // Pattern Dimensions
+        private SerializedProperty stripeWidth;
+        private SerializedProperty checkerboardSize;
+        private SerializedProperty stripeAngle;
+        
+        // Natural Blend Settings
+        private SerializedProperty naturalBlendType;
+        private SerializedProperty naturalScale;
+        private SerializedProperty naturalSoftness;
+        private SerializedProperty naturalContrast;
+        
+        // Texture Options
+        private SerializedProperty useAlbedoBlend;
+        private SerializedProperty albedoBlendAmount;
+        private SerializedProperty useNormalMap;
+        
+        // Ground Shader
+        private SerializedProperty useGroundShader;
+        private SerializedProperty groundMaterial;
+        private SerializedProperty groundTextureResolution;
+        private SerializedProperty groundBlendStrength;
+        private SerializedProperty groundBlendRadius;
         
         // Tip Customization
         private SerializedProperty useTipCutout;
@@ -64,7 +92,7 @@ namespace GrassSystem
         private SerializedProperty albedoTexture;
         private SerializedProperty normalMap;
         
-        // Lighting
+        // Lighting (topTint/bottomTint are used for Tint mode now)
         private SerializedProperty topTint;
         private SerializedProperty bottomTint;
         private SerializedProperty translucency;
@@ -104,7 +132,6 @@ namespace GrassSystem
         private SerializedProperty maxTiltAngleLimit;
         private SerializedProperty maxInteractorStrengthLimit;
         private SerializedProperty maxInteractorsLimit;
-        private SerializedProperty maxZoneScaleLimit;
         
         private void OnEnable()
         {
@@ -117,7 +144,6 @@ namespace GrassSystem
             customMeshes = serializedObject.FindProperty("customMeshes");
             minSize = serializedObject.FindProperty("minSize");
             maxSize = serializedObject.FindProperty("maxSize");
-            useOnlyAlbedoColor = serializedObject.FindProperty("useOnlyAlbedoColor");
             meshRotationOffset = serializedObject.FindProperty("meshRotationOffset");
             
             maxTiltAngle = serializedObject.FindProperty("maxTiltAngle");
@@ -136,16 +162,45 @@ namespace GrassSystem
             maxDrawDistance = serializedObject.FindProperty("maxDrawDistance");
             cullingTreeDepth = serializedObject.FindProperty("cullingTreeDepth");
             
-            useColorZones = serializedObject.FindProperty("useColorZones");
-            zonePatternType = serializedObject.FindProperty("zonePatternType");
-            zoneColorLight = serializedObject.FindProperty("zoneColorLight");
-            zoneColorDark = serializedObject.FindProperty("zoneColorDark");
-            zoneScale = serializedObject.FindProperty("zoneScale");
-            zoneDirection = serializedObject.FindProperty("zoneDirection");
-            zoneSoftness = serializedObject.FindProperty("zoneSoftness");
-            zoneContrast = serializedObject.FindProperty("zoneContrast");
-            organicAccentColor = serializedObject.FindProperty("organicAccentColor");
-            organicClumpiness = serializedObject.FindProperty("organicClumpiness");
+            colorMode = serializedObject.FindProperty("colorMode");
+            
+            // Pattern Mode
+            patternType = serializedObject.FindProperty("patternType");
+            patternATip = serializedObject.FindProperty("patternATip");
+            patternARoot = serializedObject.FindProperty("patternARoot");
+            patternBTip = serializedObject.FindProperty("patternBTip");
+            patternBRoot = serializedObject.FindProperty("patternBRoot");
+            
+            // Natural Blend Colors
+            naturalColor1Tip = serializedObject.FindProperty("naturalColor1Tip");
+            naturalColor1Root = serializedObject.FindProperty("naturalColor1Root");
+            naturalColor2Tip = serializedObject.FindProperty("naturalColor2Tip");
+            naturalColor2Root = serializedObject.FindProperty("naturalColor2Root");
+            naturalColor3Tip = serializedObject.FindProperty("naturalColor3Tip");
+            naturalColor3Root = serializedObject.FindProperty("naturalColor3Root");
+            
+            // Pattern Dimensions
+            stripeWidth = serializedObject.FindProperty("stripeWidth");
+            checkerboardSize = serializedObject.FindProperty("checkerboardSize");
+            stripeAngle = serializedObject.FindProperty("stripeAngle");
+            
+            // Natural Blend Settings
+            naturalBlendType = serializedObject.FindProperty("naturalBlendType");
+            naturalScale = serializedObject.FindProperty("naturalScale");
+            naturalSoftness = serializedObject.FindProperty("naturalSoftness");
+            naturalContrast = serializedObject.FindProperty("naturalContrast");
+            
+            // Texture Options
+            useAlbedoBlend = serializedObject.FindProperty("useAlbedoBlend");
+            albedoBlendAmount = serializedObject.FindProperty("albedoBlendAmount");
+            useNormalMap = serializedObject.FindProperty("useNormalMap");
+            
+            // Ground Shader
+            useGroundShader = serializedObject.FindProperty("useGroundShader");
+            groundMaterial = serializedObject.FindProperty("groundMaterial");
+            groundTextureResolution = serializedObject.FindProperty("groundTextureResolution");
+            groundBlendStrength = serializedObject.FindProperty("groundBlendStrength");
+            groundBlendRadius = serializedObject.FindProperty("groundBlendRadius");
             
             useTipCutout = serializedObject.FindProperty("useTipCutout");
             tipMaskTexture = serializedObject.FindProperty("tipMaskTexture");
@@ -188,7 +243,6 @@ namespace GrassSystem
             maxTiltAngleLimit = serializedObject.FindProperty("maxTiltAngleLimit");
             maxInteractorStrengthLimit = serializedObject.FindProperty("maxInteractorStrengthLimit");
             maxInteractorsLimit = serializedObject.FindProperty("maxInteractorsLimit");
-            maxZoneScaleLimit = serializedObject.FindProperty("maxZoneScaleLimit");
         }
         
         public override void OnInspectorGUI()
@@ -226,12 +280,6 @@ namespace GrassSystem
                 minSize.floatValue = EditorGUILayout.Slider("Min Size", minSize.floatValue, 0.1f, settings.maxSizeLimit);
                 maxSize.floatValue = EditorGUILayout.Slider("Max Size", maxSize.floatValue, 0.1f, settings.maxSizeLimit);
                 EditorGUILayout.PropertyField(meshRotationOffset, new GUIContent("Rotation Offset (Degrees)"));
-                EditorGUILayout.PropertyField(useOnlyAlbedoColor, new GUIContent("Use Only Albedo Color"));
-                
-                if (settings.useOnlyAlbedoColor)
-                {
-                    EditorGUILayout.HelpBox("Tints and grass color will be ignored. Only albedo texture color will be used.", MessageType.Info);
-                }
                 
                 EditorGUILayout.Space(10);
                 
@@ -253,18 +301,132 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             
-            // === LIGHTING ===
-            EditorGUILayout.LabelField("Lighting", EditorStyles.boldLabel);
+            // === COLOR MODE === (moved up, right after Textures/Mode settings)
+            EditorGUILayout.LabelField("Color Mode", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(colorMode, new GUIContent("Mode", "How grass color is determined"));
             
-            // Only show tints if not using only albedo color
-            if (!isCustomMeshMode || !settings.useOnlyAlbedoColor)
+            bool isTintMode = settings.colorMode == GrassColorMode.Tint;
+            bool isAlbedoMode = settings.colorMode == GrassColorMode.Albedo;
+            
+            // Mode 0: Albedo - pure texture
+            if (isAlbedoMode)
             {
-                EditorGUILayout.PropertyField(topTint);
-                EditorGUILayout.PropertyField(bottomTint);
+                EditorGUILayout.HelpBox("Uses albedo texture colors directly without any tint.", MessageType.Info);
             }
             
-            EditorGUILayout.PropertyField(translucency);
-            EditorGUILayout.PropertyField(useAlignedNormals);
+            // Mode 1: Tint - TopTint/BottomTint gradient
+            if (isTintMode)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(topTint, new GUIContent("Top Tint", "Color at the tip of grass blades"));
+                EditorGUILayout.PropertyField(bottomTint, new GUIContent("Bottom Tint", "Color at the root of grass blades"));
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.PropertyField(useAlbedoBlend, new GUIContent("Blend with Albedo", "Mix albedo texture with tint colors"));
+                if (settings.useAlbedoBlend)
+                {
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.PropertyField(albedoBlendAmount, new GUIContent("Blend Amount", "0 = pure tint, 1 = full albedo"));
+                    EditorGUI.indentLevel--;
+                }
+                EditorGUILayout.PropertyField(useNormalMap, new GUIContent("Use Normal Map", "Enable normal map for lighting detail"));
+                EditorGUI.indentLevel--;
+            }
+            
+            
+            // Mode 2: Patterns - Stripes/Checkerboard/NaturalBlend
+            bool isPatternsMode = settings.colorMode == GrassColorMode.Patterns;
+            if (isPatternsMode)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(patternType, new GUIContent("Pattern Type", "Type of pattern to apply"));
+                
+                bool isStripes = settings.patternType == PatternType.Stripes;
+                bool isCheckerboard = settings.patternType == PatternType.Checkerboard;
+                bool isNaturalBlend = settings.patternType == PatternType.NaturalBlend;
+                
+                EditorGUILayout.Space(5);
+                
+                // Stripes/Checkerboard: Show Color A/B
+                if (isStripes || isCheckerboard)
+                {
+                    EditorGUILayout.LabelField("Color A", EditorStyles.boldLabel);
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.PropertyField(patternATip, new GUIContent("Tip", "Color A at blade tip"));
+                    EditorGUILayout.PropertyField(patternARoot, new GUIContent("Root", "Color A at blade root"));
+                    EditorGUI.indentLevel--;
+                    
+                    EditorGUILayout.LabelField("Color B", EditorStyles.boldLabel);
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.PropertyField(patternBTip, new GUIContent("Tip", "Color B at blade tip"));
+                    EditorGUILayout.PropertyField(patternBRoot, new GUIContent("Root", "Color B at blade root"));
+                    EditorGUI.indentLevel--;
+                }
+                
+                // Natural Blend: Show 3 colors with tip/root each
+                if (isNaturalBlend)
+                {
+                    EditorGUILayout.LabelField("Natural Blend Colors", EditorStyles.boldLabel);
+                    EditorGUI.indentLevel++;
+                    
+                    EditorGUILayout.LabelField("Color 1", EditorStyles.miniLabel);
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.PropertyField(naturalColor1Tip, new GUIContent("Tip", "Color 1 at blade tip"));
+                    EditorGUILayout.PropertyField(naturalColor1Root, new GUIContent("Root", "Color 1 at blade root"));
+                    EditorGUI.indentLevel--;
+                    
+                    EditorGUILayout.LabelField("Color 2", EditorStyles.miniLabel);
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.PropertyField(naturalColor2Tip, new GUIContent("Tip", "Color 2 at blade tip"));
+                    EditorGUILayout.PropertyField(naturalColor2Root, new GUIContent("Root", "Color 2 at blade root"));
+                    EditorGUI.indentLevel--;
+                    
+                    EditorGUILayout.LabelField("Color 3", EditorStyles.miniLabel);
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.PropertyField(naturalColor3Tip, new GUIContent("Tip", "Color 3 at blade tip"));
+                    EditorGUILayout.PropertyField(naturalColor3Root, new GUIContent("Root", "Color 3 at blade root"));
+                    EditorGUI.indentLevel--;
+                    
+                    EditorGUI.indentLevel--;
+                }
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.LabelField("Dimensions", EditorStyles.boldLabel);
+                EditorGUI.indentLevel++;
+                
+                if (isStripes)
+                {
+                    EditorGUILayout.PropertyField(stripeWidth, new GUIContent("Stripe Width", "Width of stripes in world units"));
+                    EditorGUILayout.PropertyField(stripeAngle, new GUIContent("Stripe Angle", "Rotation angle in degrees"));
+                    EditorGUILayout.PropertyField(naturalSoftness, new GUIContent("Edge Softness", "Softness of stripe edges"));
+                }
+                
+                if (isCheckerboard)
+                {
+                    EditorGUILayout.PropertyField(checkerboardSize, new GUIContent("Square Size", "Size of squares in world units"));
+                }
+                
+                if (isNaturalBlend)
+                {
+                    EditorGUILayout.PropertyField(naturalBlendType, new GUIContent("Blend Type", "Type of natural distribution pattern"));
+                    EditorGUILayout.PropertyField(naturalScale, new GUIContent("Scale", "Size of natural areas in world units"));
+                    EditorGUILayout.PropertyField(naturalSoftness, new GUIContent("Softness", "0 = sharp edges, 1 = smooth transitions"));
+                    EditorGUILayout.PropertyField(naturalContrast, new GUIContent("Contrast", "Separation between color areas"));
+                }
+                
+                EditorGUI.indentLevel--;
+                
+                EditorGUILayout.Space(5);
+                EditorGUILayout.PropertyField(useAlbedoBlend, new GUIContent("Blend with Albedo", "Mix albedo texture with pattern"));
+                if (settings.useAlbedoBlend)
+                {
+                    EditorGUI.indentLevel++;
+                    EditorGUILayout.PropertyField(albedoBlendAmount, new GUIContent("Blend Amount", "0 = pure pattern, 1 = full albedo"));
+                    EditorGUI.indentLevel--;
+                }
+                EditorGUILayout.PropertyField(useNormalMap, new GUIContent("Use Normal Map", "Enable normal map for lighting detail"));
+                EditorGUI.indentLevel--;
+            }
             
             EditorGUILayout.Space(10);
             
@@ -291,49 +453,16 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             
-            // === COLOR ZONES ===
-            EditorGUILayout.LabelField("Color Zones", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(useColorZones, new GUIContent("Enable Color Zones", "Creates alternating color zones like baseball/soccer fields or organic clumps"));
-            if (settings.useColorZones)
+            // === GROUND SHADER ===
+            EditorGUILayout.LabelField("Ground Shader", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(useGroundShader, new GUIContent("Enable Ground Blend", "Create color patches on terrain under grass"));
+            if (settings.useGroundShader)
             {
                 EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(zonePatternType, new GUIContent("Pattern Type"));
-                EditorGUILayout.PropertyField(zoneColorLight, new GUIContent("Light Zone Color"));
-                EditorGUILayout.PropertyField(zoneColorDark, new GUIContent("Dark Zone Color"));
-                zoneScale.floatValue = EditorGUILayout.Slider(new GUIContent("Zone Scale (meters)", "Size of each zone/stripe in world units"), zoneScale.floatValue, 1f, settings.maxZoneScaleLimit);
-                
-                // Only show direction for Stripes pattern
-                if (settings.zonePatternType == ZonePatternType.Stripes)
-                {
-                    EditorGUILayout.PropertyField(zoneDirection, new GUIContent("Stripe Direction (°)", "Direction of stripes in degrees (0 = along X axis)"));
-                }
-                
-                EditorGUILayout.PropertyField(zoneSoftness, new GUIContent("Edge Softness", "How soft/blended the edges between zones are"));
-                
-                // Only show contrast for Noise pattern
-                if (settings.zonePatternType == ZonePatternType.Noise)
-                {
-                    EditorGUILayout.PropertyField(zoneContrast, new GUIContent("Noise Contrast", "Higher values create more distinct zones"));
-                }
-                
-                // Show organic-specific options
-                if (settings.zonePatternType == ZonePatternType.Organic)
-                {
-                    EditorGUILayout.Space(5);
-                    EditorGUILayout.LabelField("Organic Settings", EditorStyles.miniLabel);
-                    EditorGUILayout.PropertyField(organicAccentColor, new GUIContent("Accent Color", "Third color for variety (yellows, browns, etc)"));
-                    EditorGUILayout.PropertyField(organicClumpiness, new GUIContent("Clumpiness", "0 = smooth noise, 1 = distinct blob-like clumps"));
-                }
-                
-                // Show patches-specific options
-                if (settings.zonePatternType == ZonePatternType.Patches)
-                {
-                    EditorGUILayout.Space(5);
-                    EditorGUILayout.LabelField("Patches Settings", EditorStyles.miniLabel);
-                    EditorGUILayout.PropertyField(organicAccentColor, new GUIContent("Accent Color", "Color for the darkest patch centers"));
-                    EditorGUILayout.PropertyField(organicClumpiness, new GUIContent("Patch Density", "0 = few large patches, 1 = many small patches"));
-                }
-                
+                EditorGUILayout.PropertyField(groundMaterial, new GUIContent("Ground Material", "Material receiving the grass color blend"));
+                EditorGUILayout.PropertyField(groundTextureResolution, new GUIContent("Texture Resolution", "Quality of ground color texture (higher = more detail)"));
+                EditorGUILayout.PropertyField(groundBlendStrength, new GUIContent("Blend Strength", "How much grass color affects ground"));
+                EditorGUILayout.PropertyField(groundBlendRadius, new GUIContent("Blend Radius", "Radius of color influence around each blade"));
                 EditorGUI.indentLevel--;
             }
             
@@ -393,6 +522,13 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             
+            // === LIGHTING === (moved to bottom as requested)
+            EditorGUILayout.LabelField("Lighting", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(translucency);
+            EditorGUILayout.PropertyField(useAlignedNormals);
+            
+            EditorGUILayout.Space(10);
+            
             // === DEBUG ===
             EditorGUILayout.LabelField("Debug", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(drawCullingBounds);
@@ -427,7 +563,6 @@ namespace GrassSystem
                 EditorGUILayout.PropertyField(maxTiltAngleLimit, new GUIContent("Max Tilt Angle Limit"));
                 EditorGUILayout.PropertyField(maxInteractorStrengthLimit, new GUIContent("Max Interactor Strength Limit"));
                 EditorGUILayout.PropertyField(maxInteractorsLimit, new GUIContent("Max Interactors Limit"));
-                EditorGUILayout.PropertyField(maxZoneScaleLimit, new GUIContent("Max Zone Scale Limit"));
                 
                 EditorGUI.indentLevel--;
             }

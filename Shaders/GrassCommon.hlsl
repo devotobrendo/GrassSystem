@@ -41,6 +41,14 @@ float2 GradientNoise2D(float2 p)
     return u;
 }
 
+// Hash function returning 2D random vector from 2D input
+float2 Hash2D(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * float3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.xx + p3.yz) * p3.zy);
+}
+
 // Simplex-like noise for organic shapes
 float PerlinNoise(float2 p)
 {
@@ -108,6 +116,158 @@ float WorleyNoise(float2 p)
     }
     
     return minDist;
+}
+
+// Voronoi noise with sharp cell edges (distance to edge instead of cell center)
+float VoronoiNoise(float2 p)
+{
+    float2 i = floor(p);
+    float2 f = frac(p);
+    
+    float minDist1 = 1.0;
+    float minDist2 = 1.0;
+    
+    // Check 3x3 neighborhood
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            float2 neighbor = float2(x, y);
+            float2 cellPoint = float2(
+                Hash(i + neighbor),
+                Hash(i + neighbor + float2(127.1, 311.7))
+            );
+            
+            float2 diff = neighbor + cellPoint - f;
+            float dist = length(diff);
+            
+            // Track two closest distances for edge detection
+            if (dist < minDist1)
+            {
+                minDist2 = minDist1;
+                minDist1 = dist;
+            }
+            else if (dist < minDist2)
+            {
+                minDist2 = dist;
+            }
+        }
+    }
+    
+    // Return edge distance (creates sharper cell boundaries)
+    return minDist2 - minDist1;
+}
+
+// Blue Noise - uniform scattered distribution without clumping
+// Creates natural-looking uniform spread of color variation
+float BlueNoise(float2 p)
+{
+    // Use golden ratio based sampling for blue noise approximation
+    float2 r = float2(0.618033988749894848, 0.381966011250105152);
+    float n = frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+    
+    // Multi-octave blue noise for smoother distribution
+    float value = 0;
+    float2 offset = float2(0, 0);
+    
+    for (int i = 0; i < 3; i++)
+    {
+        float2 cell = floor(p + offset);
+        float2 f = frac(p + offset);
+        
+        float minDist = 1.0;
+        for (int y = -1; y <= 1; y++)
+        {
+            for (int x = -1; x <= 1; x++)
+            {
+                float2 neighbor = float2(x, y);
+                float2 randPoint = Hash2D(cell + neighbor);
+                float dist = length(neighbor + randPoint - f);
+                minDist = min(minDist, dist);
+            }
+        }
+        value += minDist * (1.0 / (i + 1));
+        offset += r * 17.0;
+        p *= 1.5;
+    }
+    
+    return saturate(value * 0.7);
+}
+
+// Cluster Noise - creates natural grass clump/patch patterns
+// Mimics how grass naturally grows in clusters
+float ClusterNoise(float2 p)
+{
+    // Primary cluster layer - large patches
+    float2 cell = floor(p);
+    float2 f = frac(p);
+    
+    float value = 0;
+    float weight = 0;
+    
+    // Check 3x3 neighborhood for cluster centers
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            float2 neighbor = float2(x, y);
+            float2 randPoint = Hash2D(cell + neighbor);
+            float2 diff = neighbor + randPoint - f;
+            
+            // Gaussian-like falloff for soft cluster edges
+            float dist = length(diff);
+            float influence = exp(-dist * dist * 2.0);
+            
+            // Each cluster has its own color assignment
+            float clusterColor = Hash(cell + neighbor);
+            value += clusterColor * influence;
+            weight += influence;
+        }
+    }
+    
+    return saturate(value / max(weight, 0.001));
+}
+
+// Gradient Blend - smooth natural color transitions
+// Creates gentle flowing color changes across terrain
+float GradientBlend(float2 p)
+{
+    // Multi-directional smooth gradients
+    float angle1 = Hash(floor(p * 0.1)) * 6.28318;
+    float angle2 = Hash(floor(p * 0.1) + 100.0) * 6.28318;
+    
+    float2 dir1 = float2(cos(angle1), sin(angle1));
+    float2 dir2 = float2(cos(angle2), sin(angle2));
+    
+    // Smooth perlin-like gradients in multiple directions
+    float grad1 = PerlinNoise(p * 0.5) * 0.5 + 0.5;
+    float grad2 = PerlinNoise(p * 0.3 + 50.0) * 0.5 + 0.5;
+    float grad3 = PerlinNoise(p * 0.7 + 100.0) * 0.5 + 0.5;
+    
+    // Blend gradients for natural flowing color
+    float result = grad1 * 0.5 + grad2 * 0.3 + grad3 * 0.2;
+    
+    return saturate(result);
+}
+
+// Stochastic Noise - irregular non-repeating pattern
+// Breaks up visual repetition for natural look
+float StochasticNoise(float2 p)
+{
+    // Sample from multiple offset positions and blend
+    float2 offset1 = float2(Hash(floor(p.x * 0.3)), Hash(floor(p.y * 0.3))) * 100.0;
+    float2 offset2 = float2(Hash(floor(p.y * 0.3)), Hash(floor(p.x * 0.3))) * 100.0;
+    
+    // Three layers with different rotations and scales
+    float n1 = WorleyNoise(p + offset1);
+    float n2 = WorleyNoise(p * 1.3 + offset2);
+    float n3 = PerlinNoise(p * 0.7) * 0.5 + 0.5;
+    
+    // Stochastic blend based on position
+    float blend = Hash(floor(p * 0.5)) * 0.5 + 0.25;
+    float result = lerp(lerp(n1, n2, blend), n3, 0.3);
+    
+    return saturate(result);
 }
 
 // Main organic variation function - creates natural irregular color patches

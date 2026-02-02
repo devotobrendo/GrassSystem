@@ -114,18 +114,41 @@ Shader "GrassSystem/GrassLit"
                 float4 _MainTex_ST;
                 float4 _TopTint;
                 float4 _BottomTint;
-                float4 _PatternColorA;
-                float4 _PatternColorB;
-                float _UseColorZones;
-                float _ZonePatternType;
-                float4 _ZoneColorLight;
-                float4 _ZoneColorDark;
-                float _ZoneScale;
-                float _ZoneDirection;
-                float _ZoneSoftness;
-                float _ZoneContrast;
-                float4 _OrganicAccentColor;
-                float _OrganicClumpiness;
+                
+                // Color Mode System (0=Albedo, 1=Tint, 2=Patterns)
+                float _ColorMode;
+                
+                // Pattern Mode
+                float _PatternType; // 0=Stripes, 1=Checkerboard, 2=NaturalBlend
+                float4 _PatternATip;
+                float4 _PatternARoot;
+                float4 _PatternBTip;
+                float4 _PatternBRoot;
+                
+                // Natural Blend Colors (3 colors with tip/root)
+                float4 _NaturalColor1Tip;
+                float4 _NaturalColor1Root;
+                float4 _NaturalColor2Tip;
+                float4 _NaturalColor2Root;
+                float4 _NaturalColor3Tip;
+                float4 _NaturalColor3Root;
+                
+                // Pattern Dimensions
+                float _StripeWidth;
+                float _CheckerboardSize;
+                float _StripeAngle;
+                
+                // Natural Blend Settings
+                float _NaturalBlendType; // 0=BlueNoise, 1=Cluster, 2=Gradient, 3=Stochastic
+                float _NaturalScale;
+                float _NaturalSoftness;
+                float _NaturalContrast;
+                
+                // Albedo Blend
+                float _UseAlbedoBlend;
+                float _AlbedoBlendAmount;
+                float _UseNormalMap;
+                
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;
@@ -138,7 +161,6 @@ Shader "GrassSystem/GrassLit"
                 float _TerrainLightmapInfluence;
                 float4 _TerrainPosition;
                 float4 _TerrainSize;
-                float _UseOnlyAlbedoColor;
                 float _UseUniformScale;
                 float4 _MeshRotation;
                 float _MaxTiltAngle;
@@ -314,21 +336,64 @@ Shader "GrassSystem/GrassLit"
                 );
                 float3 normalWS = mul(normalTS, tangentToWorld);
                 
-                // Color calculation - TWO MUTUALLY EXCLUSIVE MODES:
-                // 1. UseOnlyAlbedoColor ON  = Use ONLY albedo texture (no tints, no zones)
-                // 2. UseOnlyAlbedoColor OFF = Use TopTint/BottomTint (+ optional zones, no albedo)
+                // ========================================
+                // COLOR MODE SYSTEM
+                // 0 = Albedo: pure texture (NO depth effects)
+                // 1 = Tint: TopTint/BottomTint gradient
+                // 2 = Patterns: Stripes/Checkerboard/NaturalBlend
+                // ========================================
                 half3 baseColor;
+                half4 albedoTex = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                 
-                if (_UseOnlyAlbedoColor > 0.5)
+                // Mode 0: Albedo - PURE texture color (no depth effects)
+                if (_ColorMode < 0.5)
                 {
-                    // ===== ALBEDO-ONLY MODE =====
-                    // Pure albedo texture color - no modifications from tints or zones
-                    baseColor = albedo.rgb;
+                    baseColor = albedoTex.rgb;
+                    
+                    // Decal projection (optional overlay)
+                    if (_DecalEnabled > 0.5)
+                    {
+                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
+                        float cosR = cos(-_DecalRotation);
+                        float sinR = sin(-_DecalRotation);
+                        float2 rotatedPos = float2(
+                            relPos.x * cosR - relPos.y * sinR,
+                            relPos.x * sinR + relPos.y * cosR
+                        );
+                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
+                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                        {
+                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
+                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                        }
+                    }
+                    
+                    // Pure PBR lighting, no depth effects
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = input.positionWS;
+                    inputData.normalWS = normalize(normalWS);
+                    inputData.viewDirectionWS = normalize(input.viewDirWS);
+                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                    inputData.fogCoord = input.fogFactor;
+                    inputData.bakedGI = SampleSH(inputData.normalWS);
+                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
+                    
+                    SurfaceData surfaceData = (SurfaceData)0;
+                    surfaceData.albedo = baseColor;
+                    surfaceData.alpha = 1.0;
+                    surfaceData.metallic = 0;
+                    surfaceData.smoothness = 0.1;
+                    surfaceData.normalTS = normalTS;
+                    surfaceData.occlusion = 1;
+                    
+                    half4 color = UniversalFragmentPBR(inputData, surfaceData);
+                    color.rgb = MixFog(color.rgb, input.fogFactor);
+                    return color;
                 }
-                else
+                
+                // Mode 1: Tint - TopTint/BottomTint gradient
+                else if (_ColorMode < 1.5)
                 {
-                    // ===== TINT MODE =====
-                    // Use TopTint/BottomTint gradient only (no albedo texture)
                     baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
                     
                     // Terrain lightmap blending (only in tint mode)
@@ -340,63 +405,118 @@ Shader "GrassSystem/GrassLit"
                         baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                     }
                     
-                    // Color Zones (only in tint mode - stripes, checkerboard, noise, organic, patches)
-                    if (_UseColorZones > 0.5)
+                    // Optional albedo blend
+                    if (_UseAlbedoBlend > 0.5)
                     {
-                        float zoneMask = 0;
-                        half3 zoneColor;
+                        baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
+                    }
+                }
+                // Mode 2: Patterns - Stripes/Checkerboard/NaturalBlend
+                else
+                {
+                    float2 worldPos = input.positionWS.xz;
+                    half3 colorATip = _PatternATip.rgb;
+                    half3 colorARoot = _PatternARoot.rgb;
+                    half3 colorBTip = _PatternBTip.rgb;
+                    half3 colorBRoot = _PatternBRoot.rgb;
+                    
+                    float patternValue = 0;
+                    
+                    // Pattern Type 0: Stripes
+                    if (_PatternType < 0.5)
+                    {
+                        float cosA = cos(_StripeAngle);
+                        float sinA = sin(_StripeAngle);
+                        float rotatedX = worldPos.x * cosA - worldPos.y * sinA;
+                        patternValue = frac(rotatedX / _StripeWidth);
+                        patternValue = patternValue < 0.5 ? 0 : 1;
+                        patternValue = lerp(patternValue, smoothstep(0.45, 0.55, frac(rotatedX / _StripeWidth)), _NaturalSoftness);
+                    }
+                    // Pattern Type 1: Checkerboard
+                    else if (_PatternType < 1.5)
+                    {
+                        float checkX = floor(worldPos.x / _CheckerboardSize);
+                        float checkZ = floor(worldPos.y / _CheckerboardSize); // worldPos.y is actually Z!
+                        float checker = fmod(abs(checkX + checkZ), 2.0);
+                        patternValue = checker < 0.5 ? 0 : 1;
+                    }
+                    // Pattern Type 2: Natural Blend (3-color with tip/root using natural patterns)
+                    else
+                    {
+                        float noise1 = 0, noise2 = 0;
                         
-                        if (_ZonePatternType < 0.5)
+                        // Select natural blend type (0=BlueNoise, 1=Cluster, 2=Gradient, 3=Stochastic)
+                        if (_NaturalBlendType < 0.5)
                         {
-                            zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
-                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                            noise1 = BlueNoise(worldPos / _NaturalScale);
+                            noise2 = BlueNoise(worldPos / _NaturalScale * 1.7 + 50);
                         }
-                        else if (_ZonePatternType < 1.5)
+                        else if (_NaturalBlendType < 1.5)
                         {
-                            zoneMask = CalculateCheckerPattern(input.positionWS, _ZoneScale);
-                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                            noise1 = ClusterNoise(worldPos / _NaturalScale);
+                            noise2 = ClusterNoise(worldPos / _NaturalScale * 1.3 + 25);
                         }
-                        else if (_ZonePatternType < 2.5)
+                        else if (_NaturalBlendType < 2.5)
                         {
-                            zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
-                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
-                        }
-                        else if (_ZonePatternType < 3.5)
-                        {
-                            float organic = CalculateOrganicPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
-                            float accentNoise = CalculateOrganicVariation(
-                                input.positionWS + float3(100, 0, 100),
-                                _ZoneScale * 1.5,
-                                _OrganicClumpiness * 0.7,
-                                1.5,
-                                0.6
-                            );
-                            
-                            if (organic < 0.5)
-                            {
-                                float t = organic * 2.0;
-                                zoneColor = lerp(_ZoneColorDark.rgb, lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), t);
-                            }
-                            else
-                            {
-                                float t = (organic - 0.5) * 2.0;
-                                zoneColor = lerp(lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), _ZoneColorLight.rgb, t);
-                            }
-                            zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentNoise * 0.3);
+                            noise1 = GradientBlend(worldPos / _NaturalScale);
+                            noise2 = GradientBlend(worldPos / _NaturalScale * 1.5 + 40);
                         }
                         else
                         {
-                            float patches = CalculatePatchesPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
-                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, patches);
-                            float accentMask = saturate((1.0 - patches) * 2.0 - 0.5);
-                            zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentMask * 0.4);
+                            noise1 = StochasticNoise(worldPos / _NaturalScale);
+                            noise2 = StochasticNoise(worldPos / _NaturalScale * 1.2 + 30);
                         }
                         
-                        baseColor *= zoneColor;
+                        // Apply softness and contrast
+                        float sharpness = 1.0 - _NaturalSoftness;
+                        noise1 = saturate((noise1 - 0.5) * (1.0 + _NaturalContrast * 3.0) + 0.5);
+                        noise2 = saturate((noise2 - 0.5) * (1.0 + _NaturalContrast * 3.0) + 0.5);
+                        
+                        // Blend 3 colors with proper tip/root gradients
+                        half3 color1 = lerp(_NaturalColor1Root.rgb, _NaturalColor1Tip.rgb, input.uv.y);
+                        half3 color2 = lerp(_NaturalColor2Root.rgb, _NaturalColor2Tip.rgb, input.uv.y);
+                        half3 color3 = lerp(_NaturalColor3Root.rgb, _NaturalColor3Tip.rgb, input.uv.y);
+                        
+                        // Blend colors based on noise values
+                        half3 blendedColor = lerp(color1, color2, smoothstep(0.3 - sharpness * 0.2, 0.7 + sharpness * 0.2, noise1));
+                        blendedColor = lerp(blendedColor, color3, smoothstep(0.4 - sharpness * 0.2, 0.6 + sharpness * 0.2, noise2) * 0.5);
+                        
+                        baseColor = blendedColor;
+                        
+                        if (_UseAlbedoBlend > 0.5)
+                        {
+                            baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
+                        }
+                        // Skip the A/B pattern code below for natural blend
+                        patternValue = -1;
+                    }
+                    
+                    // Apply A/B pattern (only for Stripes/Checkerboard)
+                    if (patternValue >= 0)
+                    {
+                        half3 colorA = lerp(colorARoot, colorATip, input.uv.y);
+                        half3 colorB = lerp(colorBRoot, colorBTip, input.uv.y);
+                        baseColor = lerp(colorA, colorB, patternValue);
+                        
+                        if (_UseAlbedoBlend > 0.5)
+                        {
+                            baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
+                        }
+                    }
+                    
+                    // Terrain lightmap for patterns
+                    if (_UseTerrainLightmap > 0.5)
+                    {
+                        float2 terrainUV = (input.positionWS.xz - _TerrainPosition.xz) / _TerrainSize.xz;
+                        terrainUV = saturate(terrainUV);
+                        half3 terrainLight = SAMPLE_TEXTURE2D(_TerrainLightmap, sampler_TerrainLightmap, terrainUV).rgb;
+                        baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                     }
                 }
                 
-                // Decal projection (applies to BOTH modes - it's an overlay effect)
+                // === EFFECTS (for all color modes) ===
+                
+                // Decal projection
                 if (_DecalEnabled > 0.5)
                 {
                     float2 relPos = input.positionWS.xz - _DecalBounds.xy;
@@ -407,7 +527,6 @@ Shader "GrassSystem/GrassLit"
                         relPos.x * sinR + relPos.y * cosR
                     );
                     float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
-                    
                     if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
                     {
                         half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
