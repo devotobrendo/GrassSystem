@@ -1,11 +1,12 @@
 // Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GrassSystem
 {
     /// <summary>
-    /// Projects a decal texture onto grass rendered by GrassRenderer.
+    /// Projects a decal texture onto grass rendered by one or more GrassRenderers.
     /// Position and rotation are controlled via the Transform component.
     /// </summary>
     [ExecuteAlways]
@@ -22,9 +23,12 @@ namespace GrassSystem
         [Tooltip("Blend strength of the decal. 0 = invisible, 1 = fully visible.")]
         public float blend = 1f;
         
-        [Header("Target")]
-        [Tooltip("The GrassRenderer to apply the decal to. If null, will try to find one in the scene.")]
-        public GrassRenderer targetRenderer;
+        [Header("Targets")]
+        [Tooltip("The GrassRenderers to apply the decal to. If empty, will try to find all in the scene.")]
+        public List<GrassRenderer> targetRenderers = new List<GrassRenderer>();
+        
+        [Tooltip("Automatically find and target all GrassRenderers in the scene.")]
+        public bool autoFindAll = false;
         
         // Shader property IDs for performance
         private static readonly int PropDecalEnabled = Shader.PropertyToID("_DecalEnabled");
@@ -33,36 +37,75 @@ namespace GrassSystem
         private static readonly int PropDecalRotation = Shader.PropertyToID("_DecalRotation");
         private static readonly int PropDecalBlend = Shader.PropertyToID("_DecalBlend");
         
+        // Cache for auto-find to avoid FindObjectsOfType every frame
+        private GrassRenderer[] cachedRenderers;
+        private float lastAutoFindTime;
+        private const float AUTO_FIND_INTERVAL = 1f;
+        
+        // Track previous targets to detect removals and clear decals properly
+        private HashSet<GrassRenderer> previousTargets = new HashSet<GrassRenderer>();
+        
         private void OnEnable()
         {
-            if (targetRenderer == null)
+            if (autoFindAll || targetRenderers.Count == 0)
             {
-                targetRenderer = FindFirstObjectByType<GrassRenderer>();
+                RefreshAutoFind();
             }
-            ApplyDecal();
+            ApplyDecalToAll();
         }
         
         private void OnDisable()
         {
-            ClearDecal();
+            ClearDecalFromAll();
         }
         
         private void Update()
         {
-            // Try to find renderer if not set
-            if (targetRenderer == null)
+            // Refresh auto-find periodically (not every frame for performance)
+            if (autoFindAll && Time.time - lastAutoFindTime > AUTO_FIND_INTERVAL)
             {
-                targetRenderer = FindFirstObjectByType<GrassRenderer>();
+                RefreshAutoFind();
             }
         }
         
         private void LateUpdate()
         {
-            // Apply decal in LateUpdate to ensure GrassRenderer has initialized its material
+            // Apply decal in LateUpdate to ensure GrassRenderers have initialized their materials
             if (enabled && decalTexture != null)
             {
-                ApplyDecal();
+                SyncTargetsAndApply();
             }
+        }
+        
+        /// <summary>
+        /// Syncs targets with previous frame, clears removed renderers, and applies to current.
+        /// </summary>
+        private void SyncTargetsAndApply()
+        {
+            var currentTargets = new HashSet<GrassRenderer>();
+            
+            foreach (var renderer in GetEffectiveTargets())
+            {
+                if (renderer != null)
+                {
+                    currentTargets.Add(renderer);
+                    ApplyDecalToRenderer(renderer);
+                }
+            }
+            
+            // Clear decal from any renderers that were removed
+            foreach (var prevRenderer in previousTargets)
+            {
+                if (prevRenderer != null && !currentTargets.Contains(prevRenderer))
+                {
+                    if (prevRenderer.MaterialInstance != null)
+                    {
+                        prevRenderer.MaterialInstance.SetFloat(PropDecalEnabled, 0f);
+                    }
+                }
+            }
+            
+            previousTargets = currentTargets;
         }
         
         private void OnValidate()
@@ -71,26 +114,59 @@ namespace GrassSystem
             size.x = Mathf.Max(0.1f, size.x);
             size.y = Mathf.Max(0.1f, size.y);
             
-            ApplyDecal();
+            // Clean null entries from list
+            targetRenderers.RemoveAll(r => r == null);
+            
+            ApplyDecalToAll();
         }
         
         /// <summary>
-        /// Applies the decal to the target GrassRenderer's material.
+        /// Refreshes the cached list of all GrassRenderers in the scene.
         /// </summary>
-        public void ApplyDecal()
+        public void RefreshAutoFind()
         {
-            if (targetRenderer == null)
+            cachedRenderers = FindObjectsByType<GrassRenderer>(FindObjectsSortMode.None);
+            lastAutoFindTime = Time.time;
+        }
+        
+        /// <summary>
+        /// Gets the effective list of target renderers (manual list or auto-found).
+        /// </summary>
+        private IEnumerable<GrassRenderer> GetEffectiveTargets()
+        {
+            if (autoFindAll)
             {
-                return;
+                if (cachedRenderers == null)
+                    RefreshAutoFind();
+                return cachedRenderers;
             }
-            
-            if (targetRenderer.MaterialInstance == null)
+            return targetRenderers;
+        }
+        
+        /// <summary>
+        /// Applies the decal to all target GrassRenderers.
+        /// </summary>
+        public void ApplyDecalToAll()
+        {
+            foreach (var renderer in GetEffectiveTargets())
+            {
+                if (renderer != null)
+                    ApplyDecalToRenderer(renderer);
+            }
+        }
+        
+        /// <summary>
+        /// Applies the decal to a specific GrassRenderer's material.
+        /// </summary>
+        private void ApplyDecalToRenderer(GrassRenderer renderer)
+        {
+            if (renderer.MaterialInstance == null)
             {
                 // Material not ready yet, will be applied next frame
                 return;
             }
             
-            Material mat = targetRenderer.MaterialInstance;
+            Material mat = renderer.MaterialInstance;
             
             if (decalTexture != null && enabled)
             {
@@ -112,13 +188,40 @@ namespace GrassSystem
         }
         
         /// <summary>
-        /// Clears the decal from the material.
+        /// Clears the decal from all target renderers.
         /// </summary>
-        public void ClearDecal()
+        public void ClearDecalFromAll()
         {
-            if (targetRenderer != null && targetRenderer.MaterialInstance != null)
+            foreach (var renderer in GetEffectiveTargets())
             {
-                targetRenderer.MaterialInstance.SetFloat(PropDecalEnabled, 0f);
+                if (renderer != null && renderer.MaterialInstance != null)
+                {
+                    renderer.MaterialInstance.SetFloat(PropDecalEnabled, 0f);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Adds a renderer to the target list if not already present.
+        /// </summary>
+        public void AddTarget(GrassRenderer renderer)
+        {
+            if (renderer != null && !targetRenderers.Contains(renderer))
+            {
+                targetRenderers.Add(renderer);
+                ApplyDecalToRenderer(renderer);
+            }
+        }
+        
+        /// <summary>
+        /// Removes a renderer from the target list.
+        /// </summary>
+        public void RemoveTarget(GrassRenderer renderer)
+        {
+            if (renderer != null && targetRenderers.Remove(renderer))
+            {
+                if (renderer.MaterialInstance != null)
+                    renderer.MaterialInstance.SetFloat(PropDecalEnabled, 0f);
             }
         }
         
@@ -145,3 +248,4 @@ namespace GrassSystem
         }
     }
 }
+

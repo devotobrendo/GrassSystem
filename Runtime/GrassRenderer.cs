@@ -55,6 +55,11 @@ namespace GrassSystem
         private uint[] readbackArgs = new uint[5];
         private int lastVisibleCount;
         
+        // Track if material needs reapplication (after scene save, domain reload, etc.)
+        private bool materialDirty = false;
+        private float lastMaterialCheck = 0f;
+        private const float MATERIAL_CHECK_INTERVAL = 0.5f;
+        
         public List<GrassData> GrassDataList
         {
             get => grassData;
@@ -93,6 +98,7 @@ namespace GrassSystem
             #if UNITY_EDITOR
             UnityEditor.SceneManagement.EditorSceneManager.sceneClosing += OnSceneClosing;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += OnSceneOpened;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneSaved += OnSceneSaved;
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             #endif
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
@@ -107,6 +113,7 @@ namespace GrassSystem
             #if UNITY_EDITOR
             UnityEditor.SceneManagement.EditorSceneManager.sceneClosing -= OnSceneClosing;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened -= OnSceneOpened;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneSaved -= OnSceneSaved;
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             #endif
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
@@ -152,7 +159,51 @@ namespace GrassSystem
             // Critical: cleanup before domain reload to prevent buffer leaks
             Cleanup();
         }
+        
+        private void OnSceneSaved(UnityEngine.SceneManagement.Scene scene)
+        {
+            // After scene save, Unity may reset material properties
+            if (gameObject.scene == scene)
+            {
+                LogEvent($"OnSceneSaved ({scene.name}) - Marking material dirty");
+                materialDirty = true;
+            }
+        }
+        
+        /// <summary>
+        /// Validates that material properties are correctly set and repairs if needed.
+        /// Called periodically and after scene operations to catch Unity resets.
+        /// </summary>
+        private void ValidateAndRepairMaterial()
+        {
+            if (materialInstance == null || settings == null)
+                return;
+            
+            // If material was marked dirty, always reapply
+            if (materialDirty)
+            {
+                LogEvent("Material marked dirty. Reapplying settings.");
+                ApplySettingsToMaterial();
+                materialDirty = false;
+                return;
+            }
+            
+            // Quick check: verify ColorMode is correctly set (if property exists)
+            // If it's been reset to 0 when it shouldn't be, reapply all settings
+            if (materialInstance.HasProperty("_ColorMode"))
+            {
+                float currentColorMode = materialInstance.GetFloat("_ColorMode");
+                float expectedColorMode = (float)settings.colorMode;
+                
+                if (Mathf.Abs(currentColorMode - expectedColorMode) > 0.01f)
+                {
+                    LogEvent($"Material properties mismatch detected (ColorMode: {currentColorMode} vs {expectedColorMode}). Reapplying.");
+                    ApplySettingsToMaterial();
+                }
+            }
+        }
         #endif
+
         
         private void OnSceneUnloaded(UnityEngine.SceneManagement.Scene scene)
         {
@@ -173,6 +224,16 @@ namespace GrassSystem
         {
             if (!isInitialized || grassData.Count == 0 || sourceBuffer == null)
                 return;
+            
+            // Periodic check to ensure material properties are valid
+            // This catches cases where Unity resets materials after various operations
+            #if UNITY_EDITOR
+            if (materialDirty || Time.realtimeSinceStartup - lastMaterialCheck > MATERIAL_CHECK_INTERVAL)
+            {
+                ValidateAndRepairMaterial();
+                lastMaterialCheck = Time.realtimeSinceStartup;
+            }
+            #endif
             
             Camera cam = GetCurrentCamera();
             if (cam == null)
