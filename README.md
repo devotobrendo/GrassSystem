@@ -82,10 +82,40 @@ Add the `GrassInteractor` component to your player character.
 
 | Action | Control |
 |--------|---------|
-| Paint | Shift + Left Click |
-| Erase | Shift + Ctrl + Left Click |
-| Adjust Brush Size | Shift + Scroll Wheel |
+| Paint | Left Click (drag to paint stroke) |
+| Erase | Shift + Left Click |
+| Adjust Brush Size | Ctrl + Scroll Wheel |
 | Rotate View | Right Click + Drag |
+
+### Fluid Brush System (v1.4.0+)
+
+The Grass Painter now uses a **deferred processing system** for better performance:
+
+1. **During Stroke**: Positions are collected (shown as ghost circles)
+2. **On Mouse Release**: Positions are processed in batches with progress indicator
+3. **Result**: Fluid brush experience even with 100k+ grass instances
+
+---
+
+## Multiple Renderers Support (v1.3.0+)
+
+You can now have **multiple GrassRenderer components** in a single scene to render different grass types simultaneously.
+
+### Setup
+1. Create separate GameObjects for each grass type
+2. Add `GrassRenderer` to each with different `SO_GrassSettings`
+3. Use the **Renderer Dropdown** in Grass Painter to switch targets
+
+### Features
+- **Isolated Buffers**: Each renderer maintains its own grass data
+- **Safe Switching**: Painter saves current renderer's data before switching
+- **Simultaneous Rendering**: All renderers are visible at the same time
+- **Per-Renderer Settings**: Different colors, sizes, densities per renderer
+
+### Best Practices
+- Use separate settings assets for each grass type
+- Limit total instance count across all renderers for performance
+- Consider using different LOD distances for less important grass types
 
 ---
 

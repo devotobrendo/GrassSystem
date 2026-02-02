@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-02
+
+### Added
+- **Fluid Brush System** - Dramatically improved brush responsiveness
+  - Positions are queued during stroke instead of processed immediately
+  - Batch processing (5 positions/frame) on mouse release prevents editor freezing
+  - Ghost circle preview shows pending paint/erase areas during stroke
+  - Pulsing progress indicator with "Processing X/Y..." text during deferred processing
+  - Cursor pulses during active stroke for visual feedback
+
+### Fixed
+- **Memory Leak Prevention** - `GrassRenderer.Initialize()` now always calls `Cleanup()` first
+  - Prevents accumulation of material instances and compute buffers
+  - Fixes editor slowdown after extended use
+  - Proper resource release on renderer reinitialization
+
+### Removed
+- **Ground Shader Feature** (temporarily) - Removed for stability while under development
+  - Ground blend UI removed from inspector
+  - `GroundTextureResolution` enum removed
+  - Will be re-added in future release with improved baking algorithm
+
+### Technical
+- Deferred paint processing uses `EditorApplication.delayCall` for non-blocking batch execution
+- Input blocked during deferred processing to prevent race conditions
+- Buffer rebuild only called once at end of stroke instead of per-position
+
+
+
 ## [1.3.0] - 2026-02-01
 
 ### Added

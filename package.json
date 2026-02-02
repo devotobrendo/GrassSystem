@@ -1,6 +1,6 @@
 {
     "name": "com.grasssystem.urp",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "displayName": "BotW-Style Grass System",
     "description": "High-performance GPU-based grass rendering system for Unity URP, inspired by The Legend of Zelda: Breath of the Wild. Features GPU instancing, LOD culling, wind simulation, player interaction, and an intuitive painting tool.",
     "unity": "2022.3",
