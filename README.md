@@ -4,6 +4,9 @@ A high-performance, GPU-based grass rendering system for **Unity URP**, inspired
 
 ---
 
+## Media
+- [Click here to watch the Technical Showcase](https://youtu.be/YUdifIoGrvY)
+
 ## Features
 
 ### Rendering
@@ -16,6 +19,7 @@ A high-performance, GPU-based grass rendering system for **Unity URP**, inspired
 ### Interaction
 - **Player Interaction** - Grass reacts to player movement in real-time
 - **Real-time Deformation** - Grass bends away from interactors with configurable radius and strength
+- **Grass Decals** - Project textures onto grass regions with rotation and alpha blending
 
 ### Editor Tools
 - **Grass Painter** - Paint, erase, and modify grass directly in Scene view
@@ -163,6 +167,50 @@ public class Player : MonoBehaviour
         interactor.strength = 1.5f;
     }
 }
+```
+
+---
+
+### GrassDecal
+
+Projects a texture onto grass, allowing you to "paint" patterns, logos, or effects onto specific regions.
+
+**Setup:**
+1. Add to any GameObject in your scene
+2. Assign a decal texture (use textures with alpha for transparency)
+3. Position using the Transform component
+4. Adjust size and blend as needed
+
+**Inspector Properties:**
+
+| Property | Description |
+|----------|-------------|
+| **Decal Texture** | The texture to project onto the grass |
+| **Size** | Projection area size in world units (X, Z) |
+| **Blend** | Decal visibility (0 = invisible, 1 = fully visible) |
+| **Target Renderer** | The GrassRenderer to apply to (auto-detected if null) |
+
+**Features:**
+- Full rotation support via Transform component
+- Scene view gizmos for easy positioning
+- Alpha-blended projection
+- Works with both GrassLit and GrassUnlit shaders
+
+**Usage Example:**
+
+```csharp
+// Create a decal programmatically
+GameObject decalObj = new GameObject("GrassDecal");
+GrassDecal decal = decalObj.AddComponent<GrassDecal>();
+
+// Configure the decal
+decal.decalTexture = myTexture;
+decal.size = new Vector2(10f, 10f);
+decal.blend = 0.8f;
+
+// Position and rotate via Transform
+decal.transform.position = new Vector3(50f, 0f, 50f);
+decal.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
 ```
 
 ---
@@ -382,6 +430,7 @@ GrassSystem/
 ├── Runtime/          # Core runtime scripts
 │   ├── GrassRenderer.cs
 │   ├── GrassInteractor.cs
+│   ├── GrassDecal.cs
 │   ├── GrassData.cs
 │   ├── GrassPerformanceOverlay.cs
 │   └── SO_GrassSettings.cs

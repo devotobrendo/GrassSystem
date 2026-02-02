@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OnRendererChanged method ensures proper buffer state when switching targets
 - Settings validation before painting operations
 
+
 ## [1.2.0] - 2026-01-28
 
 ### Added
