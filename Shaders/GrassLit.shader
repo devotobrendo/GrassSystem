@@ -314,132 +314,106 @@ Shader "GrassSystem/GrassLit"
                 );
                 float3 normalWS = mul(normalTS, tangentToWorld);
                 
-                // Color calculation based on mode
+                // Color calculation - TWO MUTUALLY EXCLUSIVE MODES:
+                // 1. UseOnlyAlbedoColor ON  = Use ONLY albedo texture (no tints, no zones)
+                // 2. UseOnlyAlbedoColor OFF = Use TopTint/BottomTint (+ optional zones, no albedo)
                 half3 baseColor;
+                
                 if (_UseOnlyAlbedoColor > 0.5)
                 {
-                    // Custom Mesh Mode with Use Only Albedo: use only albedo color
-                    baseColor = half3(1, 1, 1);
+                    // ===== ALBEDO-ONLY MODE =====
+                    // Pure albedo texture color - no modifications from tints or zones
+                    baseColor = albedo.rgb;
                 }
                 else
                 {
-                    // Default Mode or Custom without Use Only Albedo: apply tints only
-                    // Note: We use pure tints here. Per-instance grassColor is used for
-                    // pattern color variation, not for tinting the whole blade.
+                    // ===== TINT MODE =====
+                    // Use TopTint/BottomTint gradient only (no albedo texture)
                     baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
-                }
-                
-                if (_UseTerrainLightmap > 0.5)
-                {
-                    float2 terrainUV = (input.positionWS.xz - _TerrainPosition.xz) / _TerrainSize.xz;
-                    terrainUV = saturate(terrainUV);
-                    half3 terrainLight = SAMPLE_TEXTURE2D(_TerrainLightmap, sampler_TerrainLightmap, terrainUV).rgb;
-                    baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
-                }
-                
-                // Color Zones (stripes, checkerboard, noise, organic, patches)
-                if (_UseColorZones > 0.5)
-                {
-                    float zoneMask = 0;
-                    half3 zoneColor;
                     
-                    if (_ZonePatternType < 0.5)
+                    // Terrain lightmap blending (only in tint mode)
+                    if (_UseTerrainLightmap > 0.5)
                     {
-                        // Stripes pattern
-                        zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                        float2 terrainUV = (input.positionWS.xz - _TerrainPosition.xz) / _TerrainSize.xz;
+                        terrainUV = saturate(terrainUV);
+                        half3 terrainLight = SAMPLE_TEXTURE2D(_TerrainLightmap, sampler_TerrainLightmap, terrainUV).rgb;
+                        baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                     }
-                    else if (_ZonePatternType < 1.5)
+                    
+                    // Color Zones (only in tint mode - stripes, checkerboard, noise, organic, patches)
+                    if (_UseColorZones > 0.5)
                     {
-                        // Checkerboard pattern
-                        zoneMask = CalculateCheckerPattern(input.positionWS, _ZoneScale);
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
-                    }
-                    else if (_ZonePatternType < 2.5)
-                    {
-                        // Noise pattern
-                        zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
-                    }
-                    else if (_ZonePatternType < 3.5)
-                    {
-                        // Organic pattern (soft natural blending)
-                        float organic = CalculateOrganicPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                        float zoneMask = 0;
+                        half3 zoneColor;
                         
-                        // Get a second noise sample for accent color distribution
-                        float accentNoise = CalculateOrganicVariation(
-                            input.positionWS + float3(100, 0, 100),
-                            _ZoneScale * 1.5,
-                            _OrganicClumpiness * 0.7,
-                            1.5,
-                            0.6
-                        );
-                        
-                        // Create natural color blending with 3 colors
-                        if (organic < 0.5)
+                        if (_ZonePatternType < 0.5)
                         {
-                            float t = organic * 2.0;
-                            zoneColor = lerp(_ZoneColorDark.rgb, lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), t);
+                            zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                        }
+                        else if (_ZonePatternType < 1.5)
+                        {
+                            zoneMask = CalculateCheckerPattern(input.positionWS, _ZoneScale);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                        }
+                        else if (_ZonePatternType < 2.5)
+                        {
+                            zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                        }
+                        else if (_ZonePatternType < 3.5)
+                        {
+                            float organic = CalculateOrganicPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                            float accentNoise = CalculateOrganicVariation(
+                                input.positionWS + float3(100, 0, 100),
+                                _ZoneScale * 1.5,
+                                _OrganicClumpiness * 0.7,
+                                1.5,
+                                0.6
+                            );
+                            
+                            if (organic < 0.5)
+                            {
+                                float t = organic * 2.0;
+                                zoneColor = lerp(_ZoneColorDark.rgb, lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), t);
+                            }
+                            else
+                            {
+                                float t = (organic - 0.5) * 2.0;
+                                zoneColor = lerp(lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), _ZoneColorLight.rgb, t);
+                            }
+                            zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentNoise * 0.3);
                         }
                         else
                         {
-                            float t = (organic - 0.5) * 2.0;
-                            zoneColor = lerp(lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), _ZoneColorLight.rgb, t);
+                            float patches = CalculatePatchesPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, patches);
+                            float accentMask = saturate((1.0 - patches) * 2.0 - 0.5);
+                            zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentMask * 0.4);
                         }
                         
-                        // Mix in accent color at specific areas
-                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentNoise * 0.3);
+                        baseColor *= zoneColor;
                     }
-                    else
-                    {
-                        // Patches pattern (circular irregular spots)
-                        float patches = CalculatePatchesPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
-                        
-                        // Strong contrast between light and dark patches
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, patches);
-                        
-                        // Add accent color in the darkest spots
-                        float accentMask = saturate((1.0 - patches) * 2.0 - 0.5);
-                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentMask * 0.4);
-                    }
-                    
-                    baseColor *= zoneColor;
                 }
                 
-                // Decal projection
+                // Decal projection (applies to BOTH modes - it's an overlay effect)
                 if (_DecalEnabled > 0.5)
                 {
-                    // Calculate position relative to decal center
                     float2 relPos = input.positionWS.xz - _DecalBounds.xy;
-                    
-                    // Apply rotation
                     float cosR = cos(-_DecalRotation);
                     float sinR = sin(-_DecalRotation);
                     float2 rotatedPos = float2(
                         relPos.x * cosR - relPos.y * sinR,
                         relPos.x * sinR + relPos.y * cosR
                     );
-                    
-                    // Convert to UV (0-1 range)
                     float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
                     
-                    // Check if inside decal bounds
                     if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
                     {
                         half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
                         baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
                     }
                 }
-                
-                // Apply albedo texture ONLY when UseOnlyAlbedoColor is enabled
-                // When disabled, TopTint/BottomTint are the final colors (no texture tinting)
-                if (_UseOnlyAlbedoColor > 0.5)
-                {
-                    baseColor *= albedo.rgb;
-                }
-                
-                // Note: We used to skip PBR lighting for UseOnlyAlbedoColor, but that causes it to be 100% unlit white.
-                // Now we let it fall through to UniversalFragmentPBR so it receives shadows and lighting.
                 
                 InputData inputData = (InputData)0;
                 inputData.positionWS = input.positionWS;

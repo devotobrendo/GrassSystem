@@ -272,96 +272,81 @@ Shader "GrassSystem/GrassUnlit"
                         discard;
                 }
                 
-                // Base color calculation
+                // Color calculation - TWO MUTUALLY EXCLUSIVE MODES:
+                // 1. UseOnlyAlbedoColor ON  = Use ONLY albedo texture (no tints, no zones)
+                // 2. UseOnlyAlbedoColor OFF = Use TopTint/BottomTint (+ optional zones, no albedo)
                 half3 baseColor;
+                
                 if (_UseOnlyAlbedoColor > 0.5)
                 {
-                    baseColor = half3(1, 1, 1);
+                    // ===== ALBEDO-ONLY MODE =====
+                    // Pure albedo texture color - no modifications from tints or zones
+                    half4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                    baseColor = albedo.rgb;
                 }
                 else
                 {
-                    // Apply tints only - per-instance grassColor is for pattern variation
+                    // ===== TINT MODE =====
+                    // Use TopTint/BottomTint gradient only (no albedo texture)
                     baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
-                }
-                
-                // Color Zones (stripes, checkerboard, noise, organic, patches)
-                if (_UseColorZones > 0.5)
-                {
-                    float zoneMask = 0;
-                    half3 zoneColor;
                     
-                    if (_ZonePatternType < 0.5)
+                    // Color Zones (only in tint mode - stripes, checkerboard, noise, organic, patches)
+                    if (_UseColorZones > 0.5)
                     {
-                        // Stripes pattern
-                        zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
-                    }
-                    else if (_ZonePatternType < 1.5)
-                    {
-                        // Checkerboard pattern
-                        zoneMask = CalculateCheckerPattern(input.positionWS, _ZoneScale);
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
-                    }
-                    else if (_ZonePatternType < 2.5)
-                    {
-                        // Noise pattern
-                        zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
-                    }
-                    else if (_ZonePatternType < 3.5)
-                    {
-                        // Organic pattern (soft natural blending)
-                        float organic = CalculateOrganicPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                        float zoneMask = 0;
+                        half3 zoneColor;
                         
-                        // Get a second noise sample for accent color distribution
-                        float accentNoise = CalculateOrganicVariation(
-                            input.positionWS + float3(100, 0, 100),
-                            _ZoneScale * 1.5,
-                            _OrganicClumpiness * 0.7,
-                            1.5,
-                            0.6
-                        );
-                        
-                        // Create natural color blending with 3 colors
-                        if (organic < 0.5)
+                        if (_ZonePatternType < 0.5)
                         {
-                            float t = organic * 2.0;
-                            zoneColor = lerp(_ZoneColorDark.rgb, lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), t);
+                            zoneMask = CalculateStripePattern(input.positionWS, _ZoneScale, _ZoneDirection, _ZoneSoftness);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                        }
+                        else if (_ZonePatternType < 1.5)
+                        {
+                            zoneMask = CalculateCheckerPattern(input.positionWS, _ZoneScale);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                        }
+                        else if (_ZonePatternType < 2.5)
+                        {
+                            zoneMask = CalculateNoisePattern(input.positionWS, _ZoneScale, _ZoneContrast);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, zoneMask);
+                        }
+                        else if (_ZonePatternType < 3.5)
+                        {
+                            float organic = CalculateOrganicPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                            float accentNoise = CalculateOrganicVariation(
+                                input.positionWS + float3(100, 0, 100),
+                                _ZoneScale * 1.5,
+                                _OrganicClumpiness * 0.7,
+                                1.5,
+                                0.6
+                            );
+                            
+                            if (organic < 0.5)
+                            {
+                                float t = organic * 2.0;
+                                zoneColor = lerp(_ZoneColorDark.rgb, lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), t);
+                            }
+                            else
+                            {
+                                float t = (organic - 0.5) * 2.0;
+                                zoneColor = lerp(lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), _ZoneColorLight.rgb, t);
+                            }
+                            zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentNoise * 0.3);
                         }
                         else
                         {
-                            float t = (organic - 0.5) * 2.0;
-                            zoneColor = lerp(lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, 0.5), _ZoneColorLight.rgb, t);
+                            float patches = CalculatePatchesPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
+                            zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, patches);
+                            float accentMask = saturate((1.0 - patches) * 2.0 - 0.5);
+                            zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentMask * 0.4);
                         }
                         
-                        // Mix in accent color at specific areas
-                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentNoise * 0.3);
+                        baseColor *= zoneColor;
                     }
-                    else
-                    {
-                        // Patches pattern (circular irregular spots)
-                        float patches = CalculatePatchesPattern(input.positionWS, _ZoneScale, _OrganicClumpiness, _ZoneSoftness);
-                        
-                        // Strong contrast between light and dark patches
-                        zoneColor = lerp(_ZoneColorDark.rgb, _ZoneColorLight.rgb, patches);
-                        
-                        // Add accent color in the darkest spots
-                        float accentMask = saturate((1.0 - patches) * 2.0 - 0.5);
-                        zoneColor = lerp(zoneColor, _OrganicAccentColor.rgb, accentMask * 0.4);
-                    }
-                    
-                    baseColor *= zoneColor;
                 }
                 
-                // Albedo texture - ONLY apply when UseOnlyAlbedoColor is enabled
-                // When disabled, TopTint/BottomTint are the final colors (no texture)
-                if (_UseOnlyAlbedoColor > 0.5)
-                {
-                    half4 albedo = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
-                    baseColor *= albedo.rgb;
-                }
-                
-                // Decal projection
+                // Decal projection (applies to BOTH modes - it's an overlay effect)
                 if (_DecalEnabled > 0.5)
                 {
                     // Calculate position relative to decal center
