@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f7dc3ad6fc052f40be15ddb5773e282, type: 3}
   m_Name: DefaultGrassSettings
   m_EditorClassIdentifier: GrassSystem::GrassSystem.SO_GrassSettings
-  grassMode: 1
+  grassMode: 0
   cullingShader: {fileID: 7200000, guid: 780ebd41b14bcfa4ea235a416c62a893, type: 3}
   grassMaterial: {fileID: 2100000, guid: 336b1f5d2af7535449977acea87aae1b, type: 2}
   grassMesh: {fileID: 8254687373856176130, guid: e95e173edd8242a46a4a9e77d38c72e8, type: 3}
