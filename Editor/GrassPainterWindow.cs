@@ -21,6 +21,15 @@ namespace GrassSystem
         private Vector3 lastPaintPos;
         private float minPaintDistance = 0.1f;
         
+        // Deferred paint queue for fluid brush experience
+        private List<Vector3> pendingPaintPositions = new List<Vector3>();
+        private List<Vector3> pendingPaintNormals = new List<Vector3>();
+        private PaintMode pendingPaintMode;
+        private bool isProcessingDeferred = false;
+        private int processedCount = 0;
+        private int totalToProcess = 0;
+        private const int BATCH_SIZE = 5; // Process N positions per frame
+        
         // Renderer dropdown cache
         private GrassRenderer[] sceneRenderers;
         private string[] rendererNames;
@@ -480,6 +489,7 @@ namespace GrassSystem
             
             Event e = Event.current;
             
+            // Handle scroll wheel for brush size
             if (e.type == EventType.ScrollWheel && e.control)
             {
                 toolSettings.brushSize = Mathf.Clamp(toolSettings.brushSize - e.delta.y * 0.5f, 0.1f, toolSettings.maxBrushSizeLimit);
@@ -490,45 +500,196 @@ namespace GrassSystem
             Ray ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
             int hitCount = Physics.RaycastNonAlloc(ray, hitResults, 500f, toolSettings.paintMask);
             
+            // Draw processing indicator if deferred processing is active
+            if (isProcessingDeferred)
+            {
+                DrawProcessingIndicator(sceneView);
+                return; // Block input during processing
+            }
+            
             if (hitCount == 0) return;
             
             Vector3 hitPoint = hitResults[0].point;
             Vector3 hitNormal = hitResults[0].normal;
             
-            Handles.color = GetBrushColor();
-            Handles.DrawWireDisc(hitPoint, hitNormal, toolSettings.brushSize);
-            Handles.color = new Color(Handles.color.r, Handles.color.g, Handles.color.b, 0.2f);
-            Handles.DrawSolidDisc(hitPoint, hitNormal, toolSettings.brushSize);
+            // Draw current brush cursor
+            DrawBrushPreview(hitPoint, hitNormal);
+            
+            // Draw pending positions preview during stroke
+            if (isPainting && pendingPaintPositions.Count > 0)
+            {
+                DrawPendingPreview();
+            }
             
             if (e.type == EventType.MouseDown && e.button == 0)
             {
                 isPainting = true;
                 lastPaintPos = hitPoint;
-                // Paint immediately on first click
-                PaintMode mode = e.shift ? PaintMode.Remove : currentMode;
-                Paint(hitPoint, hitNormal, mode);
+                pendingPaintMode = e.shift ? PaintMode.Remove : currentMode;
+                
+                // Queue first position
+                QueuePaintPosition(hitPoint, hitNormal);
                 e.Use();
             }
             else if (e.type == EventType.MouseUp && e.button == 0)
             {
                 isPainting = false;
                 e.Use();
-                targetRenderer.RebuildBuffers();
-                EditorUtility.SetDirty(targetRenderer);
+                
+                // Start deferred processing if there are pending positions
+                if (pendingPaintPositions.Count > 0)
+                {
+                    StartDeferredProcessing();
+                }
             }
             
             if (isPainting && e.type == EventType.MouseDrag && e.button == 0)
             {
                 // Use brush diameter as minimum distance to prevent overlapping circles
-                // This ensures each drag step paints a new, non-overlapping area
                 float dynamicMinDistance = toolSettings.brushSize * 2f;
                 if (Vector3.Distance(hitPoint, lastPaintPos) > dynamicMinDistance)
                 {
-                    PaintMode mode = e.shift ? PaintMode.Remove : currentMode;
-                    Paint(hitPoint, hitNormal, mode);
+                    QueuePaintPosition(hitPoint, hitNormal);
                     lastPaintPos = hitPoint;
                 }
                 e.Use();
+            }
+            
+            SceneView.RepaintAll();
+        }
+        
+        private void QueuePaintPosition(Vector3 position, Vector3 normal)
+        {
+            pendingPaintPositions.Add(position);
+            pendingPaintNormals.Add(normal);
+        }
+        
+        private void DrawBrushPreview(Vector3 hitPoint, Vector3 hitNormal)
+        {
+            Color brushColor = GetBrushColor();
+            
+            // Pulsing effect during stroke
+            if (isPainting)
+            {
+                float pulse = (Mathf.Sin((float)EditorApplication.timeSinceStartup * 4f) + 1f) * 0.15f + 0.7f;
+                brushColor.a = pulse;
+            }
+            
+            Handles.color = brushColor;
+            Handles.DrawWireDisc(hitPoint, hitNormal, toolSettings.brushSize);
+            Handles.color = new Color(brushColor.r, brushColor.g, brushColor.b, 0.2f);
+            Handles.DrawSolidDisc(hitPoint, hitNormal, toolSettings.brushSize);
+        }
+        
+        private void DrawPendingPreview()
+        {
+            // Draw ghost circles for pending positions
+            Color previewColor = pendingPaintMode == PaintMode.Remove 
+                ? new Color(1f, 0.3f, 0.3f, 0.15f) 
+                : new Color(0.3f, 1f, 0.3f, 0.15f);
+            
+            Handles.color = previewColor;
+            for (int i = 0; i < pendingPaintPositions.Count; i++)
+            {
+                Handles.DrawSolidDisc(pendingPaintPositions[i], pendingPaintNormals[i], toolSettings.brushSize * 0.8f);
+            }
+        }
+        
+        private void DrawProcessingIndicator(SceneView sceneView)
+        {
+            // Draw pulsing indicator at center of pending area
+            if (pendingPaintPositions.Count > 0)
+            {
+                Vector3 center = Vector3.zero;
+                foreach (var pos in pendingPaintPositions)
+                    center += pos;
+                center /= pendingPaintPositions.Count;
+                
+                float pulse = (Mathf.Sin((float)EditorApplication.timeSinceStartup * 6f) + 1f) * 0.5f;
+                float radius = toolSettings.brushSize * (1f + pulse * 0.3f);
+                
+                Color processingColor = pendingPaintMode == PaintMode.Remove 
+                    ? new Color(1f, 0.5f, 0f, 0.4f + pulse * 0.3f)
+                    : new Color(0f, 1f, 0.5f, 0.4f + pulse * 0.3f);
+                
+                Handles.color = processingColor;
+                Handles.DrawSolidDisc(center, Vector3.up, radius);
+                
+                // Draw progress text
+                Handles.BeginGUI();
+                Vector2 screenPos = HandleUtility.WorldToGUIPoint(center);
+                string progressText = $"Processing {processedCount}/{totalToProcess}...";
+                GUIStyle style = new GUIStyle(GUI.skin.label)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold,
+                    fontSize = 14
+                };
+                style.normal.textColor = Color.white;
+                
+                Rect rect = new Rect(screenPos.x - 80, screenPos.y - 15, 160, 30);
+                GUI.Label(rect, progressText, style);
+                Handles.EndGUI();
+            }
+            
+            SceneView.RepaintAll();
+        }
+        
+        private void StartDeferredProcessing()
+        {
+            isProcessingDeferred = true;
+            processedCount = 0;
+            totalToProcess = pendingPaintPositions.Count;
+            
+            // Start batch processing
+            EditorApplication.delayCall += ProcessNextBatch;
+        }
+        
+        private void ProcessNextBatch()
+        {
+            if (targetRenderer == null)
+            {
+                FinishDeferredProcessing();
+                return;
+            }
+            
+            var grassList = targetRenderer.GrassDataList;
+            int endIndex = Mathf.Min(processedCount + BATCH_SIZE, totalToProcess);
+            
+            // Process batch of positions
+            for (int i = processedCount; i < endIndex; i++)
+            {
+                Paint(pendingPaintPositions[i], pendingPaintNormals[i], pendingPaintMode);
+            }
+            
+            processedCount = endIndex;
+            SceneView.RepaintAll();
+            
+            // Check if done
+            if (processedCount >= totalToProcess)
+            {
+                FinishDeferredProcessing();
+            }
+            else
+            {
+                // Continue processing next frame
+                EditorApplication.delayCall += ProcessNextBatch;
+            }
+        }
+        
+        private void FinishDeferredProcessing()
+        {
+            isProcessingDeferred = false;
+            pendingPaintPositions.Clear();
+            pendingPaintNormals.Clear();
+            processedCount = 0;
+            totalToProcess = 0;
+            
+            // Rebuild buffers once at the end
+            if (targetRenderer != null)
+            {
+                targetRenderer.RebuildBuffers();
+                EditorUtility.SetDirty(targetRenderer);
             }
             
             SceneView.RepaintAll();
