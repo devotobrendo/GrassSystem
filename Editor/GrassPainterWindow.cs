@@ -16,6 +16,7 @@ namespace GrassSystem
         
         private Vector2 scrollPos;
         private bool isPainting;
+        private bool brushEnabled = true; // Toggle with P key to disable/enable brush without closing tool
         
         private RaycastHit[] hitResults = new RaycastHit[10];
         private Vector3 lastPaintPos;
@@ -148,6 +149,18 @@ namespace GrassSystem
             
             EditorGUILayout.Space(10);
             EditorGUILayout.LabelField("Grass Painter", EditorStyles.boldLabel);
+            
+            // Brush toggle with keyboard hint
+            EditorGUILayout.BeginHorizontal();
+            brushEnabled = EditorGUILayout.Toggle("Brush Enabled", brushEnabled);
+            EditorGUILayout.LabelField("(P to toggle)", EditorStyles.miniLabel, GUILayout.Width(70));
+            EditorGUILayout.EndHorizontal();
+            
+            if (!brushEnabled)
+            {
+                EditorGUILayout.HelpBox("Brush is paused. Press P or toggle above to resume.", MessageType.Info);
+            }
+            
             EditorGUILayout.Space(5);
             
             // === RENDERER SELECTION ===
@@ -489,6 +502,15 @@ namespace GrassSystem
             
             Event e = Event.current;
             
+            // Toggle brush on/off with P key (without closing window)
+            if (e.type == EventType.KeyDown && e.keyCode == KeyCode.P)
+            {
+                brushEnabled = !brushEnabled;
+                e.Use();
+                Repaint();
+                SceneView.RepaintAll();
+            }
+            
             // Handle scroll wheel for brush size
             if (e.type == EventType.ScrollWheel && e.control)
             {
@@ -505,6 +527,16 @@ namespace GrassSystem
             {
                 DrawProcessingIndicator(sceneView);
                 return; // Block input during processing
+            }
+            
+            // If brush is disabled, show disabled indicator and skip painting
+            if (!brushEnabled)
+            {
+                if (hitCount > 0)
+                {
+                    DrawBrushDisabledIndicator(hitResults[0].point, hitResults[0].normal);
+                }
+                return;
             }
             
             if (hitCount == 0) return;
@@ -579,6 +611,30 @@ namespace GrassSystem
             Handles.DrawWireDisc(hitPoint, hitNormal, toolSettings.brushSize);
             Handles.color = new Color(brushColor.r, brushColor.g, brushColor.b, 0.2f);
             Handles.DrawSolidDisc(hitPoint, hitNormal, toolSettings.brushSize);
+        }
+        
+        private void DrawBrushDisabledIndicator(Vector3 hitPoint, Vector3 hitNormal)
+        {
+            // Draw grayed out brush when disabled
+            Color disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.3f);
+            Handles.color = disabledColor;
+            Handles.DrawWireDisc(hitPoint, hitNormal, toolSettings.brushSize);
+            
+            // Draw "PAUSED" text
+            Handles.BeginGUI();
+            Vector2 screenPos = HandleUtility.WorldToGUIPoint(hitPoint);
+            GUIStyle style = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold,
+                fontSize = 12
+            };
+            style.normal.textColor = new Color(1f, 1f, 1f, 0.7f);
+            Rect rect = new Rect(screenPos.x - 40, screenPos.y - 10, 80, 20);
+            GUI.Label(rect, "PAUSED (P)", style);
+            Handles.EndGUI();
+            
+            SceneView.RepaintAll();
         }
         
         private void DrawPendingPreview()
