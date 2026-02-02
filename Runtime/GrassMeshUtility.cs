@@ -13,11 +13,14 @@ namespace GrassSystem
         
         /// <summary>
         /// Gets or creates a Zelda-style triangular grass blade mesh.
-        /// This mesh is cached for performance.
+        /// This mesh is cached for performance. The cache is validated for
+        /// Unity object destruction (which can happen during domain reload).
         /// </summary>
         public static Mesh GetZeldaStyleBlade()
         {
-            if (cachedZeldaBlade == null)
+            // Check for null OR destroyed (Unity destroys objects on domain reload
+            // but the C# reference may still be non-null)
+            if (cachedZeldaBlade == null || !cachedZeldaBlade)
             {
                 cachedZeldaBlade = GenerateZeldaStyleBlade();
             }

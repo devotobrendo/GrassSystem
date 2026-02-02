@@ -31,6 +31,11 @@ namespace GrassSystem
         private int totalToProcess = 0;
         private const int BATCH_SIZE = 5; // Process N positions per frame
         
+        // Dirty state tracking - avoid marking dirty every stroke
+        private int strokesSinceLastSave = 0;
+        private const int STROKES_BEFORE_SAVE = 10; // Only save every N strokes
+        private bool sceneDirtyPending = false;
+        
         // Renderer dropdown cache
         private GrassRenderer[] sceneRenderers;
         private string[] rendererNames;
@@ -58,6 +63,14 @@ namespace GrassSystem
         private void OnDisable()
         {
             SceneView.duringSceneGui -= OnSceneGUI;
+            
+            // Flush any pending dirty state when window closes
+            if (sceneDirtyPending && targetRenderer != null)
+            {
+                EditorUtility.SetDirty(targetRenderer);
+                sceneDirtyPending = false;
+                strokesSinceLastSave = 0;
+            }
         }
         
         /// <summary>
@@ -261,8 +274,16 @@ namespace GrassSystem
             }
             EditorGUILayout.EndHorizontal();
             
+            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Rebuild Buffers"))
                 targetRenderer.RebuildBuffers();
+            
+            // Manual memory optimization button
+            if (GUILayout.Button("Optimize Memory"))
+            {
+                OptimizeEditorMemory();
+            }
+            EditorGUILayout.EndHorizontal();
             
             EditorGUILayout.Space(10);
             EditorGUILayout.HelpBox(
@@ -736,16 +757,39 @@ namespace GrassSystem
         private void FinishDeferredProcessing()
         {
             isProcessingDeferred = false;
+            
+            // Clear pending lists (don't TrimExcess here - too slow, leave that for OptimizeMemory)
             pendingPaintPositions.Clear();
             pendingPaintNormals.Clear();
+            
             processedCount = 0;
             totalToProcess = 0;
             
-            // Rebuild buffers once at the end
+            // Smart rebuild buffers - only recreates if size changed significantly
             if (targetRenderer != null)
             {
-                targetRenderer.RebuildBuffers();
-                EditorUtility.SetDirty(targetRenderer);
+                // Use smart rebuild - much faster for incremental paint operations
+                targetRenderer.SmartRebuildBuffers();
+                
+                // Track strokes and only mark dirty periodically (avoids engasgo)
+                strokesSinceLastSave++;
+                sceneDirtyPending = true;
+                
+                if (strokesSinceLastSave >= STROKES_BEFORE_SAVE)
+                {
+                    strokesSinceLastSave = 0;
+                    sceneDirtyPending = false;
+                    
+                    // Defer SetDirty to prevent UI blocking
+                    var rendererToMark = targetRenderer;
+                    EditorApplication.delayCall += () =>
+                    {
+                        if (rendererToMark != null)
+                        {
+                            EditorUtility.SetDirty(rendererToMark);
+                        }
+                    };
+                }
             }
             
             SceneView.RepaintAll();
@@ -912,17 +956,19 @@ namespace GrassSystem
             float sqrRadius = toolSettings.brushSize * toolSettings.brushSize;
             float removalChance = toolSettings.removalStrength;
             
-            for (int i = grassList.Count - 1; i >= 0; i--)
+            // Use RemoveAll with predicate - O(n) instead of O(n²) from RemoveAt
+            // This is MUCH faster for large grass counts
+            grassList.RemoveAll(grass =>
             {
-                Vector3 diff = grassList[i].position - center;
+                Vector3 diff = grass.position - center;
                 diff.y = 0;
                 if (diff.sqrMagnitude < sqrRadius)
                 {
                     // Partial removal: only remove if random check passes
-                    if (removalChance >= 1f || Random.value < removalChance)
-                        grassList.RemoveAt(i);
+                    return removalChance >= 1f || Random.value < removalChance;
                 }
-            }
+                return false;
+            });
         }
         
         private void EditHeight(Vector3 center, List<GrassData> grassList)
@@ -977,6 +1023,89 @@ namespace GrassSystem
             }
         }
         
+        /// <summary>
+        /// Performs a complete memory cleanup and resets the plugin state as if it was just opened.
+        /// Clears all caches, pending operations, Undo stack, and forces garbage collection.
+        /// </summary>
+        private void OptimizeEditorMemory()
+        {
+            long memBefore = System.GC.GetTotalMemory(false);
+            int totalGrassCount = 0;
+            
+            // 1. Cancel any pending deferred paint operations
+            if (isProcessingDeferred)
+            {
+                isProcessingDeferred = false;
+                processedCount = 0;
+                totalToProcess = 0;
+            }
+            
+            // 2. Clear pending paint queues and release their memory
+            pendingPaintPositions.Clear();
+            pendingPaintPositions.TrimExcess();
+            pendingPaintNormals.Clear();
+            pendingPaintNormals.TrimExcess();
+            
+            // 3. Reinitialize internal state
+            lastPaintPos = Vector3.zero;
+            isPainting = false;
+            
+            // 4. Process all GrassRenderers - compact and reinitialize
+            RefreshSceneRenderers();
+            foreach (var renderer in sceneRenderers)
+            {
+                if (renderer != null)
+                {
+                    // Get grass count before cleanup
+                    var grassList = renderer.GrassDataList;
+                    if (grassList != null)
+                    {
+                        totalGrassCount += grassList.Count;
+                        
+                        // Compact the list to remove wasted capacity
+                        grassList.TrimExcess();
+                    }
+                    
+                    // Force full reinitialization of GPU buffers
+                    renderer.ForceReinitialize();
+                    
+                    // Clear any undo records for this renderer
+                    Undo.ClearUndo(renderer);
+                }
+            }
+            
+            // 5. Clear cached mesh to force regeneration if needed
+            GrassMeshUtility.ClearCache();
+            
+            // 6. Clear global Undo stack (main source of memory accumulation)
+            Undo.ClearAll();
+            
+            // 7. Force full garbage collection cycle
+            System.GC.Collect(System.GC.MaxGeneration, System.GCCollectionMode.Forced, true, true);
+            System.GC.WaitForPendingFinalizers();
+            System.GC.Collect(System.GC.MaxGeneration, System.GCCollectionMode.Forced, true, true);
+            
+            // 8. Unload unused Unity assets
+            var asyncOp = Resources.UnloadUnusedAssets();
+            
+            // 9. Clear editor caches
+            EditorUtility.UnloadUnusedAssetsImmediate(true);
+            
+            long memAfter = System.GC.GetTotalMemory(true);
+            float freedMB = (memBefore - memAfter) / (1024f * 1024f);
+            float grassMemoryMB = (totalGrassCount * 48f) / (1024f * 1024f);
+            
+            Debug.Log($"[Grass System] Memory Optimization Complete!\n" +
+                      $"  → Freed: {freedMB:F2} MB\n" +
+                      $"  → Grass instances: {totalGrassCount:N0} (~{grassMemoryMB:F2} MB)\n" +
+                      $"  → Renderers reinitialized: {sceneRenderers?.Length ?? 0}\n" +
+                      $"  → Undo history cleared");
+            
+            // Force repaint
+            SceneView.RepaintAll();
+            Repaint();
+        }
+        
         private void CreateGrassRenderer()
         {
             var go = new GameObject("Grass Renderer");
@@ -1004,7 +1133,16 @@ namespace GrassSystem
             }
             
             targetRenderer.RebuildBuffers();
-            EditorUtility.SetDirty(targetRenderer);
+            
+            // Defer SetDirty to next frame to prevent UI blocking
+            var rendererToMark = targetRenderer;
+            EditorApplication.delayCall += () =>
+            {
+                if (rendererToMark != null)
+                {
+                    EditorUtility.SetDirty(rendererToMark);
+                }
+            };
         }
         
         private void GenerateOnMesh(MeshFilter meshFilter)
@@ -1123,7 +1261,17 @@ namespace GrassSystem
             if (targetRenderer == null) return;
             // Skipping Undo.RecordObject for performance - clearing large grass counts would be too slow
             targetRenderer.ClearGrass();
-            EditorUtility.SetDirty(targetRenderer);
+            
+            // Defer SetDirty to next frame to prevent UI blocking
+            var rendererToMark = targetRenderer;
+            EditorApplication.delayCall += () =>
+            {
+                if (rendererToMark != null)
+                {
+                    EditorUtility.SetDirty(rendererToMark);
+                    Undo.ClearUndo(rendererToMark);
+                }
+            };
         }
     }
     

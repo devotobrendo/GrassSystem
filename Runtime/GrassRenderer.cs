@@ -77,11 +77,113 @@ namespace GrassSystem
         /// </summary>
         public Material MaterialInstance => materialInstance;
         
+        // ========================================
+        // DIAGNOSTIC TOOLS
+        // ========================================
+        
+        /// <summary>
+        /// Force cleans up and reinitializes all rendering resources.
+        /// Use this when grass is not rendering correctly.
+        /// </summary>
+        [ContextMenu("Force Reinitialize")]
+        public void ForceReinitialize()
+        {
+            Cleanup();
+            if (grassData.Count > 0)
+                Initialize();
+            Debug.Log($"GrassRenderer: Reinitialized. instances={grassData.Count}, isInitialized={isInitialized}", this);
+        }
+        
+        /// <summary>
+        /// Logs a comprehensive diagnostic report of the renderer state.
+        /// Use this to identify why grass might not be rendering.
+        /// </summary>
+        [ContextMenu("Diagnose Rendering Issues")]
+        public void DiagnoseRenderingIssues()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("=== GrassRenderer Diagnostics ===");
+            sb.AppendLine($"GameObject: {gameObject.name}");
+            sb.AppendLine($"isInitialized: {isInitialized}");
+            sb.AppendLine($"grassData.Count: {grassData?.Count ?? 0}");
+            sb.AppendLine($"lastVisibleCount: {lastVisibleCount}");
+            sb.AppendLine("--- Settings ---");
+            sb.AppendLine($"settings: {(settings != null ? settings.name : "NULL")}");
+            if (settings != null)
+            {
+                sb.AppendLine($"  grassMode: {settings.grassMode}");
+                sb.AppendLine($"  cullingShader: {(settings.cullingShader != null ? "OK" : "NULL")}");
+                sb.AppendLine($"  grassMaterial: {(settings.grassMaterial != null ? "OK" : "NULL")}");
+                sb.AppendLine($"  customMeshes.Count: {settings.customMeshes?.Count ?? 0}");
+                if (!settings.Validate(out string error))
+                    sb.AppendLine($"  VALIDATION ERROR: {error}");
+                else
+                    sb.AppendLine($"  Validation: PASSED");
+            }
+            sb.AppendLine("--- Buffers ---");
+            sb.AppendLine($"sourceBuffer: {(sourceBuffer != null && sourceBuffer.IsValid() ? "VALID" : "INVALID/NULL")}");
+            sb.AppendLine($"visibleBuffer: {(visibleBuffer != null && visibleBuffer.IsValid() ? "VALID" : "INVALID/NULL")}");
+            sb.AppendLine($"argsBuffer: {(argsBuffer != null && argsBuffer.IsValid() ? "VALID" : "INVALID/NULL")}");
+            sb.AppendLine("--- Rendering ---");
+            sb.AppendLine($"materialInstance: {(materialInstance != null ? "EXISTS" : "NULL")}");
+            sb.AppendLine($"cachedMesh: {(cachedMesh != null ? cachedMesh.name : "NULL")}");
+            sb.AppendLine($"renderBounds: {renderBounds}");
+            sb.AppendLine("--- Camera ---");
+            var cam = GetCurrentCamera();
+            sb.AppendLine($"currentCamera: {(cam != null ? cam.name : "NULL")}");
+            
+            Debug.Log(sb.ToString(), this);
+        }
+        
+        /// <summary>
+        /// Full rebuild - cleans up and reinitializes all buffers.
+        /// Use this when structural changes occur (mode change, etc).
+        /// </summary>
         public void RebuildBuffers()
         {
             Cleanup();
             if (grassData.Count > 0)
                 Initialize();
+        }
+        
+        /// <summary>
+        /// Smart rebuild - only recreates buffers if size changed significantly.
+        /// Much faster for incremental paint operations.
+        /// </summary>
+        public void SmartRebuildBuffers()
+        {
+            if (!isInitialized || sourceBuffer == null || !sourceBuffer.IsValid())
+            {
+                // Not initialized yet, do full rebuild
+                RebuildBuffers();
+                return;
+            }
+            
+            int currentCount = grassData.Count;
+            int bufferSize = sourceBuffer.count;
+            
+            // If count is 0, cleanup
+            if (currentCount == 0)
+            {
+                Cleanup();
+                return;
+            }
+            
+            // If buffer size matches or is within acceptable range, just update data
+            // Acceptable range: buffer can hold 50% more or exactly what we need
+            bool needsResize = currentCount > bufferSize || currentCount < bufferSize / 2;
+            
+            if (!needsResize)
+            {
+                // Fast path: just update buffer data without recreation
+                sourceBuffer.SetData(grassData);
+                settings.cullingShader.SetInt(PropInstanceCount, currentCount);
+                UpdateBounds();
+                return;
+            }
+            
+            // Buffer size changed significantly, do full rebuild
+            RebuildBuffers();
         }
         
         public void ClearGrass()
@@ -173,17 +275,27 @@ namespace GrassSystem
         /// <summary>
         /// Validates that material properties are correctly set and repairs if needed.
         /// Called periodically and after scene operations to catch Unity resets.
+        /// Also checks buffer validity and rebinds if necessary.
         /// </summary>
         private void ValidateAndRepairMaterial()
         {
             if (materialInstance == null || settings == null)
                 return;
             
-            // If material was marked dirty, always reapply
+            // Check if buffers are still valid - if not, reinitialize
+            if (visibleBuffer == null || !visibleBuffer.IsValid())
+            {
+                LogEvent("VisibleBuffer invalid. Reinitializing.");
+                Initialize();
+                return;
+            }
+            
+            // If material was marked dirty, always reapply and rebind buffer
             if (materialDirty)
             {
-                LogEvent("Material marked dirty. Reapplying settings.");
+                LogEvent("Material marked dirty. Reapplying settings and rebinding buffer.");
                 ApplySettingsToMaterial();
+                materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
                 materialDirty = false;
                 return;
             }
@@ -199,6 +311,7 @@ namespace GrassSystem
                 {
                     LogEvent($"Material properties mismatch detected (ColorMode: {currentColorMode} vs {expectedColorMode}). Reapplying.");
                     ApplySettingsToMaterial();
+                    materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
                 }
             }
         }
@@ -261,47 +374,80 @@ namespace GrassSystem
             }
             
             if (grassData.Count == 0)
-                return;
-            
-            sourceBuffer = new ComputeBuffer(grassData.Count, GrassData.Stride, ComputeBufferType.Structured);
-            sourceBuffer.SetData(grassData);
-            
-            visibleBuffer = new ComputeBuffer(grassData.Count, GrassDrawData.Stride, ComputeBufferType.Append);
-            
-            // Get and cache the active mesh based on mode
-            // This ensures consistency between argsBuffer index count and rendered mesh
-            cachedMesh = settings.GetActiveMesh(GetInstanceID());
-            if (cachedMesh == null)
             {
-                Debug.LogError("GrassRenderer: No valid mesh available!", this);
+                LogEvent("No grass data to render - skipping initialization.");
                 return;
             }
             
-            argsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, sizeof(uint) * 5);
-            argsReset[0] = cachedMesh.GetIndexCount(0);
-            argsReset[1] = 0;
-            argsBuffer.SetData(argsReset);
-            
-            cullingKernel = settings.cullingShader.FindKernel("CSMain");
-            
-            settings.cullingShader.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
-            settings.cullingShader.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
-            settings.cullingShader.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
-            settings.cullingShader.SetInt(PropInstanceCount, grassData.Count);
-            settings.cullingShader.SetFloat(PropMinFade, settings.minFadeDistance);
-            settings.cullingShader.SetFloat(PropMaxDraw, settings.maxDrawDistance);
-            settings.cullingShader.SetFloat(PropWindSpeed, settings.windSpeed);
-            settings.cullingShader.SetFloat(PropWindStrength, settings.windStrength);
-            settings.cullingShader.SetFloat(PropWindFrequency, settings.windFrequency);
-            settings.cullingShader.SetFloat(PropInteractorStrength, settings.interactorStrength);
-            
-            materialInstance = new Material(settings.grassMaterial);
-            materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
-            
-            ApplySettingsToMaterial();
-            UpdateBounds();
-            
-            isInitialized = true;
+            try
+            {
+                // Create and validate source buffer
+                sourceBuffer = new ComputeBuffer(grassData.Count, GrassData.Stride, ComputeBufferType.Structured);
+                if (sourceBuffer == null || !sourceBuffer.IsValid())
+                {
+                    Debug.LogError("GrassRenderer: Failed to create sourceBuffer!", this);
+                    return;
+                }
+                sourceBuffer.SetData(grassData);
+                
+                // Create and validate visible buffer
+                visibleBuffer = new ComputeBuffer(grassData.Count, GrassDrawData.Stride, ComputeBufferType.Append);
+                if (visibleBuffer == null || !visibleBuffer.IsValid())
+                {
+                    Debug.LogError("GrassRenderer: Failed to create visibleBuffer!", this);
+                    Cleanup();
+                    return;
+                }
+                
+                // Get and cache the active mesh based on mode
+                // This ensures consistency between argsBuffer index count and rendered mesh
+                cachedMesh = settings.GetActiveMesh(GetInstanceID());
+                if (cachedMesh == null)
+                {
+                    Debug.LogError("GrassRenderer: No valid mesh available!", this);
+                    Cleanup();
+                    return;
+                }
+                
+                // Create and validate args buffer
+                argsBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, sizeof(uint) * 5);
+                if (argsBuffer == null || !argsBuffer.IsValid())
+                {
+                    Debug.LogError("GrassRenderer: Failed to create argsBuffer!", this);
+                    Cleanup();
+                    return;
+                }
+                argsReset[0] = cachedMesh.GetIndexCount(0);
+                argsReset[1] = 0;
+                argsBuffer.SetData(argsReset);
+                
+                cullingKernel = settings.cullingShader.FindKernel("CSMain");
+                
+                settings.cullingShader.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
+                settings.cullingShader.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
+                settings.cullingShader.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
+                settings.cullingShader.SetInt(PropInstanceCount, grassData.Count);
+                settings.cullingShader.SetFloat(PropMinFade, settings.minFadeDistance);
+                settings.cullingShader.SetFloat(PropMaxDraw, settings.maxDrawDistance);
+                settings.cullingShader.SetFloat(PropWindSpeed, settings.windSpeed);
+                settings.cullingShader.SetFloat(PropWindStrength, settings.windStrength);
+                settings.cullingShader.SetFloat(PropWindFrequency, settings.windFrequency);
+                settings.cullingShader.SetFloat(PropInteractorStrength, settings.interactorStrength);
+                
+                materialInstance = new Material(settings.grassMaterial);
+                materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
+                
+                ApplySettingsToMaterial();
+                UpdateBounds();
+                
+                isInitialized = true;
+                LogEvent($"Initialized successfully with {grassData.Count} instances.");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"GrassRenderer: Initialization failed - {ex.Message}", this);
+                Cleanup();
+            }
         }
         
         private void ApplySettingsToMaterial()

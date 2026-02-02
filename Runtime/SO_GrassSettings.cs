@@ -235,12 +235,35 @@ namespace GrassSystem
             }
             else // CustomMesh mode
             {
-                if (customMeshes == null || customMeshes.Count == 0) { error = "At least one custom mesh is required for CustomMesh mode"; return false; }
-                foreach (var mesh in customMeshes)
+                // Auto-fallback to Default mode if no valid custom meshes
+                if (customMeshes == null || customMeshes.Count == 0)
                 {
-                    if (mesh == null) { error = "Custom meshes list contains null entries"; return false; }
+                    Debug.LogWarning($"SO_GrassSettings '{name}': CustomMesh mode has no meshes assigned. Falling back to Default mode.", this);
+                    grassMode = GrassMode.Default;
+                    // Re-validate with Default mode constraints
+                    if (minWidth > maxWidth) { error = "Min width cannot be greater than max width"; return false; }
+                    if (minHeight > maxHeight) { error = "Min height cannot be greater than max height"; return false; }
                 }
-                if (minSize > maxSize) { error = "Min size cannot be greater than max size"; return false; }
+                else
+                {
+                    // Check for null entries and filter them out
+                    int nullCount = customMeshes.RemoveAll(m => m == null);
+                    if (nullCount > 0)
+                    {
+                        Debug.LogWarning($"SO_GrassSettings '{name}': Removed {nullCount} null entries from custom meshes list.", this);
+                    }
+                    
+                    // If all meshes were null, fallback to Default mode
+                    if (customMeshes.Count == 0)
+                    {
+                        Debug.LogWarning($"SO_GrassSettings '{name}': All custom meshes were null. Falling back to Default mode.", this);
+                        grassMode = GrassMode.Default;
+                    }
+                    else
+                    {
+                        if (minSize > maxSize) { error = "Min size cannot be greater than max size"; return false; }
+                    }
+                }
             }
             
             if (minFadeDistance >= maxDrawDistance) { error = "Min fade distance must be less than max draw distance"; return false; }
