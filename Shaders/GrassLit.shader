@@ -161,6 +161,7 @@ Shader "GrassSystem/GrassLit"
                 float _TerrainLightmapInfluence;
                 float4 _TerrainPosition;
                 float4 _TerrainSize;
+                float _UseOnlyAlbedoColor;
                 float _UseUniformScale;
                 float4 _MeshRotation;
                 float _MaxTiltAngle;
