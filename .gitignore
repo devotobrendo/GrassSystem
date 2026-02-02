@@ -12,6 +12,14 @@
 [Aa]ssets/
 [Pp]ackages/
 [Pp]roject[Ss]ettings/
+[Ss]cenes/
+
+# Generated at runtime (user-specific)
+Editor/GrassToolSettings.asset
+Editor/GrassToolSettings.asset.meta
+
+# IDE config
+.vsconfig
 
 # Asset meta data (uncomment if not tracking)
 # *.meta
