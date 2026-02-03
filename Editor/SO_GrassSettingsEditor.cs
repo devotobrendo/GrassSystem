@@ -234,10 +234,25 @@ namespace GrassSystem
         
         public override void OnInspectorGUI()
         {
-            serializedObject.Update();
+            // Safety check: if serialized object is null or disposed, skip drawing
+            if (serializedObject == null || serializedObject.targetObject == null)
+            {
+                EditorGUILayout.HelpBox("Target object is null. Please reselect the asset.", MessageType.Error);
+                return;
+            }
             
-            var settings = (SO_GrassSettings)target;
-            bool isCustomMeshMode = settings.grassMode == GrassMode.CustomMesh;
+            try
+            {
+                serializedObject.Update();
+                
+                var settings = (SO_GrassSettings)target;
+                if (settings == null)
+                {
+                    DrawDefaultInspector();
+                    return;
+                }
+                
+                bool isCustomMeshMode = settings.grassMode == GrassMode.CustomMesh;
             
             // === GRASS MODE ===
             EditorGUILayout.Space(5);
@@ -541,6 +556,29 @@ namespace GrassSystem
             }
             
             serializedObject.ApplyModifiedProperties();
+            }
+            catch (System.Exception e)
+            {
+                // Log the error for debugging but don't break the Inspector
+                if (Event.current.type == EventType.Layout)
+                {
+                    Debug.LogWarning($"[GrassSettings Editor] Error in custom inspector: {e.Message}");
+                }
+                
+                // Fall back to default inspector so user can still edit
+                EditorGUILayout.Space(10);
+                EditorGUILayout.HelpBox("Custom inspector encountered an error. Showing default view.", MessageType.Warning);
+                
+                if (GUILayout.Button("Refresh Inspector"))
+                {
+                    // Force reinitialize the editor
+                    OnEnable();
+                    Repaint();
+                }
+                
+                EditorGUILayout.Space(5);
+                DrawDefaultInspector();
+            }
         }
     }
 }

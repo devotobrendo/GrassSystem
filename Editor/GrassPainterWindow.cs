@@ -20,7 +20,6 @@ namespace GrassSystem
         
         private RaycastHit[] hitResults = new RaycastHit[10];
         private Vector3 lastPaintPos;
-        private float minPaintDistance = 0.1f;
         
         // Deferred paint queue for fluid brush experience
         private List<Vector3> pendingPaintPositions = new List<Vector3>();
@@ -1100,6 +1099,18 @@ namespace GrassSystem
                       $"  → Grass instances: {totalGrassCount:N0} (~{grassMemoryMB:F2} MB)\n" +
                       $"  → Renderers reinitialized: {sceneRenderers?.Length ?? 0}\n" +
                       $"  → Undo history cleared");
+            
+            // 10. Force all Inspectors/Editors to refresh and repaint
+            // This fixes the "disappearing Inspector" issue
+            UnityEditorInternal.InternalEditorUtility.RepaintAllViews();
+            
+            // Force reload of all custom editors by reselecting current selection
+            var currentSelection = Selection.objects;
+            Selection.objects = new Object[0];
+            EditorApplication.delayCall += () =>
+            {
+                Selection.objects = currentSelection;
+            };
             
             // Force repaint
             SceneView.RepaintAll();

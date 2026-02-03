@@ -11,8 +11,20 @@ Shader "GrassSystem/GrassUnlit"
         [Header(Colors)]
         _TopTint ("Top Tint", Color) = (0.8, 1.0, 0.6, 1)
         _BottomTint ("Bottom Tint", Color) = (0.2, 0.4, 0.1, 1)
-        _PatternColorA ("Pattern Color A", Color) = (0.2, 0.5, 0.1, 1)
-        _PatternColorB ("Pattern Color B", Color) = (0.15, 0.45, 0.08, 1)
+        
+        [Header(Pattern Colors)]
+        _PatternATip ("Color A Tip", Color) = (0.45, 0.85, 0.25, 1)
+        _PatternARoot ("Color A Root", Color) = (0.15, 0.35, 0.08, 1)
+        _PatternBTip ("Color B Tip", Color) = (0.35, 0.65, 0.20, 1)
+        _PatternBRoot ("Color B Root", Color) = (0.12, 0.28, 0.06, 1)
+        
+        [Header(Natural Blend Colors)]
+        _NaturalColor1Tip ("Color 1 Tip", Color) = (0.45, 0.85, 0.25, 1)
+        _NaturalColor1Root ("Color 1 Root", Color) = (0.15, 0.35, 0.08, 1)
+        _NaturalColor2Tip ("Color 2 Tip", Color) = (0.35, 0.65, 0.20, 1)
+        _NaturalColor2Root ("Color 2 Root", Color) = (0.12, 0.28, 0.06, 1)
+        _NaturalColor3Tip ("Color 3 Tip", Color) = (0.50, 0.70, 0.15, 1)
+        _NaturalColor3Root ("Color 3 Root", Color) = (0.20, 0.30, 0.05, 1)
         
         [Header(Color Zones)]
         [Toggle] _UseColorZones ("Enable Color Zones", Float) = 0
@@ -396,48 +408,56 @@ Shader "GrassSystem/GrassUnlit"
                     // Pattern Type 2: Natural Blend (3-color with tip/root using natural patterns)
                     else
                     {
-                        float noise1 = 0, noise2 = 0;
+                        // Get noise value (0-1) that determines which color zone we're in
+                        float zoneNoise = 0;
                         
                         // Select natural blend type (0=BlueNoise, 1=Cluster, 2=Gradient, 3=Stochastic)
                         if (_NaturalBlendType < 0.5)
                         {
-                            noise1 = BlueNoise(worldPos / _NaturalScale);
-                            noise2 = BlueNoise(worldPos / _NaturalScale * 1.7 + 50);
+                            zoneNoise = BlueNoise(worldPos / _NaturalScale);
                         }
                         else if (_NaturalBlendType < 1.5)
                         {
-                            noise1 = ClusterNoise(worldPos / _NaturalScale);
-                            noise2 = ClusterNoise(worldPos / _NaturalScale * 1.3 + 25);
+                            zoneNoise = ClusterNoise(worldPos / _NaturalScale);
                         }
                         else if (_NaturalBlendType < 2.5)
                         {
-                            noise1 = GradientBlend(worldPos / _NaturalScale);
-                            noise2 = GradientBlend(worldPos / _NaturalScale * 1.5 + 40);
+                            zoneNoise = GradientBlend(worldPos / _NaturalScale);
                         }
                         else
                         {
-                            noise1 = StochasticNoise(worldPos / _NaturalScale);
-                            noise2 = StochasticNoise(worldPos / _NaturalScale * 1.2 + 30);
+                            zoneNoise = StochasticNoise(worldPos / _NaturalScale);
                         }
                         
-                        // Apply contrast (centered around 0.5)
-                        noise1 = saturate((noise1 - 0.5) * _NaturalContrast + 0.5);
-                        noise2 = saturate((noise2 - 0.5) * _NaturalContrast + 0.5);
+                        // Apply contrast to expand the noise distribution
+                        // Uses 1 + contrast*2 so that contrast 0->1 maps to multiplier 1->3
+                        // This ensures the full 0-1 range is covered even with default contrast
+                        float contrastMultiplier = 1.0 + _NaturalContrast * 2.0;
+                        zoneNoise = saturate((zoneNoise - 0.5) * contrastMultiplier + 0.5);
                         
-                        // Apply softness via smoothstep (wider range = smoother transitions)
-                        float edgeStart = 0.5 - _NaturalSoftness * 0.5;
-                        float edgeEnd = 0.5 + _NaturalSoftness * 0.5;
-                        noise1 = smoothstep(edgeStart, edgeEnd, noise1);
-                        noise2 = smoothstep(edgeStart, edgeEnd, noise2);
-                        
-                        // Blend 3 colors with proper tip/root gradients
+                        // Calculate 3 color zones with tip/root gradients
                         half3 color1 = lerp(_NaturalColor1Root.rgb, _NaturalColor1Tip.rgb, input.uv.y);
                         half3 color2 = lerp(_NaturalColor2Root.rgb, _NaturalColor2Tip.rgb, input.uv.y);
                         half3 color3 = lerp(_NaturalColor3Root.rgb, _NaturalColor3Tip.rgb, input.uv.y);
                         
-                        // Simple direct blend: noise1 picks between color1/color2, noise2 adds color3
-                        half3 blendedColor = lerp(color1, color2, noise1);
-                        blendedColor = lerp(blendedColor, color3, noise2 * 0.7);
+                        // Zone thresholds: 0-0.33=Color1, 0.33-0.66=Color2, 0.66-1=Color3
+                        // Softness controls how wide the transition bands are
+                        float softEdge = _NaturalSoftness * 0.15; // Max 15% overlap at each edge
+                        
+                        // Weight for each color zone (smooth transitions when softness > 0)
+                        float w1 = 1.0 - smoothstep(0.333 - softEdge, 0.333 + softEdge, zoneNoise);
+                        float w3 = smoothstep(0.666 - softEdge, 0.666 + softEdge, zoneNoise);
+                        float w2 = 1.0 - w1 - w3;
+                        w2 = max(w2, 0.0); // Ensure non-negative
+                        
+                        // Normalize weights
+                        float totalWeight = w1 + w2 + w3;
+                        w1 /= totalWeight;
+                        w2 /= totalWeight;
+                        w3 /= totalWeight;
+                        
+                        // Blend colors based on zone weights
+                        half3 blendedColor = color1 * w1 + color2 * w2 + color3 * w3;
                         
                         baseColor = blendedColor;
                         
