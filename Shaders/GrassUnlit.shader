@@ -420,19 +420,24 @@ Shader "GrassSystem/GrassUnlit"
                             noise2 = StochasticNoise(worldPos / _NaturalScale * 1.2 + 30);
                         }
                         
-                        // Apply softness and contrast
-                        float sharpness = 1.0 - _NaturalSoftness;
-                        noise1 = saturate((noise1 - 0.5) * (1.0 + _NaturalContrast * 3.0) + 0.5);
-                        noise2 = saturate((noise2 - 0.5) * (1.0 + _NaturalContrast * 3.0) + 0.5);
+                        // Apply contrast (centered around 0.5)
+                        noise1 = saturate((noise1 - 0.5) * _NaturalContrast + 0.5);
+                        noise2 = saturate((noise2 - 0.5) * _NaturalContrast + 0.5);
+                        
+                        // Apply softness via smoothstep (wider range = smoother transitions)
+                        float edgeStart = 0.5 - _NaturalSoftness * 0.5;
+                        float edgeEnd = 0.5 + _NaturalSoftness * 0.5;
+                        noise1 = smoothstep(edgeStart, edgeEnd, noise1);
+                        noise2 = smoothstep(edgeStart, edgeEnd, noise2);
                         
                         // Blend 3 colors with proper tip/root gradients
                         half3 color1 = lerp(_NaturalColor1Root.rgb, _NaturalColor1Tip.rgb, input.uv.y);
                         half3 color2 = lerp(_NaturalColor2Root.rgb, _NaturalColor2Tip.rgb, input.uv.y);
                         half3 color3 = lerp(_NaturalColor3Root.rgb, _NaturalColor3Tip.rgb, input.uv.y);
                         
-                        // Blend colors based on noise values
-                        half3 blendedColor = lerp(color1, color2, smoothstep(0.3 - sharpness * 0.2, 0.7 + sharpness * 0.2, noise1));
-                        blendedColor = lerp(blendedColor, color3, smoothstep(0.4 - sharpness * 0.2, 0.6 + sharpness * 0.2, noise2) * 0.5);
+                        // Simple direct blend: noise1 picks between color1/color2, noise2 adds color3
+                        half3 blendedColor = lerp(color1, color2, noise1);
+                        blendedColor = lerp(blendedColor, color3, noise2 * 0.7);
                         
                         baseColor = blendedColor;
                         

@@ -169,6 +169,7 @@ float BlueNoise(float2 p)
     // Multi-octave blue noise for smoother distribution
     float value = 0;
     float2 offset = float2(0, 0);
+    float totalWeight = 0;
     
     for (int i = 0; i < 3; i++)
     {
@@ -186,13 +187,17 @@ float BlueNoise(float2 p)
                 minDist = min(minDist, dist);
             }
         }
-        value += minDist * (1.0 / (i + 1));
+        float weight = 1.0 / (i + 1);
+        value += minDist * weight;
+        totalWeight += weight;
         offset += r * 17.0;
         p *= 1.5;
     }
     
-    return saturate(value * 0.7);
+    // Normalize to full 0-1 range (removed * 0.7 which was causing dark output)
+    return saturate(value / totalWeight);
 }
+
 
 // Cluster Noise - creates natural grass clump/patch patterns
 // Mimics how grass naturally grows in clusters
