@@ -331,7 +331,7 @@ Shader "GrassSystem/GrassUnlit"
                     return half4(finalColor, 1.0);
                 }
                 
-                // Mode 1: Tint - TopTint/BottomTint gradient
+                // Mode 1: Tint - TopTint/BottomTint gradient (PURE colors, no effects)
                 else if (_ColorMode < 1.5)
                 {
                     baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
@@ -341,6 +341,28 @@ Shader "GrassSystem/GrassUnlit"
                     {
                         baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
                     }
+                    
+                    // Decal projection (optional overlay)
+                    if (_DecalEnabled > 0.5)
+                    {
+                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
+                        float cosR = cos(-_DecalRotation);
+                        float sinR = sin(-_DecalRotation);
+                        float2 rotatedPos = float2(
+                            relPos.x * cosR - relPos.y * sinR,
+                            relPos.x * sinR + relPos.y * cosR
+                        );
+                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
+                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                        {
+                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
+                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                        }
+                    }
+                    
+                    // Apply fog only, no depth perception effects
+                    half3 finalColor = MixFog(baseColor, input.fogFactor);
+                    return half4(finalColor, 1.0);
                 }
                 // Mode 2: Patterns - Stripes/Checkerboard/NaturalBlend
                 else
@@ -434,50 +456,29 @@ Shader "GrassSystem/GrassUnlit"
                             baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
                         }
                     }
-                }
-                
-                // === EFFECTS (for all color modes) ===
-                
-                // Decal projection
-                if (_DecalEnabled > 0.5)
-                {
-                    float2 relPos = input.positionWS.xz - _DecalBounds.xy;
-                    float cosR = cos(-_DecalRotation);
-                    float sinR = sin(-_DecalRotation);
-                    float2 rotatedPos = float2(
-                        relPos.x * cosR - relPos.y * sinR,
-                        relPos.x * sinR + relPos.y * cosR
-                    );
-                    float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
-                    if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                    
+                    // Decal projection (optional overlay)
+                    if (_DecalEnabled > 0.5)
                     {
-                        half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                        baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
+                        float cosR = cos(-_DecalRotation);
+                        float sinR = sin(-_DecalRotation);
+                        float2 rotatedPos = float2(
+                            relPos.x * cosR - relPos.y * sinR,
+                            relPos.x * sinR + relPos.y * cosR
+                        );
+                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
+                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                        {
+                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
+                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                        }
                     }
+                    
+                    // Apply fog only, no depth perception effects
+                    half3 finalColor = MixFog(baseColor, input.fogFactor);
+                    return half4(finalColor, 1.0);
                 }
-                
-                // Light Probes (Spherical Harmonics)
-                half3 ambient = SampleSH(input.normalWS) * _LightProbeInfluence;
-                ambient = max(ambient, 0.1);
-                ambient *= _AmbientBoost;
-                
-                // Depth Perception Effects
-                half instanceOffset = (input.instanceVariation - 0.5) * 2.0 * _InstanceColorVariation;
-                baseColor *= (1.0 + instanceOffset);
-                
-                half heightFactor = saturate(input.uv.y);
-                half heightDark = lerp(1.0 - _HeightDarkening, 1.0, heightFactor * heightFactor);
-                baseColor *= heightDark;
-                
-                if (!isFrontFace)
-                {
-                    baseColor *= (1.0 - _BackfaceDarkening);
-                }
-                
-                half3 finalColor = baseColor * ambient;
-                finalColor = MixFog(finalColor, input.fogFactor);
-                
-                return half4(finalColor, 1.0);
             }
             ENDHLSL
         }

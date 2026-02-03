@@ -392,7 +392,7 @@ Shader "GrassSystem/GrassLit"
                     return color;
                 }
                 
-                // Mode 1: Tint - TopTint/BottomTint gradient
+                // Mode 1: Tint - TopTint/BottomTint gradient (PURE colors, PBR only)
                 else if (_ColorMode < 1.5)
                 {
                     baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
@@ -411,6 +411,46 @@ Shader "GrassSystem/GrassLit"
                     {
                         baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
                     }
+                    
+                    // Decal projection (optional overlay)
+                    if (_DecalEnabled > 0.5)
+                    {
+                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
+                        float cosR = cos(-_DecalRotation);
+                        float sinR = sin(-_DecalRotation);
+                        float2 rotatedPos = float2(
+                            relPos.x * cosR - relPos.y * sinR,
+                            relPos.x * sinR + relPos.y * cosR
+                        );
+                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
+                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                        {
+                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
+                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                        }
+                    }
+                    
+                    // Pure PBR lighting, no extra effects
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = input.positionWS;
+                    inputData.normalWS = normalize(normalWS);
+                    inputData.viewDirectionWS = normalize(input.viewDirWS);
+                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                    inputData.fogCoord = input.fogFactor;
+                    inputData.bakedGI = SampleSH(inputData.normalWS);
+                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
+                    
+                    SurfaceData surfaceData = (SurfaceData)0;
+                    surfaceData.albedo = baseColor;
+                    surfaceData.alpha = 1.0;
+                    surfaceData.metallic = 0;
+                    surfaceData.smoothness = 0.1;
+                    surfaceData.normalTS = normalTS;
+                    surfaceData.occlusion = 1;
+                    
+                    half4 color = UniversalFragmentPBR(inputData, surfaceData);
+                    color.rgb = MixFog(color.rgb, input.fogFactor);
+                    return color;
                 }
                 // Mode 2: Patterns - Stripes/Checkerboard/NaturalBlend
                 else
@@ -505,7 +545,7 @@ Shader "GrassSystem/GrassLit"
                         }
                     }
                     
-                    // Terrain lightmap for patterns
+                    // Terrain lightmap for patterns (optional)
                     if (_UseTerrainLightmap > 0.5)
                     {
                         float2 terrainUV = (input.positionWS.xz - _TerrainPosition.xz) / _TerrainSize.xz;
@@ -513,55 +553,47 @@ Shader "GrassSystem/GrassLit"
                         half3 terrainLight = SAMPLE_TEXTURE2D(_TerrainLightmap, sampler_TerrainLightmap, terrainUV).rgb;
                         baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                     }
-                }
-                
-                // === EFFECTS (for all color modes) ===
-                
-                // Decal projection
-                if (_DecalEnabled > 0.5)
-                {
-                    float2 relPos = input.positionWS.xz - _DecalBounds.xy;
-                    float cosR = cos(-_DecalRotation);
-                    float sinR = sin(-_DecalRotation);
-                    float2 rotatedPos = float2(
-                        relPos.x * cosR - relPos.y * sinR,
-                        relPos.x * sinR + relPos.y * cosR
-                    );
-                    float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
-                    if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                    
+                    // Decal projection (optional overlay)
+                    if (_DecalEnabled > 0.5)
                     {
-                        half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                        baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
+                        float cosR = cos(-_DecalRotation);
+                        float sinR = sin(-_DecalRotation);
+                        float2 rotatedPos = float2(
+                            relPos.x * cosR - relPos.y * sinR,
+                            relPos.x * sinR + relPos.y * cosR
+                        );
+                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
+                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
+                        {
+                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
+                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                        }
                     }
+                    
+                    // Pure PBR lighting, no extra effects
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = input.positionWS;
+                    inputData.normalWS = normalize(normalWS);
+                    inputData.viewDirectionWS = normalize(input.viewDirWS);
+                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                    inputData.fogCoord = input.fogFactor;
+                    inputData.bakedGI = SampleSH(inputData.normalWS);
+                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
+                    
+                    SurfaceData surfaceData = (SurfaceData)0;
+                    surfaceData.albedo = baseColor;
+                    surfaceData.alpha = 1.0;
+                    surfaceData.metallic = 0;
+                    surfaceData.smoothness = 0.1;
+                    surfaceData.normalTS = normalTS;
+                    surfaceData.occlusion = 1;
+                    
+                    half4 color = UniversalFragmentPBR(inputData, surfaceData);
+                    color.rgb = MixFog(color.rgb, input.fogFactor);
+                    return color;
                 }
-                
-                InputData inputData = (InputData)0;
-                inputData.positionWS = input.positionWS;
-                inputData.normalWS = normalize(normalWS);
-                inputData.viewDirectionWS = normalize(input.viewDirWS);
-                inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
-                inputData.fogCoord = input.fogFactor;
-                inputData.bakedGI = SampleSH(inputData.normalWS);
-                inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
-                
-                SurfaceData surfaceData = (SurfaceData)0;
-                surfaceData.albedo = baseColor;
-                surfaceData.alpha = 1.0;
-                surfaceData.metallic = 0;
-                surfaceData.smoothness = 0.1;
-                surfaceData.normalTS = normalTS;
-                surfaceData.occlusion = 1;
-                
-                half4 color = UniversalFragmentPBR(inputData, surfaceData);
-                
-                Light mainLight = GetMainLight(inputData.shadowCoord);
-                float NdotL = dot(inputData.normalWS, mainLight.direction);
-                float translucencyFactor = saturate(-NdotL) * _Translucency;
-                color.rgb += mainLight.color * translucencyFactor * baseColor * 0.5;
-                
-                color.rgb = MixFog(color.rgb, input.fogFactor);
-                
-                return color;
             }
             ENDHLSL
         }
