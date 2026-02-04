@@ -334,7 +334,8 @@ Shader "GrassSystem/GrassUnlit"
                         if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
                         {
                             half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                            half3 decalBlended = baseColor * decalColor.rgb * 2.0;
+                            baseColor = lerp(baseColor, decalBlended, decalColor.a * _DecalBlend);
                         }
                     }
                     
@@ -368,7 +369,8 @@ Shader "GrassSystem/GrassUnlit"
                         if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
                         {
                             half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                            half3 decalBlended = baseColor * decalColor.rgb * 2.0;
+                            baseColor = lerp(baseColor, decalBlended, decalColor.a * _DecalBlend);
                         }
                     }
                     
@@ -496,7 +498,8 @@ Shader "GrassSystem/GrassUnlit"
                         if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
                         {
                             half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                            baseColor = lerp(baseColor, decalColor.rgb, decalColor.a * _DecalBlend);
+                            half3 decalBlended = baseColor * decalColor.rgb * 2.0;
+                            baseColor = lerp(baseColor, decalBlended, decalColor.a * _DecalBlend);
                         }
                     }
                     
