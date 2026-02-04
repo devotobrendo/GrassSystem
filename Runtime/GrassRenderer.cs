@@ -606,16 +606,22 @@ namespace GrassSystem
         }
         
         private Camera GetCurrentCamera()
-        {
-            #if UNITY_EDITOR
-            if (!Application.isPlaying)
-            {
-                var sceneView = UnityEditor.SceneView.lastActiveSceneView;
-                return sceneView?.camera;
-            }
-            #endif
-            return Camera.main;
-        }
+{
+    #if UNITY_EDITOR
+    if (!Application.isPlaying)
+    {
+        var sceneView = UnityEditor.SceneView.lastActiveSceneView;
+        return sceneView?.camera;
+    }
+    #endif
+    
+    // Try Camera.main first (requires "MainCamera" tag)
+    if (Camera.main != null)
+        return Camera.main;
+    
+    // Fallback: find any active camera if Main is missing
+    return Camera.allCameras.Length > 0 ? Camera.allCameras[0] : null;
+}
         
         private void UpdateCulling(Camera cam)
         {
