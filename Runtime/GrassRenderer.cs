@@ -87,15 +87,52 @@ namespace GrassSystem
         
         /// <summary>
         /// Force cleans up and reinitializes all rendering resources.
+        /// If local data is empty, attempts to recover from external asset.
         /// Use this when grass is not rendering correctly.
         /// </summary>
         [ContextMenu("Force Reinitialize")]
         public void ForceReinitialize()
         {
             Cleanup();
+            
+            // Attempt to recover from external asset if local data is empty
+            if (grassData.Count == 0 && externalDataAsset != null && externalDataAsset.InstanceCount > 0)
+            {
+                Debug.Log($"GrassRenderer: Recovering {externalDataAsset.InstanceCount:N0} instances from external asset.", this);
+                grassData = externalDataAsset.LoadData();
+            }
+            
             if (grassData.Count > 0)
                 Initialize();
+            
             Debug.Log($"GrassRenderer: Reinitialized. instances={grassData.Count}, isInitialized={isInitialized}", this);
+        }
+        
+        /// <summary>
+        /// Checks if all GPU buffers are valid and ready for rendering.
+        /// Returns false if any buffer is null or invalid (indicating corruption).
+        /// </summary>
+        public bool AreBuffersValid()
+        {
+            if (!isInitialized) return false;
+            
+            bool buffersValid = sourceBuffer != null && sourceBuffer.IsValid() &&
+                         visibleBuffer != null && visibleBuffer.IsValid() &&
+                         argsBuffer != null && argsBuffer.IsValid();
+            
+            bool materialValid = materialInstance != null && cachedMesh != null && settings != null;
+            
+            // Also check if the grass buffer is still bound to the material
+            // After scene changes, the material can lose its buffer binding
+            if (materialValid && buffersValid)
+            {
+                // Check if material has lost its buffer (this happens on scene unload)
+                // We verify by checking if the material's shader is still valid
+                if (materialInstance.shader == null)
+                    return false;
+            }
+            
+            return buffersValid && materialValid;
         }
         
         /// <summary>
@@ -219,7 +256,8 @@ namespace GrassSystem
             }
             
             string sceneName = gameObject.scene.name;
-            externalDataAsset.SaveData(grassData, sceneName);
+            // Save both data and settings reference for proper restoration
+            externalDataAsset.SaveData(grassData, sceneName, settings);
             
             Debug.Log($"GrassRenderer: Saved {grassData.Count:N0} grass instances to {externalDataAsset.name}", this);
             return true;
@@ -238,8 +276,22 @@ namespace GrassSystem
                 return false;
             }
             
+            // If the asset has associated settings, use them
+            if (externalDataAsset.AssociatedSettings != null)
+            {
+                settings = externalDataAsset.AssociatedSettings;
+            }
+            
+            // Load data and force full reinitialization to ensure material is properly created
             grassData = externalDataAsset.LoadData();
-            RebuildBuffers();
+            
+            // Use ForceReinitialize to ensure complete cleanup and material recreation
+            Cleanup();
+            if (grassData.Count > 0)
+                Initialize();
+            
+            // Force apply settings to ensure colors are correct
+            ApplySettingsToMaterial();
             
             Debug.Log($"GrassRenderer: Loaded {grassData.Count:N0} grass instances from {externalDataAsset.name}", this);
             return true;
@@ -290,6 +342,14 @@ namespace GrassSystem
             {
                 Initialize();
                 needsReinitAfterDeserialize = false;
+            }
+            
+            // Validate buffer state after initialization
+            // If buffers are corrupted (e.g., after crash/domain reload), auto-repair
+            if (isInitialized && !AreBuffersValid())
+            {
+                Debug.LogWarning("GrassRenderer: Detected corrupted buffers after enable. Auto-repairing...", this);
+                ForceReinitialize();
             }
         }
         
@@ -406,8 +466,26 @@ namespace GrassSystem
         {
             if (gameObject.scene == scene)
             {
+                // Our scene is being unloaded - cleanup
                 LogEvent($"OnSceneUnloaded ({scene.name})");
                 Cleanup();
+            }
+            else if (isInitialized)
+            {
+                // Another scene was unloaded - this can corrupt material state
+                // Always reapply settings to ensure colors remain correct
+                LogEvent($"OnSceneUnloaded ({scene.name}) - Reapplying material settings...");
+                
+                if (!AreBuffersValid())
+                {
+                    // Complete reinitialization needed
+                    ForceReinitialize();
+                }
+                else
+                {
+                    // Just refresh material settings (colors, etc.)
+                    ApplySettingsToMaterial();
+                }
             }
         }
         

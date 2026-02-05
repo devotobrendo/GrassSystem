@@ -78,28 +78,72 @@ namespace GrassSystem
                 // Show external asset info
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.LabelField($"Asset: {renderer.externalDataAsset.name}", EditorStyles.miniLabel);
-                EditorGUILayout.LabelField($"Instances: {renderer.externalDataAsset.InstanceCount:N0}", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField($"Asset Instances: {renderer.externalDataAsset.InstanceCount:N0}", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField($"Rendered Instances: {cachedGrassCount:N0}", EditorStyles.miniLabel);
                 if (!string.IsNullOrEmpty(renderer.externalDataAsset.LastSaveTime))
                     EditorGUILayout.LabelField($"Last Saved: {renderer.externalDataAsset.LastSaveTime}", EditorStyles.miniLabel);
                 EditorGUILayout.EndVertical();
                 
-                EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button("💾 Save to Asset"))
+                // Show warning if asset has data but renderer doesn't
+                if (renderer.externalDataAsset.InstanceCount > 0 && cachedGrassCount == 0)
                 {
-                    renderer.SaveToExternalAsset();
-                    AssetDatabase.SaveAssets();
-                }
-                if (GUILayout.Button("📂 Load from Asset"))
-                {
-                    if (EditorUtility.DisplayDialog("Load Grass Data", 
-                        "This will replace current grass data with data from the asset. Continue?", 
-                        "Yes, Load", "Cancel"))
+                    EditorGUILayout.HelpBox(
+                        "External asset has grass data but renderer is empty. Click 'Load from Asset' to display the grass.", 
+                        MessageType.Warning);
+                    
+                    GUI.backgroundColor = Color.green;
+                    if (GUILayout.Button("▶ Load from Asset", GUILayout.Height(30)))
                     {
                         renderer.LoadFromExternalAsset();
                         UpdateCachedCount();
                     }
+                    GUI.backgroundColor = Color.white;
                 }
-                EditorGUILayout.EndHorizontal();
+                else
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    if (GUILayout.Button("💾 Save + Backup"))
+                    {
+                        // Create backup BEFORE saving (keeps last good state)
+                        renderer.externalDataAsset.CreateBackup();
+                        renderer.SaveToExternalAsset();
+                        AssetDatabase.SaveAssets();
+                        // Force refresh material after save to prevent color reset
+                        renderer.ForceReinitialize();
+                    }
+                    if (GUILayout.Button("📂 Load from Asset"))
+                    {
+                        if (EditorUtility.DisplayDialog("Load Grass Data", 
+                            "This will replace current grass data with data from the asset. Continue?", 
+                            "Yes, Load", "Cancel"))
+                        {
+                            renderer.LoadFromExternalAsset();
+                            UpdateCachedCount();
+                        }
+                    }
+                    EditorGUILayout.EndHorizontal();
+                    
+                    // Show backup info and restore option
+                    if (renderer.externalDataAsset.HasBackup())
+                    {
+                        EditorGUILayout.BeginHorizontal();
+                        EditorGUILayout.LabelField(renderer.externalDataAsset.GetBackupInfo(), EditorStyles.miniLabel);
+                        if (GUILayout.Button("🔄 Restore from Backup", GUILayout.Width(140)))
+                        {
+                            if (EditorUtility.DisplayDialog("Restore from Backup", 
+                                "This will restore grass data from the last backup. Use if data is corrupted.", 
+                                "Yes, Restore", "Cancel"))
+                            {
+                                if (renderer.externalDataAsset.RestoreFromBackup())
+                                {
+                                    renderer.LoadFromExternalAsset();
+                                    UpdateCachedCount();
+                                }
+                            }
+                        }
+                        EditorGUILayout.EndHorizontal();
+                    }
+                }
             }
             else
             {
@@ -142,24 +186,19 @@ namespace GrassSystem
             EditorGUILayout.LabelField("Actions", EditorStyles.boldLabel);
             
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Rebuild Buffers"))
-            {
-                renderer.RebuildBuffers();
-                UpdateCachedCount();
-            }
-            if (GUILayout.Button("Force Reinitialize"))
+            // Force Reinitialize now includes recovery from external asset - replaces old Rebuild Buffers
+            if (GUILayout.Button("🔧 Force Reinitialize"))
             {
                 renderer.ForceReinitialize();
                 UpdateCachedCount();
             }
-            EditorGUILayout.EndHorizontal();
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Diagnose Issues"))
+            if (GUILayout.Button("🔍 Diagnose Issues"))
             {
                 renderer.DiagnoseRenderingIssues();
             }
-            if (GUILayout.Button("Clear All Grass"))
+            EditorGUILayout.EndHorizontal();
+            
+            if (GUILayout.Button("🗑 Clear All Grass"))
             {
                 if (EditorUtility.DisplayDialog("Clear Grass", 
                     $"Are you sure you want to delete {cachedGrassCount:N0} grass instances?", 
@@ -170,7 +209,6 @@ namespace GrassSystem
                     UpdateCachedCount();
                 }
             }
-            EditorGUILayout.EndHorizontal();
             
             EditorGUILayout.Space(10);
             

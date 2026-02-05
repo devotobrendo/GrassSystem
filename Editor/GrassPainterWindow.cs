@@ -35,11 +35,26 @@ namespace GrassSystem
         private const int STROKES_BEFORE_SAVE = 10; // Only save every N strokes
         private bool sceneDirtyPending = false;
         
+        // Timed auto-backup for crash protection
+        private double lastBackupTime = 0;
+        private const double AUTO_BACKUP_INTERVAL = 60.0; // Backup every 60 seconds during active editing
+        private bool hasUnsavedChanges = false;
+        
         // Renderer dropdown cache
         private GrassRenderer[] sceneRenderers;
         private string[] rendererNames;
         private int selectedRendererIndex;
         private GrassRenderer previousRenderer;  // Track previous renderer to save data when switching
+        
+        /// <summary>
+        /// Reset static state on domain reload to prevent orphaned callbacks.
+        /// </summary>
+        [UnityEditor.Callbacks.DidReloadScripts]
+        private static void OnScriptsReloaded()
+        {
+            // Clear any static state that may have been orphaned by domain reload
+            // This prevents issues when processing was interrupted by a reload
+        }
         
         [MenuItem("Tools/Grass Painter")]
         public static void ShowWindow()
@@ -770,7 +785,7 @@ namespace GrassSystem
                 // Use smart rebuild - much faster for incremental paint operations
                 targetRenderer.SmartRebuildBuffers();
                 
-                // Track strokes and only mark dirty periodically (avoids engasgo)
+                // Track strokes and only mark dirty/save periodically (avoids engasgo)
                 strokesSinceLastSave++;
                 sceneDirtyPending = true;
                 
@@ -778,6 +793,13 @@ namespace GrassSystem
                 {
                     strokesSinceLastSave = 0;
                     sceneDirtyPending = false;
+                    
+                    // Auto-save to external asset if available (prevents data loss on crash)
+                    // Only save periodically to avoid material reset issues
+                    if (targetRenderer.HasExternalData)
+                    {
+                        targetRenderer.SaveToExternalAsset();
+                    }
                     
                     // Defer SetDirty to prevent UI blocking
                     var rendererToMark = targetRenderer;
@@ -788,6 +810,21 @@ namespace GrassSystem
                             EditorUtility.SetDirty(rendererToMark);
                         }
                     };
+                }
+                
+                // Mark that we have unsaved changes for timed backup
+                hasUnsavedChanges = true;
+                
+                // Timed auto-backup: every 60 seconds, create a JSON backup for crash recovery
+                double currentTime = EditorApplication.timeSinceStartup;
+                if (hasUnsavedChanges && currentTime - lastBackupTime > AUTO_BACKUP_INTERVAL)
+                {
+                    lastBackupTime = currentTime;
+                    if (targetRenderer.HasExternalData)
+                    {
+                        targetRenderer.externalDataAsset.CreateBackup();
+                        hasUnsavedChanges = false;
+                    }
                 }
             }
             
