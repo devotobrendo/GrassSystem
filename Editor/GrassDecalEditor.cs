@@ -15,7 +15,10 @@ namespace GrassSystem
         
         private SerializedProperty decalTexture;
         private SerializedProperty size;
+        private SerializedProperty rotation;
         private SerializedProperty blend;
+        private SerializedProperty layer;
+        private SerializedProperty blendMode;
         private SerializedProperty targetRenderers;
         private SerializedProperty autoFindAll;
         
@@ -23,7 +26,10 @@ namespace GrassSystem
         {
             decalTexture = serializedObject.FindProperty("decalTexture");
             size = serializedObject.FindProperty("size");
+            rotation = serializedObject.FindProperty("rotation");
             blend = serializedObject.FindProperty("blend");
+            layer = serializedObject.FindProperty("layer");
+            blendMode = serializedObject.FindProperty("blendMode");
             targetRenderers = serializedObject.FindProperty("targetRenderers");
             autoFindAll = serializedObject.FindProperty("autoFindAll");
             
@@ -53,7 +59,12 @@ namespace GrassSystem
             EditorGUILayout.LabelField("Decal Settings", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(decalTexture);
             EditorGUILayout.PropertyField(size);
+            EditorGUILayout.PropertyField(rotation, new GUIContent("Rotation", "Rotation of the decal texture in degrees (0-360)"));
             EditorGUILayout.PropertyField(blend);
+            
+            EditorGUILayout.Space(5);
+            EditorGUILayout.PropertyField(layer, new GUIContent("Layer", "Higher layers override lower layers in overlapping areas"));
+            EditorGUILayout.PropertyField(blendMode, new GUIContent("Blend Mode", "How the decal color is combined with the base color"));
             
             EditorGUILayout.Space(10);
             

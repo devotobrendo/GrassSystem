@@ -69,12 +69,45 @@ Shader "GrassSystem/GrassLit"
         _MaxTiltAngle ("Max Tilt Angle (Radians)", Float) = 0.26
         _TiltVariation ("Tilt Variation", Range(0, 1)) = 0.7
         
-        [Header(Decal Projection)]
-        [Toggle] _DecalEnabled ("Enable Decal", Float) = 0
-        _DecalTex ("Decal Texture", 2D) = "white" {}
-        _DecalBounds ("Decal Bounds (centerX, centerZ, sizeX, sizeZ)", Vector) = (0, 0, 10, 10)
-        _DecalRotation ("Decal Rotation (radians)", Float) = 0
-        _DecalBlend ("Decal Blend", Range(0, 1)) = 1
+        [Header(Decal Layer 1)]
+        [Toggle] _DecalEnabled ("Enable Decal 1", Float) = 0
+        _DecalTex ("Decal 1 Texture", 2D) = "white" {}
+        _DecalBounds ("Decal 1 Bounds", Vector) = (0, 0, 10, 10)
+        _DecalRotation ("Decal 1 Rotation", Float) = 0
+        _DecalBlend ("Decal 1 Blend", Range(0, 1)) = 1
+        [Enum(Override,0,Multiply,1,Additive,2)] _DecalBlendMode ("Decal 1 Blend Mode", Float) = 0
+        
+        [Header(Decal Layer 2)]
+        [Toggle] _Decal2Enabled ("Enable Decal 2", Float) = 0
+        _Decal2Tex ("Decal 2 Texture", 2D) = "white" {}
+        _Decal2Bounds ("Decal 2 Bounds", Vector) = (0, 0, 10, 10)
+        _Decal2Rotation ("Decal 2 Rotation", Float) = 0
+        _Decal2Blend ("Decal 2 Blend", Range(0, 1)) = 1
+        [Enum(Override,0,Multiply,1,Additive,2)] _Decal2BlendMode ("Decal 2 Blend Mode", Float) = 0
+        
+        [Header(Decal Layer 3)]
+        [Toggle] _Decal3Enabled ("Enable Decal 3", Float) = 0
+        _Decal3Tex ("Decal 3 Texture", 2D) = "white" {}
+        _Decal3Bounds ("Decal 3 Bounds", Vector) = (0, 0, 10, 10)
+        _Decal3Rotation ("Decal 3 Rotation", Float) = 0
+        _Decal3Blend ("Decal 3 Blend", Range(0, 1)) = 1
+        [Enum(Override,0,Multiply,1,Additive,2)] _Decal3BlendMode ("Decal 3 Blend Mode", Float) = 0
+        
+        [Header(Decal Layer 4)]
+        [Toggle] _Decal4Enabled ("Enable Decal 4", Float) = 0
+        _Decal4Tex ("Decal 4 Texture", 2D) = "white" {}
+        _Decal4Bounds ("Decal 4 Bounds", Vector) = (0, 0, 10, 10)
+        _Decal4Rotation ("Decal 4 Rotation", Float) = 0
+        _Decal4Blend ("Decal 4 Blend", Range(0, 1)) = 1
+        [Enum(Override,0,Multiply,1,Additive,2)] _Decal4BlendMode ("Decal 4 Blend Mode", Float) = 0
+        
+        [Header(Decal Layer 5)]
+        [Toggle] _Decal5Enabled ("Enable Decal 5", Float) = 0
+        _Decal5Tex ("Decal 5 Texture", 2D) = "white" {}
+        _Decal5Bounds ("Decal 5 Bounds", Vector) = (0, 0, 10, 10)
+        _Decal5Rotation ("Decal 5 Rotation", Float) = 0
+        _Decal5Blend ("Decal 5 Blend", Range(0, 1)) = 1
+        [Enum(Override,0,Multiply,1,Additive,2)] _Decal5BlendMode ("Decal 5 Blend Mode", Float) = 0
     }
     
     SubShader
@@ -116,11 +149,19 @@ Shader "GrassSystem/GrassLit"
             TEXTURE2D(_TipMask);
             TEXTURE2D(_TerrainLightmap);
             TEXTURE2D(_DecalTex);
+            TEXTURE2D(_Decal2Tex);
+            TEXTURE2D(_Decal3Tex);
+            TEXTURE2D(_Decal4Tex);
+            TEXTURE2D(_Decal5Tex);
             SAMPLER(sampler_MainTex);
             SAMPLER(sampler_NormalMap);
             SAMPLER(sampler_TipMask);
             SAMPLER(sampler_TerrainLightmap);
             SAMPLER(sampler_DecalTex);
+            SAMPLER(sampler_Decal2Tex);
+            SAMPLER(sampler_Decal3Tex);
+            SAMPLER(sampler_Decal4Tex);
+            SAMPLER(sampler_Decal5Tex);
             
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
@@ -179,10 +220,38 @@ Shader "GrassSystem/GrassLit"
                 float _MaxTiltAngle;
                 float _TiltVariation;
                 float _MaxBendAngle;
+                // Decal Layer 1
                 float _DecalEnabled;
                 float4 _DecalBounds;
                 float _DecalRotation;
                 float _DecalBlend;
+                float _DecalBlendMode;
+                
+                // Decal Layer 2
+                float _Decal2Enabled;
+                float4 _Decal2Bounds;
+                float _Decal2Rotation;
+                float _Decal2Blend;
+                float _Decal2BlendMode;
+                
+                // Decal Layer 3
+                float _Decal3Enabled;
+                float4 _Decal3Bounds;
+                float _Decal3Rotation;
+                float _Decal3Blend;
+                float _Decal3BlendMode;
+                // Decal Layer 4
+                float _Decal4Enabled;
+                float4 _Decal4Bounds;
+                float _Decal4Rotation;
+                float _Decal4Blend;
+                float _Decal4BlendMode;
+                // Decal Layer 5
+                float _Decal5Enabled;
+                float4 _Decal5Bounds;
+                float _Decal5Rotation;
+                float _Decal5Blend;
+                float _Decal5BlendMode;
             CBUFFER_END
             
             struct Attributes
@@ -363,24 +432,32 @@ Shader "GrassSystem/GrassLit"
                 {
                     baseColor = albedoTex.rgb;
                     
-                    // Decal projection (optional overlay)
-                    if (_DecalEnabled > 0.5)
-                    {
-                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
-                        float cosR = cos(-_DecalRotation);
-                        float sinR = sin(-_DecalRotation);
-                        float2 rotatedPos = float2(
-                            relPos.x * cosR - relPos.y * sinR,
-                            relPos.x * sinR + relPos.y * cosR
-                        );
-                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
-                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
-                        {
-                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                            half3 decalBlended = baseColor * decalColor.rgb * 2.0;
-                            baseColor = lerp(baseColor, decalBlended, decalColor.a * _DecalBlend);
-                        }
-                    }
+                    // Multi-layer decal projection (Layer 1 -> 5, last wins)
+                    float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
+                    float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
+                    float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
+                    float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
+                    float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
+                    
+                    half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
+                    half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
+                    half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
+                    half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
+                    half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
+                    
+                    DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
+                    DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
+                    DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
+                    DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
+                    DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
+                    
+                    // Preserve albedo texture variation by multiplying decal result with albedo luminance
+                    // This keeps the leaf shape/texture visible even when decal overrides color
+                    float anyDecalApplied = saturate(d1.applied + d2.applied + d3.applied + d4.applied + d5.applied);
+                    half albedoLuma = dot(albedoTex.rgb, half3(0.299, 0.587, 0.114));
+                    // Normalize luma to center around 1.0 so multiply doesn't darken too much
+                    half lumaFactor = lerp(1.0, albedoLuma * 2.0, 0.5);
+                    baseColor = lerp(d5.color, d5.color * lumaFactor, anyDecalApplied);
                     
                     // Pure PBR lighting, no depth effects
                     InputData inputData = (InputData)0;
@@ -425,24 +502,25 @@ Shader "GrassSystem/GrassLit"
                         baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
                     }
                     
-                    // Decal projection (optional overlay)
-                    if (_DecalEnabled > 0.5)
-                    {
-                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
-                        float cosR = cos(-_DecalRotation);
-                        float sinR = sin(-_DecalRotation);
-                        float2 rotatedPos = float2(
-                            relPos.x * cosR - relPos.y * sinR,
-                            relPos.x * sinR + relPos.y * cosR
-                        );
-                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
-                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
-                        {
-                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                            half3 decalBlended = baseColor * decalColor.rgb * 2.0;
-                            baseColor = lerp(baseColor, decalBlended, decalColor.a * _DecalBlend);
-                        }
-                    }
+                    // Multi-layer decal projection (Layer 1 -> 5, last wins)
+                    float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
+                    float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
+                    float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
+                    float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
+                    float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
+                    
+                    half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
+                    half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
+                    half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
+                    half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
+                    half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
+                    
+                    DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
+                    DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
+                    DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
+                    DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
+                    DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
+                    baseColor = d5.color;
                     
                     // Pure PBR lighting, no extra effects
                     InputData inputData = (InputData)0;
@@ -581,24 +659,25 @@ Shader "GrassSystem/GrassLit"
                         baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                     }
                     
-                    // Decal projection (optional overlay)
-                    if (_DecalEnabled > 0.5)
-                    {
-                        float2 relPos = input.positionWS.xz - _DecalBounds.xy;
-                        float cosR = cos(-_DecalRotation);
-                        float sinR = sin(-_DecalRotation);
-                        float2 rotatedPos = float2(
-                            relPos.x * cosR - relPos.y * sinR,
-                            relPos.x * sinR + relPos.y * cosR
-                        );
-                        float2 decalUV = rotatedPos / _DecalBounds.zw + 0.5;
-                        if (decalUV.x >= 0 && decalUV.x <= 1 && decalUV.y >= 0 && decalUV.y <= 1)
-                        {
-                            half4 decalColor = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decalUV);
-                            half3 decalBlended = baseColor * decalColor.rgb * 2.0;
-                            baseColor = lerp(baseColor, decalBlended, decalColor.a * _DecalBlend);
-                        }
-                    }
+                    // Multi-layer decal projection (Layer 1 -> 5, last wins)
+                    float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
+                    float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
+                    float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
+                    float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
+                    float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
+                    
+                    half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
+                    half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
+                    half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
+                    half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
+                    half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
+                    
+                    DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
+                    DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
+                    DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
+                    DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
+                    DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
+                    baseColor = d5.color;
                     
                     // Pure PBR lighting, no extra effects
                     InputData inputData = (InputData)0;

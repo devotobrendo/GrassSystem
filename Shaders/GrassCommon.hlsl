@@ -560,4 +560,96 @@ float CalculateTipCutout(float uvY, float cutoffHeight)
     return step(uvY, cutoffHeight);
 }
 
+// =====================================================
+// MULTI-LAYER DECAL SYSTEM
+// Supports 3 decal layers with priority overwrite
+// BlendMode: 0=Override, 1=Multiply, 2=Additive
+// =====================================================
+
+struct DecalResult
+{
+    half3 color;
+    float applied; // 1.0 if decal was applied, 0.0 otherwise
+};
+
+// Calculate decal UV from world position and bounds
+// Returns UV in 0-1 range if inside bounds, otherwise outside range
+// UV mapping: texture U = world X (right), texture V = world Z (forward)
+float2 CalculateDecalUV(float3 worldPos, float4 bounds, float rotation)
+{
+    float2 relPos = worldPos.xz - bounds.xy;
+    // Use positive rotation to match Unity's Y-axis rotation direction
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    // Rotate relative position around center
+    // After rotation: U maps to rotated X, V maps to rotated Z
+    float2 rotatedPos = float2(
+        relPos.x * cosR - relPos.y * sinR,
+        relPos.x * sinR + relPos.y * cosR
+    );
+    // Flip V to align texture "up" with world forward (Z+)
+    // bounds.zw = (sizeX, sizeZ) so we need to match UV to correct axis
+    return float2(rotatedPos.x / bounds.z, -rotatedPos.y / bounds.w) + 0.5;
+}
+
+// Check if UV is within valid decal bounds (branchless)
+float IsInsideDecalBounds(float2 uv)
+{
+    // Returns 1.0 if inside [0,1] range, 0.0 otherwise
+    float2 inside = step(float2(0, 0), uv) * step(uv, float2(1, 1));
+    return inside.x * inside.y;
+}
+
+// Apply blend mode to decal color (branchless using lerp chain)
+// BlendMode: 0=Override, 1=Multiply, 2=Additive
+half3 ApplyDecalBlendMode(half3 baseColor, half3 decalColor, float blendMode)
+{
+    half3 overrideResult = decalColor;
+    half3 multiplyResult = baseColor * decalColor * 2.0;
+    half3 additiveResult = baseColor + decalColor;
+    
+    // Branchless selection: blendMode 0 -> override, 1 -> multiply, 2 -> additive
+    float isMultiply = step(0.5, blendMode) * step(blendMode, 1.5);
+    float isAdditive = step(1.5, blendMode);
+    float isOverride = 1.0 - isMultiply - isAdditive;
+    
+    return overrideResult * isOverride + multiplyResult * isMultiply + additiveResult * isAdditive;
+}
+
+// Apply a single decal layer to base color
+// Returns the blended color and whether this decal was applied
+DecalResult ApplyDecalLayer(
+    half3 baseColor,
+    float3 worldPos,
+    float enabled,
+    float4 bounds,
+    float rotation,
+    float blend,
+    float blendMode,
+    half4 decalSample,
+    float2 decalUV
+)
+{
+    DecalResult result;
+    result.color = baseColor;
+    result.applied = 0.0;
+    
+    // Early out mask (branchless)
+    float isEnabled = step(0.5, enabled);
+    float isInside = IsInsideDecalBounds(decalUV);
+    float hasAlpha = step(0.01, decalSample.a);
+    float shouldApply = isEnabled * isInside * hasAlpha;
+    
+    // Apply blend mode
+    half3 blendedColor = ApplyDecalBlendMode(baseColor, decalSample.rgb, blendMode);
+    
+    // Final lerp with alpha and blend strength
+    float finalBlend = shouldApply * decalSample.a * blend;
+    result.color = lerp(baseColor, blendedColor, finalBlend);
+    result.applied = shouldApply;
+    
+    return result;
+}
+
 #endif
+

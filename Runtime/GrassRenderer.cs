@@ -7,10 +7,14 @@ using UnityEngine.Rendering;
 namespace GrassSystem
 {
     [ExecuteAlways]
-    public class GrassRenderer : MonoBehaviour
+    public class GrassRenderer : MonoBehaviour, ISerializationCallbackReceiver
     {
         [Header("Settings")]
         public SO_GrassSettings settings;
+        
+        [Header("External Data (Optional)")]
+        [Tooltip("Optional: Store grass data in an external asset instead of the scene. Recommended for large grass counts.")]
+        public GrassDataAsset externalDataAsset;
         
         [Header("Grass Data")]
         [SerializeField, HideInInspector]
@@ -192,6 +196,75 @@ namespace GrassSystem
             Cleanup();
         }
         
+        // ========================================
+        // EXTERNAL DATA PERSISTENCE
+        // ========================================
+        
+        /// <summary>
+        /// Returns true if this renderer is using external data storage.
+        /// </summary>
+        public bool HasExternalData => externalDataAsset != null;
+        
+        /// <summary>
+        /// Saves current grass data to the external asset.
+        /// Does nothing if no external asset is assigned.
+        /// </summary>
+        /// <returns>True if save was successful.</returns>
+        public bool SaveToExternalAsset()
+        {
+            if (externalDataAsset == null)
+            {
+                Debug.LogWarning("GrassRenderer: No external data asset assigned.", this);
+                return false;
+            }
+            
+            string sceneName = gameObject.scene.name;
+            externalDataAsset.SaveData(grassData, sceneName);
+            
+            Debug.Log($"GrassRenderer: Saved {grassData.Count:N0} grass instances to {externalDataAsset.name}", this);
+            return true;
+        }
+        
+        /// <summary>
+        /// Loads grass data from the external asset.
+        /// Does nothing if no external asset is assigned.
+        /// </summary>
+        /// <returns>True if load was successful.</returns>
+        public bool LoadFromExternalAsset()
+        {
+            if (externalDataAsset == null)
+            {
+                Debug.LogWarning("GrassRenderer: No external data asset assigned.", this);
+                return false;
+            }
+            
+            grassData = externalDataAsset.LoadData();
+            RebuildBuffers();
+            
+            Debug.Log($"GrassRenderer: Loaded {grassData.Count:N0} grass instances from {externalDataAsset.name}", this);
+            return true;
+        }
+        
+        /// <summary>
+        /// Syncs data between embedded storage and external asset.
+        /// If external asset has data and embedded is empty, loads from external.
+        /// </summary>
+        public void SyncWithExternalAsset()
+        {
+            if (externalDataAsset == null) return;
+            
+            // If we have external data but no embedded data, load from external
+            if (externalDataAsset.InstanceCount > 0 && grassData.Count == 0)
+            {
+                LoadFromExternalAsset();
+            }
+            // If we have embedded data, save to external
+            else if (grassData.Count > 0)
+            {
+                SaveToExternalAsset();
+            }
+        }
+        
         private void OnEnable()
         {
             LogEvent("OnEnable");
@@ -205,8 +278,19 @@ namespace GrassSystem
             #endif
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
             
-            if (grassData.Count > 0)
+            // Initialize if we have data (either from painting or from deserialization/prefab)
+            // Priority: external asset > embedded data
+            if (externalDataAsset != null && externalDataAsset.InstanceCount > 0)
+            {
+                // Load from external asset (preferred)
+                grassData = externalDataAsset.LoadData();
                 Initialize();
+            }
+            else if (grassData.Count > 0 || needsReinitAfterDeserialize)
+            {
+                Initialize();
+                needsReinitAfterDeserialize = false;
+            }
         }
         
         private void OnDisable()
@@ -720,6 +804,33 @@ namespace GrassSystem
                 Gizmos.color = new Color(0, 1, 0, 0.3f);
                 Gizmos.DrawWireCube(renderBounds.center, renderBounds.size);
             }
+        }
+        
+        // ========================================
+        // SERIALIZATION CALLBACKS FOR PREFAB SUPPORT
+        // ========================================
+        
+        // Track if we need to reinitialize after deserialization
+        private bool needsReinitAfterDeserialize = false;
+        
+        /// <summary>
+        /// Called before Unity serializes this object.
+        /// Used for prefab saving and scene saving.
+        /// </summary>
+        public void OnBeforeSerialize()
+        {
+            // No special handling needed - grassData is already marked [SerializeField]
+        }
+        
+        /// <summary>
+        /// Called after Unity deserializes this object.
+        /// Ensures grass is properly initialized when loading scenes or instantiating prefabs.
+        /// </summary>
+        public void OnAfterDeserialize()
+        {
+            // Mark for reinitialization on next Update/OnEnable
+            // We can't call Initialize() here because Unity is in the middle of deserialization
+            needsReinitAfterDeserialize = grassData != null && grassData.Count > 0;
         }
     }
 }
