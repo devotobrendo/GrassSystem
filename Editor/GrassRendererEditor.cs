@@ -254,6 +254,36 @@ namespace GrassSystem
             }
             EditorGUILayout.EndHorizontal();
             
+            // Version Control Optimization - only show when using external asset and has embedded data
+            if (renderer.externalDataAsset != null && cachedGrassCount > 0)
+            {
+                EditorGUILayout.Space(5);
+                GUI.backgroundColor = new Color(0.6f, 0.8f, 1f); // Light blue
+                if (GUILayout.Button("📦 Optimize for Version Control", GUILayout.Height(25)))
+                {
+                    if (EditorUtility.DisplayDialog("Optimize for VCS", 
+                        $"This will:\n" +
+                        $"1. Save {cachedGrassCount:N0} instances to external asset\n" +
+                        $"2. Clear embedded data from this component\n\n" +
+                        $"This reduces scene/prefab file size significantly.\n" +
+                        $"The grass will still work - it loads from the asset file.\n\n" +
+                        $"Continue?", 
+                        "Yes, Optimize", "Cancel"))
+                    {
+                        if (renderer.ClearEmbeddedDataForVersionControl())
+                        {
+                            EditorUtility.SetDirty(renderer);
+                            AssetDatabase.SaveAssets();
+                            UpdateCachedCount();
+                        }
+                    }
+                }
+                GUI.backgroundColor = Color.white;
+                EditorGUILayout.HelpBox(
+                    "Clear embedded data to reduce scene/prefab file size. Data is kept in external asset.", 
+                    MessageType.None);
+            }
+            
             if (GUILayout.Button("🗑 Clear All Grass"))
             {
                 if (EditorUtility.DisplayDialog("Clear Grass", 

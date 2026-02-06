@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.4] - 2026-02-06
+
+### Fixed
+- **Critical: Data Loss After Load** - Fixed `OnBeforeSerialize` clearing data immediately after load
+  - Unity calls `OnBeforeSerialize` frequently (not just on save), causing data loss
+  - Removed automatic clear; optimization is now explicit via button
+  
+### Added
+- **"Optimize for Version Control" Button** - Explicitly clear embedded data to reduce file size
+  - Shows only when external asset is configured and renderer has embedded data
+  - Confirmation dialog explains what will happen
+  - Data is safely stored in external asset before clearing
+
 ## [4.0.3] - 2026-02-06
 
 ### Added
