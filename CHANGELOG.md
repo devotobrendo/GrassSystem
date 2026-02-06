@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.3] - 2026-02-06
+
+### Added
+- **Migration UI** - New "Migrate to Asset" button when renderer has data but external asset is empty
+  - Handles all 4 data states: asset only, renderer only, both, neither
+  - Clear error messages and recovery options when both are empty
+  - Automatic backup restore prompt when data is lost
+
 ## [4.0.2] - 2026-02-05
 
 ### Fixed
