@@ -330,19 +330,39 @@ namespace GrassSystem
             #endif
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
             
-            // Initialize if we have data (either from painting or from deserialization/prefab)
-            // Priority: external asset > embedded data
-            if (externalDataAsset != null && externalDataAsset.InstanceCount > 0)
+            // Initialize based on data source priority:
+            // 1. External asset (preferred - keeps scene/prefab light)
+            // 2. Embedded data (fallback for prefabs without external asset)
+            
+            bool hasExternalData = externalDataAsset != null && externalDataAsset.InstanceCount > 0;
+            bool hasEmbeddedData = grassData != null && grassData.Count > 0;
+            
+            if (hasExternalData)
             {
                 // Load from external asset (preferred)
+                // This handles both fresh loads AND prefab instantiation where OnBeforeSerialize cleared embedded data
                 grassData = externalDataAsset.LoadData();
+                LogEvent($"Loaded {grassData.Count:N0} instances from external asset");
                 Initialize();
             }
-            else if (grassData.Count > 0 || needsReinitAfterDeserialize)
+            else if (hasEmbeddedData)
             {
+                // Use embedded data
                 Initialize();
-                needsReinitAfterDeserialize = false;
             }
+            else if (needsReinitAfterDeserialize && externalDataAsset != null)
+            {
+                // OnAfterDeserialize marked for reload but asset was empty at that time
+                // Try loading again now - asset might be ready
+                grassData = externalDataAsset.LoadData();
+                if (grassData.Count > 0)
+                {
+                    LogEvent($"Deferred load: {grassData.Count:N0} instances from external asset");
+                    Initialize();
+                }
+            }
+            
+            needsReinitAfterDeserialize = false;
             
             // Validate buffer state after initialization
             // If buffers are corrupted (e.g., after crash/domain reload), auto-repair
@@ -894,21 +914,49 @@ namespace GrassSystem
         /// <summary>
         /// Called before Unity serializes this object.
         /// Used for prefab saving and scene saving.
+        /// When using external GrassDataAsset, clears embedded data to prevent scene/prefab bloat.
         /// </summary>
         public void OnBeforeSerialize()
         {
-            // No special handling needed - grassData is already marked [SerializeField]
+            // If using external data storage, don't serialize embedded data
+            // This prevents scene/prefab files from becoming huge (400MB+)
+            // The data lives in the GrassDataAsset instead
+            if (externalDataAsset != null && grassData != null && grassData.Count > 0)
+            {
+                // Save to external asset first to ensure data is preserved
+                #if UNITY_EDITOR
+                if (externalDataAsset.InstanceCount == 0 || externalDataAsset.InstanceCount != grassData.Count)
+                {
+                    // Data needs to be saved to external asset
+                    string sceneName = gameObject.scene.IsValid() ? gameObject.scene.name : "Unknown";
+                    externalDataAsset.SaveData(grassData, sceneName, settings);
+                    UnityEditor.EditorUtility.SetDirty(externalDataAsset);
+                }
+                #endif
+                
+                // Clear embedded data - it's safely stored in external asset
+                grassData.Clear();
+            }
         }
         
         /// <summary>
         /// Called after Unity deserializes this object.
         /// Ensures grass is properly initialized when loading scenes or instantiating prefabs.
+        /// Loads data from external asset if embedded data is empty.
         /// </summary>
         public void OnAfterDeserialize()
         {
-            // Mark for reinitialization on next Update/OnEnable
-            // We can't call Initialize() here because Unity is in the middle of deserialization
-            needsReinitAfterDeserialize = grassData != null && grassData.Count > 0;
+            // If we have external asset but no embedded data, mark for loading from asset
+            // This handles the case where OnBeforeSerialize cleared the embedded data
+            if (externalDataAsset != null && (grassData == null || grassData.Count == 0))
+            {
+                needsReinitAfterDeserialize = true;
+            }
+            // Otherwise use embedded data as before
+            else if (grassData != null && grassData.Count > 0)
+            {
+                needsReinitAfterDeserialize = true;
+            }
         }
     }
 }

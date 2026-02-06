@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.2] - 2026-02-05
+
+### Fixed
+- **Scene/Prefab File Bloat** - Fixed critical issue where grass data was duplicated in scene files
+  - `OnBeforeSerialize()` now clears embedded data when using external `GrassDataAsset`
+  - Prefab size reduced from ~80MB to ~1KB when using external data
+  - Scene files no longer bloat to 400MB+ with grass prefabs
+  - Fixes "Failed to create Object Undo" errors when dragging prefabs
+
+### Improved
+- **Prefab Instantiation** - Fixed grass not appearing when dragging prefab into scene
+  - `OnEnable()` now correctly loads data from external asset after instantiation
+  - Added deferred loading fallback for edge cases
+  - Better logging for debugging initialization flow
+
 ## [4.0.1] - 2026-02-05
 
 ### Fixed
