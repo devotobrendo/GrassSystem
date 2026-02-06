@@ -303,25 +303,34 @@ namespace GrassSystem
                 return false;
             }
             
-            // If the asset has associated settings, use them
-            if (externalDataAsset.AssociatedSettings != null)
+            // Prevent OnBeforeSerialize from clearing data during this operation
+            isPerformingDataOperation = true;
+            try
             {
-                settings = externalDataAsset.AssociatedSettings;
+                // If the asset has associated settings, use them
+                if (externalDataAsset.AssociatedSettings != null)
+                {
+                    settings = externalDataAsset.AssociatedSettings;
+                }
+                
+                // Load data and force full reinitialization to ensure material is properly created
+                grassData = externalDataAsset.LoadData();
+                
+                // Use ForceReinitialize to ensure complete cleanup and material recreation
+                Cleanup();
+                if (grassData.Count > 0)
+                    Initialize();
+                
+                // Force apply settings to ensure colors are correct
+                ApplySettingsToMaterial();
+                
+                Debug.Log($"GrassRenderer: Loaded {grassData.Count:N0} grass instances from {externalDataAsset.name}", this);
+                return true;
             }
-            
-            // Load data and force full reinitialization to ensure material is properly created
-            grassData = externalDataAsset.LoadData();
-            
-            // Use ForceReinitialize to ensure complete cleanup and material recreation
-            Cleanup();
-            if (grassData.Count > 0)
-                Initialize();
-            
-            // Force apply settings to ensure colors are correct
-            ApplySettingsToMaterial();
-            
-            Debug.Log($"GrassRenderer: Loaded {grassData.Count:N0} grass instances from {externalDataAsset.name}", this);
-            return true;
+            finally
+            {
+                isPerformingDataOperation = false;
+            }
         }
         
         /// <summary>
@@ -938,6 +947,12 @@ namespace GrassSystem
         // Track if we need to reinitialize after deserialization
         private bool needsReinitAfterDeserialize = false;
         
+        // Flag to prevent OnBeforeSerialize from clearing data during active operations
+        // (loading, saving, initializing). Without this, Unity calls OnBeforeSerialize
+        // frequently and would clear data before Initialize() completes.
+        [System.NonSerialized]
+        private bool isPerformingDataOperation = false;
+        
         /// <summary>
         /// Called before Unity serializes this object.
         /// Used for prefab saving and scene saving.
@@ -950,16 +965,22 @@ namespace GrassSystem
         /// </summary>
         public void OnBeforeSerialize()
         {
+            // Don't clear data while loading/saving/initializing is in progress
+            if (isPerformingDataOperation)
+                return;
+            
             // Only clear embedded data if:
             // 1. We have an external asset configured
             // 2. The external asset already has valid data (not empty)
             // 3. The counts match (data was already saved to asset)
+            // 4. The system is fully initialized (not in the middle of a load operation)
             // This prevents data loss while keeping the scene/prefab light
             if (externalDataAsset != null && 
                 grassData != null && 
                 grassData.Count > 0 &&
                 externalDataAsset.InstanceCount > 0 &&
-                externalDataAsset.InstanceCount == grassData.Count)
+                externalDataAsset.InstanceCount == grassData.Count &&
+                isInitialized)  // Only clear after successful initialization
             {
                 // Data is safely stored in external asset - clear embedded copy
                 grassData.Clear();
