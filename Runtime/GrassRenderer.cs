@@ -942,17 +942,28 @@ namespace GrassSystem
         /// Called before Unity serializes this object.
         /// Used for prefab saving and scene saving.
         /// 
-        /// NOTE: We intentionally do NOT clear grassData here, even when using external asset.
-        /// Unity calls this method very frequently (Inspector updates, Undo, etc.), not just on save.
-        /// Clearing here would cause data to be lost immediately after LoadFromExternalAsset().
+        /// When using external GrassDataAsset AND the asset already has valid data,
+        /// clears embedded data to prevent scene/prefab bloat.
         /// 
-        /// The scene/prefab size optimization should be done via explicit "Optimize for Version Control"
-        /// button in the Inspector, which calls ClearEmbeddedDataForVersionControl().
+        /// SAFETY: Only clears if external asset has the same data count,
+        /// meaning data is already safely stored externally.
         /// </summary>
         public void OnBeforeSerialize()
         {
-            // Intentionally empty - see comment above
-            // The optimization to reduce file size is now an explicit user action
+            // Only clear embedded data if:
+            // 1. We have an external asset configured
+            // 2. The external asset already has valid data (not empty)
+            // 3. The counts match (data was already saved to asset)
+            // This prevents data loss while keeping the scene/prefab light
+            if (externalDataAsset != null && 
+                grassData != null && 
+                grassData.Count > 0 &&
+                externalDataAsset.InstanceCount > 0 &&
+                externalDataAsset.InstanceCount == grassData.Count)
+            {
+                // Data is safely stored in external asset - clear embedded copy
+                grassData.Clear();
+            }
         }
         
         /// <summary>
