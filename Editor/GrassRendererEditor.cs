@@ -83,12 +83,16 @@ namespace GrassSystem
                 if (!string.IsNullOrEmpty(renderer.externalDataAsset.LastSaveTime))
                     EditorGUILayout.LabelField($"Last Saved: {renderer.externalDataAsset.LastSaveTime}", EditorStyles.miniLabel);
                 EditorGUILayout.EndVertical();
+                // Determine current state
+                bool assetHasData = renderer.externalDataAsset.InstanceCount > 0;
+                bool rendererHasData = cachedGrassCount > 0;
                 
-                // Show warning if asset has data but renderer doesn't
-                if (renderer.externalDataAsset.InstanceCount > 0 && cachedGrassCount == 0)
+                // === STATE 1: Asset has data, Renderer is empty → Offer to Load ===
+                if (assetHasData && !rendererHasData)
                 {
                     EditorGUILayout.HelpBox(
-                        "External asset has grass data but renderer is empty. Click 'Load from Asset' to display the grass.", 
+                        $"External asset has {renderer.externalDataAsset.InstanceCount:N0} grass instances but renderer is empty.\n" +
+                        "Click 'Load from Asset' to display the grass.", 
                         MessageType.Warning);
                     
                     GUI.backgroundColor = Color.green;
@@ -99,7 +103,25 @@ namespace GrassSystem
                     }
                     GUI.backgroundColor = Color.white;
                 }
-                else
+                // === STATE 2: Asset is empty, Renderer has data → Offer to Migrate ===
+                else if (!assetHasData && rendererHasData)
+                {
+                    EditorGUILayout.HelpBox(
+                        $"Renderer has {cachedGrassCount:N0} grass instances but external asset is empty.\n" +
+                        "Click 'Migrate to Asset' to save data to the external asset.", 
+                        MessageType.Warning);
+                    
+                    GUI.backgroundColor = new Color(1f, 0.8f, 0.2f); // Yellow
+                    if (GUILayout.Button("📤 Migrate to Asset", GUILayout.Height(30)))
+                    {
+                        renderer.SaveToExternalAsset();
+                        AssetDatabase.SaveAssets();
+                        Debug.Log($"Migrated {cachedGrassCount:N0} grass instances to external asset.", renderer.externalDataAsset);
+                    }
+                    GUI.backgroundColor = Color.white;
+                }
+                // === STATE 3: Both have data or asset has data → Normal operation ===
+                else if (assetHasData || rendererHasData)
                 {
                     EditorGUILayout.BeginHorizontal();
                     if (GUILayout.Button("💾 Save + Backup"))
@@ -142,6 +164,40 @@ namespace GrassSystem
                             }
                         }
                         EditorGUILayout.EndHorizontal();
+                    }
+                }
+                // === STATE 4: Both are empty → Show error with recovery options ===
+                else
+                {
+                    EditorGUILayout.HelpBox(
+                        "⚠️ Both external asset and renderer are empty!\n\n" +
+                        "This can happen if the scene was saved with the new serialization format " +
+                        "before the asset was populated.\n\n" +
+                        "Recovery options:\n" +
+                        "• If a JSON backup exists, restore from it\n" +
+                        "• Undo recent changes (Ctrl+Z)\n" +
+                        "• Re-paint the grass", 
+                        MessageType.Error);
+                    
+                    // Check for backup and offer restore
+                    if (renderer.externalDataAsset.HasBackup())
+                    {
+                        GUI.backgroundColor = Color.green;
+                        if (GUILayout.Button("🔄 Restore from Backup", GUILayout.Height(30)))
+                        {
+                            if (renderer.externalDataAsset.RestoreFromBackup())
+                            {
+                                renderer.LoadFromExternalAsset();
+                                UpdateCachedCount();
+                                Debug.Log("Successfully restored grass data from backup!", renderer);
+                            }
+                        }
+                        GUI.backgroundColor = Color.white;
+                        EditorGUILayout.LabelField(renderer.externalDataAsset.GetBackupInfo(), EditorStyles.miniLabel);
+                    }
+                    else
+                    {
+                        EditorGUILayout.HelpBox("No backup file found. You may need to re-paint the grass.", MessageType.Warning);
                     }
                 }
             }
