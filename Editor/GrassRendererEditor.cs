@@ -266,7 +266,7 @@ namespace GrassSystem
                         $"1. Save {cachedGrassCount:N0} instances to external asset\n" +
                         $"2. Clear embedded data from this component\n\n" +
                         $"This reduces scene/prefab file size significantly.\n" +
-                        $"The grass will still work - it loads from the asset file.\n\n" +
+                        $"The grass will continue rendering normally.\n\n" +
                         $"Continue?", 
                         "Yes, Optimize", "Cancel"))
                     {
@@ -274,13 +274,16 @@ namespace GrassSystem
                         {
                             EditorUtility.SetDirty(renderer);
                             AssetDatabase.SaveAssets();
+                            
+                            // Reload from external asset so grass keeps rendering
+                            renderer.LoadFromExternalAsset();
                             UpdateCachedCount();
                         }
                     }
                 }
                 GUI.backgroundColor = Color.white;
                 EditorGUILayout.HelpBox(
-                    "Clear embedded data to reduce scene/prefab file size. Data is kept in external asset.", 
+                    "Clear embedded data to reduce scene/prefab file size. Grass keeps rendering from external asset.", 
                     MessageType.None);
             }
             

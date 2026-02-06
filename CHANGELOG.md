@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.7] - 2026-02-06
+
+### Fixed
+- **Critical: OnBeforeSerialize Clearing Data** - Completely removed automatic data clearing from `OnBeforeSerialize`
+  - Unity calls this method too frequently (Inspector refresh, Undo, selection changes)
+  - Any automatic clearing caused data loss after `LoadFromExternalAsset()`
+  - File size optimization is now **100% manual** via "Optimize for Version Control" button
+
+### Added  
+- **Automatic Scene Save Optimization** - New `sceneSaving` callback clears embedded data when scene is saved
+  - Data is first saved to external asset, then cleared from component
+  - After save, data automatically reloads via `sceneSaved` callback
+  - Scene files stay small without manual intervention
+  
+- **Reload After Optimize** - "Optimize for Version Control" button now reloads from asset
+  - Grass continues rendering after optimization (no more disappearing grass)
+  
+- **Enhanced Diagnostics** - Improved `DiagnoseRenderingIssues()` with:
+  - `maxDrawDistance` and `minFadeDistance` values
+  - Camera position
+  - Sample grass position and distance to camera
+  
+### Improved
+- **Prefab Instantiation** - Grass now loads automatically when dragging prefab to scene
+  - `OnEnable` correctly loads from external asset when embedded data is empty
+
 ## [4.0.6] - 2026-02-06
 
 ### Fixed

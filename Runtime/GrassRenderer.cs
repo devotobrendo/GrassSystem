@@ -153,6 +153,8 @@ namespace GrassSystem
             if (settings != null)
             {
                 sb.AppendLine($"  grassMode: {settings.grassMode}");
+                sb.AppendLine($"  maxDrawDistance: {settings.maxDrawDistance}");
+                sb.AppendLine($"  minFadeDistance: {settings.minFadeDistance}");
                 sb.AppendLine($"  cullingShader: {(settings.cullingShader != null ? "OK" : "NULL")}");
                 sb.AppendLine($"  grassMaterial: {(settings.grassMaterial != null ? "OK" : "NULL")}");
                 sb.AppendLine($"  customMeshes.Count: {settings.customMeshes?.Count ?? 0}");
@@ -172,6 +174,21 @@ namespace GrassSystem
             sb.AppendLine("--- Camera ---");
             var cam = GetCurrentCamera();
             sb.AppendLine($"currentCamera: {(cam != null ? cam.name : "NULL")}");
+            if (cam != null)
+                sb.AppendLine($"  cameraPosition: {cam.transform.position}");
+            sb.AppendLine("--- Sample Data ---");
+            if (grassData != null && grassData.Count > 0)
+            {
+                var sample = grassData[0];
+                sb.AppendLine($"  First grass position: {sample.position}");
+                sb.AppendLine($"  First grass normal: {sample.normal}");
+                sb.AppendLine($"  First grass widthHeight: {sample.widthHeight}");
+                if (cam != null)
+                {
+                    float dist = Vector3.Distance(cam.transform.position, sample.position);
+                    sb.AppendLine($"  Distance to camera: {dist:F2}m (maxDraw={settings?.maxDrawDistance ?? 0})");
+                }
+            }
             
             Debug.Log(sb.ToString(), this);
         }
@@ -313,10 +330,9 @@ namespace GrassSystem
                     settings = externalDataAsset.AssociatedSettings;
                 }
                 
-                // Load data and force full reinitialization to ensure material is properly created
+                // Load data and force full reinitialization
                 grassData = externalDataAsset.LoadData();
                 
-                // Use ForceReinitialize to ensure complete cleanup and material recreation
                 Cleanup();
                 if (grassData.Count > 0)
                     Initialize();
@@ -361,6 +377,7 @@ namespace GrassSystem
             #if UNITY_EDITOR
             UnityEditor.SceneManagement.EditorSceneManager.sceneClosing += OnSceneClosing;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += OnSceneOpened;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneSaving += OnSceneSaving;
             UnityEditor.SceneManagement.EditorSceneManager.sceneSaved += OnSceneSaved;
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             #endif
@@ -370,13 +387,17 @@ namespace GrassSystem
             // 1. External asset (preferred - keeps scene/prefab light)
             // 2. Embedded data (fallback for prefabs without external asset)
             
-            bool hasExternalData = externalDataAsset != null && externalDataAsset.InstanceCount > 0;
-            bool hasEmbeddedData = grassData != null && grassData.Count > 0;
+            bool hasExternalAsset = externalDataAsset != null;
+            int externalCount = hasExternalAsset ? externalDataAsset.InstanceCount : 0;
+            int embeddedCount = grassData?.Count ?? 0;
+            
+            bool hasExternalData = hasExternalAsset && externalCount > 0;
+            bool hasEmbeddedData = embeddedCount > 0;
             
             if (hasExternalData)
             {
                 // Load from external asset (preferred)
-                // This handles both fresh loads AND prefab instantiation where OnBeforeSerialize cleared embedded data
+                // This handles both fresh loads AND prefab instantiation where embedded data was cleared
                 grassData = externalDataAsset.LoadData();
                 LogEvent($"Loaded {grassData.Count:N0} instances from external asset");
                 Initialize();
@@ -386,7 +407,7 @@ namespace GrassSystem
                 // Use embedded data
                 Initialize();
             }
-            else if (needsReinitAfterDeserialize && externalDataAsset != null)
+            else if (needsReinitAfterDeserialize && hasExternalAsset)
             {
                 // OnAfterDeserialize marked for reload but asset was empty at that time
                 // Try loading again now - asset might be ready
@@ -415,6 +436,7 @@ namespace GrassSystem
             #if UNITY_EDITOR
             UnityEditor.SceneManagement.EditorSceneManager.sceneClosing -= OnSceneClosing;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened -= OnSceneOpened;
+            UnityEditor.SceneManagement.EditorSceneManager.sceneSaving -= OnSceneSaving;
             UnityEditor.SceneManagement.EditorSceneManager.sceneSaved -= OnSceneSaved;
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             #endif
@@ -455,6 +477,28 @@ namespace GrassSystem
             }
         }
         
+        private void OnSceneSaving(UnityEngine.SceneManagement.Scene scene, string path)
+        {
+            // AUTOMATIC OPTIMIZATION: Before scene is saved, clear embedded data
+            // if we have a valid external asset with matching data
+            if (gameObject.scene == scene && 
+                externalDataAsset != null && 
+                grassData != null && 
+                grassData.Count > 0 &&
+                externalDataAsset.InstanceCount == grassData.Count)
+            {
+                LogEvent($"OnSceneSaving ({scene.name}) - Clearing embedded data to optimize file size");
+                
+                // Save to external asset first to ensure data is up to date
+                SaveToExternalAsset();
+                
+                // Clear embedded data - scene file will be small
+                grassData.Clear();
+                
+                // Note: Data will be reloaded from external asset when scene opens
+            }
+        }
+        
         private void OnBeforeAssemblyReload()
         {
             LogEvent("OnBeforeAssemblyReload (Domain Reload)");
@@ -464,11 +508,23 @@ namespace GrassSystem
         
         private void OnSceneSaved(UnityEngine.SceneManagement.Scene scene)
         {
-            // After scene save, Unity may reset material properties
+            // After scene save, reload data from external asset if we cleared it during saving
             if (gameObject.scene == scene)
             {
-                LogEvent($"OnSceneSaved ({scene.name}) - Marking material dirty");
-                materialDirty = true;
+                LogEvent($"OnSceneSaved ({scene.name})");
+                
+                // If we have an external asset and no data (was cleared during save), reload
+                if (externalDataAsset != null && externalDataAsset.InstanceCount > 0 && 
+                    (grassData == null || grassData.Count == 0))
+                {
+                    LogEvent($"Reloading {externalDataAsset.InstanceCount:N0} instances from external asset after save");
+                    LoadFromExternalAsset();
+                }
+                else
+                {
+                    // Just mark material dirty in case Unity reset properties
+                    materialDirty = true;
+                }
             }
         }
         
@@ -957,34 +1013,18 @@ namespace GrassSystem
         /// Called before Unity serializes this object.
         /// Used for prefab saving and scene saving.
         /// 
-        /// When using external GrassDataAsset AND the asset already has valid data,
-        /// clears embedded data to prevent scene/prefab bloat.
+        /// IMPORTANT: We intentionally do NOT clear grassData here.
+        /// Unity calls OnBeforeSerialize extremely frequently (Inspector refresh, Undo, 
+        /// selection changes, etc.) - much more often than actual saves.
+        /// Any automatic clearing here will cause data loss after LoadFromExternalAsset().
         /// 
-        /// SAFETY: Only clears if external asset has the same data count,
-        /// meaning data is already safely stored externally.
+        /// File size optimization MUST be done manually via:
+        /// - "Optimize for Version Control" button in Inspector
+        /// - ClearEmbeddedDataForVersionControl() method
         /// </summary>
         public void OnBeforeSerialize()
         {
-            // Don't clear data while loading/saving/initializing is in progress
-            if (isPerformingDataOperation)
-                return;
-            
-            // Only clear embedded data if:
-            // 1. We have an external asset configured
-            // 2. The external asset already has valid data (not empty)
-            // 3. The counts match (data was already saved to asset)
-            // 4. The system is fully initialized (not in the middle of a load operation)
-            // This prevents data loss while keeping the scene/prefab light
-            if (externalDataAsset != null && 
-                grassData != null && 
-                grassData.Count > 0 &&
-                externalDataAsset.InstanceCount > 0 &&
-                externalDataAsset.InstanceCount == grassData.Count &&
-                isInitialized)  // Only clear after successful initialization
-            {
-                // Data is safely stored in external asset - clear embedded copy
-                grassData.Clear();
-            }
+            // Intentionally empty - see comment above
         }
         
         /// <summary>
