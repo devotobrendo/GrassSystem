@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.8] - 2026-02-07
+
+### Fixed
+- **Grass Not Loading After Branch Switch** - Fixed race condition where `AsyncGPUReadback` callback accessed released buffers
+  - Cached buffer reference in closure to prevent stale access after `Cleanup()`
+  - Added deferred load retry system (`ScheduleDeferredLoad`) with up to 5 attempts via `EditorApplication.delayCall`
+  - First retry forces reimport of external asset to handle post-branch-switch asset pipeline delays
+  - `Cleanup()` now cancels pending retry attempts to prevent orphaned callbacks
+
 ## [4.0.7] - 2026-02-06
 
 ### Fixed

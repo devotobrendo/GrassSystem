@@ -56,6 +56,11 @@ namespace GrassSystem
         private Plane[] cameraPlanes = new Plane[6];
         private bool isInitialized;
         
+        #if UNITY_EDITOR
+        private int deferredLoadRetries = 0;
+        private const int MAX_DEFERRED_RETRIES = 5;
+        #endif
+        
         private uint[] readbackArgs = new uint[5];
         private int lastVisibleCount;
         
@@ -417,6 +422,14 @@ namespace GrassSystem
                     LogEvent($"Deferred load: {grassData.Count:N0} instances from external asset");
                     Initialize();
                 }
+                else
+                {
+                    // Asset may not be ready yet (e.g., after Git branch switch).
+                    // Schedule a delayed retry to allow Unity's asset pipeline to catch up.
+                    #if UNITY_EDITOR
+                    ScheduleDeferredLoad();
+                    #endif
+                }
             }
             
             needsReinitAfterDeserialize = false;
@@ -570,6 +583,52 @@ namespace GrassSystem
                     materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
                 }
             }
+        }
+        
+        /// <summary>
+        /// Schedules a delayed retry for loading grass data from external asset.
+        /// Used when the asset database hasn't fully imported after a branch switch.
+        /// </summary>
+        private void ScheduleDeferredLoad()
+        {
+            if (deferredLoadRetries >= MAX_DEFERRED_RETRIES)
+            {
+                Debug.LogWarning($"GrassRenderer: Failed to load grass data after {MAX_DEFERRED_RETRIES} retries. " +
+                                 "Use 'Force Reinitialize' or 'Load from Asset' in the Inspector.", this);
+                deferredLoadRetries = 0;
+                return;
+            }
+
+            deferredLoadRetries++;
+            LogEvent($"Scheduling deferred load attempt {deferredLoadRetries}/{MAX_DEFERRED_RETRIES}");
+
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (this == null || !this.isActiveAndEnabled) return;
+                if (externalDataAsset == null) return;
+
+                // Force reimport the asset on first attempt to ensure it's loaded from disk
+                if (deferredLoadRetries == 1)
+                {
+                    string assetPath = UnityEditor.AssetDatabase.GetAssetPath(externalDataAsset);
+                    if (!string.IsNullOrEmpty(assetPath))
+                    {
+                        UnityEditor.AssetDatabase.ImportAsset(assetPath, UnityEditor.ImportAssetOptions.ForceUpdate);
+                    }
+                }
+
+                grassData = externalDataAsset.LoadData();
+                if (grassData.Count > 0)
+                {
+                    LogEvent($"Deferred load SUCCESS: {grassData.Count:N0} instances (attempt {deferredLoadRetries})");
+                    deferredLoadRetries = 0;
+                    Initialize();
+                }
+                else
+                {
+                    ScheduleDeferredLoad();
+                }
+            };
         }
         #endif
 
@@ -858,6 +917,10 @@ namespace GrassSystem
         {
             LogEvent("Cleanup - Releasing buffers");
             
+            #if UNITY_EDITOR
+            deferredLoadRetries = MAX_DEFERRED_RETRIES; // Cancel any pending retries
+            #endif
+            
             sourceBuffer?.Release();
             visibleBuffer?.Release();
             argsBuffer?.Release();
@@ -936,11 +999,14 @@ namespace GrassSystem
             // Use async readback to avoid GPU stall (critical for performance)
             // Only do readback in Editor for debugging - skip in builds for max performance
             #if UNITY_EDITOR
-            if (argsBuffer != null && argsBuffer.IsValid())
+            // Cache buffer reference to prevent stale callback access after Cleanup
+            var cachedArgsBuffer = argsBuffer;
+            if (cachedArgsBuffer != null && cachedArgsBuffer.IsValid())
             {
-                AsyncGPUReadback.Request(argsBuffer, (request) =>
+                AsyncGPUReadback.Request(cachedArgsBuffer, (request) =>
                 {
-                    if (!request.hasError && request.done)
+                    // Guard: buffer may have been released between request and callback
+                    if (!request.hasError && request.done && cachedArgsBuffer != null && cachedArgsBuffer.IsValid())
                     {
                         var data = request.GetData<uint>();
                         if (data.Length > 1)
