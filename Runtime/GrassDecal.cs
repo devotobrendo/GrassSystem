@@ -179,6 +179,7 @@ namespace GrassSystem
                     if (layerChanged && renderer.MaterialInstance != null)
                     {
                         renderer.MaterialInstance.SetFloat(PropDecalEnabled[oldLayerIdx], 0f);
+                        // Keyword will be synced in ApplyDecalToRenderer below
                     }
                     
                     ApplyDecalToRenderer(renderer);
@@ -199,6 +200,7 @@ namespace GrassSystem
                         {
                             prevRenderer.MaterialInstance.SetFloat(PropDecalEnabled[oldLayerIdx], 0f);
                         }
+                        SyncDecalKeyword(prevRenderer.MaterialInstance);
                     }
                 }
             }
@@ -226,6 +228,7 @@ namespace GrassSystem
                     if (renderer != null && renderer.MaterialInstance != null)
                     {
                         renderer.MaterialInstance.SetFloat(PropDecalEnabled[oldLayerIdx], 0f);
+                        SyncDecalKeyword(renderer.MaterialInstance);
                     }
                 }
                 previousLayer = layer;
@@ -303,6 +306,8 @@ namespace GrassSystem
             {
                 mat.SetFloat(PropDecalEnabled[idx], 0f);
             }
+            
+            SyncDecalKeyword(mat);
         }
         
         /// <summary>
@@ -316,8 +321,33 @@ namespace GrassSystem
                 if (renderer != null && renderer.MaterialInstance != null)
                 {
                     renderer.MaterialInstance.SetFloat(PropDecalEnabled[idx], 0f);
+                    SyncDecalKeyword(renderer.MaterialInstance);
                 }
             }
+        }
+        
+        /// <summary>
+        /// Checks all 5 decal layer enable flags on the material and
+        /// enables/disables the _DECALS_ON shader keyword accordingly.
+        /// This allows the shader compiler to strip the entire decal block
+        /// when no decals are active.
+        /// </summary>
+        private static void SyncDecalKeyword(Material mat)
+        {
+            bool anyEnabled = false;
+            for (int i = 0; i < PropDecalEnabled.Length; i++)
+            {
+                if (mat.GetFloat(PropDecalEnabled[i]) > 0.5f)
+                {
+                    anyEnabled = true;
+                    break;
+                }
+            }
+            
+            if (anyEnabled)
+                mat.EnableKeyword("_DECALS_ON");
+            else
+                mat.DisableKeyword("_DECALS_ON");
         }
         
         /// <summary>
@@ -343,6 +373,7 @@ namespace GrassSystem
                 {
                     int idx = (int)layer;
                     renderer.MaterialInstance.SetFloat(PropDecalEnabled[idx], 0f);
+                    SyncDecalKeyword(renderer.MaterialInstance);
                 }
             }
         }

@@ -800,6 +800,23 @@ namespace GrassSystem
             // Color Mode System (Albedo=0, Tint=1, Patterns=2)
             materialInstance.SetFloat("_ColorMode", (float)settings.colorMode);
             
+            // Sync shader_feature keywords so the compiler strips unused color mode branches
+            materialInstance.DisableKeyword("_COLORMODE_ALBEDO");
+            materialInstance.DisableKeyword("_COLORMODE_TINT");
+            materialInstance.DisableKeyword("_COLORMODE_PATTERNS");
+            switch (settings.colorMode)
+            {
+                case GrassColorMode.Albedo:
+                    materialInstance.EnableKeyword("_COLORMODE_ALBEDO");
+                    break;
+                case GrassColorMode.Tint:
+                    materialInstance.EnableKeyword("_COLORMODE_TINT");
+                    break;
+                case GrassColorMode.Patterns:
+                    materialInstance.EnableKeyword("_COLORMODE_PATTERNS");
+                    break;
+            }
+            
             // Pattern Mode Settings
             materialInstance.SetFloat("_PatternType", (float)settings.patternType);
             materialInstance.SetColor("_PatternATip", settings.patternATip);

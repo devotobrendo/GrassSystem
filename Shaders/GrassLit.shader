@@ -134,6 +134,10 @@ Shader "GrassSystem/GrassLit"
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
             #pragma multi_compile_instancing
             
+            // Compile-time stripping: only compile the active color mode + decal toggle
+            #pragma shader_feature_local _COLORMODE_ALBEDO _COLORMODE_TINT _COLORMODE_PATTERNS
+            #pragma shader_feature_local _ _DECALS_ON
+            
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "GrassCommon.hlsl"
@@ -426,64 +430,16 @@ Shader "GrassSystem/GrassLit"
                 // ========================================
                 half3 baseColor;
                 half4 albedoTex = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                bool isAlbedoMode = false;
                 
                 // Mode 0: Albedo - PURE texture color (no depth effects)
-                if (_ColorMode < 0.5)
+                #if defined(_COLORMODE_ALBEDO)
                 {
                     baseColor = albedoTex.rgb;
-                    
-                    // Multi-layer decal projection (Layer 1 -> 5, last wins)
-                    float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
-                    float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
-                    float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
-                    float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
-                    float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
-                    
-                    half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
-                    half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
-                    half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
-                    half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
-                    half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
-                    
-                    DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
-                    DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
-                    DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
-                    DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
-                    DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
-                    
-                    // Preserve albedo texture variation by multiplying decal result with albedo luminance
-                    // This keeps the leaf shape/texture visible even when decal overrides color
-                    float anyDecalApplied = saturate(d1.applied + d2.applied + d3.applied + d4.applied + d5.applied);
-                    half albedoLuma = dot(albedoTex.rgb, half3(0.299, 0.587, 0.114));
-                    // Normalize luma to center around 1.0 so multiply doesn't darken too much
-                    half lumaFactor = lerp(1.0, albedoLuma * 2.0, 0.5);
-                    baseColor = lerp(d5.color, d5.color * lumaFactor, anyDecalApplied);
-                    
-                    // Pure PBR lighting, no depth effects
-                    InputData inputData = (InputData)0;
-                    inputData.positionWS = input.positionWS;
-                    inputData.normalWS = normalize(normalWS);
-                    inputData.viewDirectionWS = normalize(input.viewDirWS);
-                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
-                    inputData.fogCoord = input.fogFactor;
-                    inputData.bakedGI = SampleSH(inputData.normalWS);
-                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
-                    
-                    SurfaceData surfaceData = (SurfaceData)0;
-                    surfaceData.albedo = baseColor;
-                    surfaceData.alpha = 1.0;
-                    surfaceData.metallic = 0;
-                    surfaceData.smoothness = 0.1;
-                    surfaceData.normalTS = normalTS;
-                    surfaceData.occlusion = 1;
-                    
-                    half4 color = UniversalFragmentPBR(inputData, surfaceData);
-                    color.rgb = MixFog(color.rgb, input.fogFactor);
-                    return color;
+                    isAlbedoMode = true;
                 }
-                
                 // Mode 1: Tint - TopTint/BottomTint gradient (PURE colors, PBR only)
-                else if (_ColorMode < 1.5)
+                #elif defined(_COLORMODE_TINT)
                 {
                     baseColor = lerp(_BottomTint.rgb, _TopTint.rgb, input.uv.y);
                     
@@ -501,51 +457,9 @@ Shader "GrassSystem/GrassLit"
                     {
                         baseColor = lerp(baseColor, baseColor * albedoTex.rgb * 2.0, _AlbedoBlendAmount);
                     }
-                    
-                    // Multi-layer decal projection (Layer 1 -> 5, last wins)
-                    float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
-                    float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
-                    float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
-                    float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
-                    float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
-                    
-                    half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
-                    half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
-                    half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
-                    half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
-                    half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
-                    
-                    DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
-                    DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
-                    DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
-                    DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
-                    DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
-                    baseColor = d5.color;
-                    
-                    // Pure PBR lighting, no extra effects
-                    InputData inputData = (InputData)0;
-                    inputData.positionWS = input.positionWS;
-                    inputData.normalWS = normalize(normalWS);
-                    inputData.viewDirectionWS = normalize(input.viewDirWS);
-                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
-                    inputData.fogCoord = input.fogFactor;
-                    inputData.bakedGI = SampleSH(inputData.normalWS);
-                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
-                    
-                    SurfaceData surfaceData = (SurfaceData)0;
-                    surfaceData.albedo = baseColor;
-                    surfaceData.alpha = 1.0;
-                    surfaceData.metallic = 0;
-                    surfaceData.smoothness = 0.1;
-                    surfaceData.normalTS = normalTS;
-                    surfaceData.occlusion = 1;
-                    
-                    half4 color = UniversalFragmentPBR(inputData, surfaceData);
-                    color.rgb = MixFog(color.rgb, input.fogFactor);
-                    return color;
                 }
                 // Mode 2: Patterns - Stripes/Checkerboard/NaturalBlend
-                else
+                #else // _COLORMODE_PATTERNS (default fallback)
                 {
                     float2 worldPos = input.positionWS.xz;
                     half3 colorATip = _PatternATip.rgb;
@@ -598,8 +512,6 @@ Shader "GrassSystem/GrassLit"
                         }
                         
                         // Apply contrast to expand the noise distribution
-                        // Uses 1 + contrast*2 so that contrast 0->1 maps to multiplier 1->3
-                        // This ensures the full 0-1 range is covered even with default contrast
                         float contrastMultiplier = 1.0 + _NaturalContrast * 2.0;
                         zoneNoise = saturate((zoneNoise - 0.5) * contrastMultiplier + 0.5);
                         
@@ -608,15 +520,12 @@ Shader "GrassSystem/GrassLit"
                         half3 color2 = lerp(_NaturalColor2Root.rgb, _NaturalColor2Tip.rgb, input.uv.y);
                         half3 color3 = lerp(_NaturalColor3Root.rgb, _NaturalColor3Tip.rgb, input.uv.y);
                         
-                        // Zone thresholds: 0-0.33=Color1, 0.33-0.66=Color2, 0.66-1=Color3
-                        // Softness controls how wide the transition bands are
-                        float softEdge = _NaturalSoftness * 0.15; // Max 15% overlap at each edge
+                        // Zone thresholds with soft edges
+                        float softEdge = _NaturalSoftness * 0.15;
                         
-                        // Weight for each color zone (smooth transitions when softness > 0)
                         float w1 = 1.0 - smoothstep(0.333 - softEdge, 0.333 + softEdge, zoneNoise);
                         float w3 = smoothstep(0.666 - softEdge, 0.666 + softEdge, zoneNoise);
-                        float w2 = 1.0 - w1 - w3;
-                        w2 = max(w2, 0.0); // Ensure non-negative
+                        float w2 = max(1.0 - w1 - w3, 0.0);
                         
                         // Normalize weights
                         float totalWeight = w1 + w2 + w3;
@@ -624,10 +533,7 @@ Shader "GrassSystem/GrassLit"
                         w2 /= totalWeight;
                         w3 /= totalWeight;
                         
-                        // Blend colors based on zone weights
-                        half3 blendedColor = color1 * w1 + color2 * w2 + color3 * w3;
-                        
-                        baseColor = blendedColor;
+                        baseColor = color1 * w1 + color2 * w2 + color3 * w3;
                         
                         if (_UseAlbedoBlend > 0.5)
                         {
@@ -658,49 +564,66 @@ Shader "GrassSystem/GrassLit"
                         half3 terrainLight = SAMPLE_TEXTURE2D(_TerrainLightmap, sampler_TerrainLightmap, terrainUV).rgb;
                         baseColor = lerp(baseColor, baseColor * terrainLight, _TerrainLightmapInfluence);
                     }
-                    
-                    // Multi-layer decal projection (Layer 1 -> 5, last wins)
-                    float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
-                    float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
-                    float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
-                    float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
-                    float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
-                    
-                    half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
-                    half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
-                    half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
-                    half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
-                    half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
-                    
-                    DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
-                    DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
-                    DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
-                    DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
-                    DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
-                    baseColor = d5.color;
-                    
-                    // Pure PBR lighting, no extra effects
-                    InputData inputData = (InputData)0;
-                    inputData.positionWS = input.positionWS;
-                    inputData.normalWS = normalize(normalWS);
-                    inputData.viewDirectionWS = normalize(input.viewDirWS);
-                    inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
-                    inputData.fogCoord = input.fogFactor;
-                    inputData.bakedGI = SampleSH(inputData.normalWS);
-                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
-                    
-                    SurfaceData surfaceData = (SurfaceData)0;
-                    surfaceData.albedo = baseColor;
-                    surfaceData.alpha = 1.0;
-                    surfaceData.metallic = 0;
-                    surfaceData.smoothness = 0.1;
-                    surfaceData.normalTS = normalTS;
-                    surfaceData.occlusion = 1;
-                    
-                    half4 color = UniversalFragmentPBR(inputData, surfaceData);
-                    color.rgb = MixFog(color.rgb, input.fogFactor);
-                    return color;
                 }
+                #endif // _COLORMODE_*
+                
+                // ========================================
+                // SHARED: Multi-layer decal projection (Layer 1 -> 5, last wins)
+                // Runs once for ALL color modes — stripped entirely when no decals
+                // ========================================
+                #if defined(_DECALS_ON)
+                float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
+                float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
+                float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
+                float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
+                float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
+                
+                half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
+                half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
+                half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
+                half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
+                half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
+                
+                DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
+                DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
+                DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
+                DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
+                DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
+                baseColor = d5.color;
+                
+                // Albedo mode: preserve texture variation via luma multiplication
+                if (isAlbedoMode)
+                {
+                    float anyDecalApplied = saturate(d1.applied + d2.applied + d3.applied + d4.applied + d5.applied);
+                    half albedoLuma = dot(albedoTex.rgb, half3(0.299, 0.587, 0.114));
+                    half lumaFactor = lerp(1.0, albedoLuma * 2.0, 0.5);
+                    baseColor = lerp(baseColor, baseColor * lumaFactor, anyDecalApplied);
+                }
+                #endif // _DECALS_ON
+                
+                // ========================================
+                // SHARED: PBR Lighting (runs once for ALL color modes)
+                // ========================================
+                InputData inputData = (InputData)0;
+                inputData.positionWS = input.positionWS;
+                inputData.normalWS = normalize(normalWS);
+                inputData.viewDirectionWS = normalize(input.viewDirWS);
+                inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                inputData.fogCoord = input.fogFactor;
+                inputData.bakedGI = SampleSH(inputData.normalWS);
+                inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
+                
+                SurfaceData surfaceData = (SurfaceData)0;
+                surfaceData.albedo = baseColor;
+                surfaceData.alpha = 1.0;
+                surfaceData.metallic = 0;
+                surfaceData.smoothness = 0.1;
+                surfaceData.normalTS = normalTS;
+                surfaceData.occlusion = 1;
+                
+                half4 color = UniversalFragmentPBR(inputData, surfaceData);
+                color.rgb = MixFog(color.rgb, input.fogFactor);
+                return color;
             }
             ENDHLSL
         }
