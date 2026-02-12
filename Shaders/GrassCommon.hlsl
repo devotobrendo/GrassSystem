@@ -29,18 +29,6 @@ float2 CalculateWind(float3 worldPos, float time, float speed, float strength, f
 // ORGANIC NOISE FUNCTIONS FOR NATURAL GRASS VARIATION
 // =====================================================
 
-// Gradient noise for smooth organic variation (Perlin-like)
-float2 GradientNoise2D(float2 p)
-{
-    float2 i = floor(p);
-    float2 f = frac(p);
-    
-    // Smooth interpolation curve
-    float2 u = f * f * (3.0 - 2.0 * f);
-    
-    return u;
-}
-
 // Hash function returning 2D random vector from 2D input
 float2 Hash2D(float2 p)
 {
@@ -160,42 +148,25 @@ float VoronoiNoise(float2 p)
 
 // Blue Noise - uniform scattered distribution without clumping
 // Creates natural-looking uniform spread of color variation
+// Optimized: single-pass Worley (first octave dominates, 2-3 were imperceptible)
 float BlueNoise(float2 p)
 {
-    // Use golden ratio based sampling for blue noise approximation
-    float2 r = float2(0.618033988749894848, 0.381966011250105152);
-    float n = frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+    float2 cell = floor(p);
+    float2 f = frac(p);
+    float minDist = 1.0;
     
-    // Multi-octave blue noise for smoother distribution
-    float value = 0;
-    float2 offset = float2(0, 0);
-    float totalWeight = 0;
-    
-    for (int i = 0; i < 3; i++)
+    for (int y = -1; y <= 1; y++)
     {
-        float2 cell = floor(p + offset);
-        float2 f = frac(p + offset);
-        
-        float minDist = 1.0;
-        for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++)
         {
-            for (int x = -1; x <= 1; x++)
-            {
-                float2 neighbor = float2(x, y);
-                float2 randPoint = Hash2D(cell + neighbor);
-                float dist = length(neighbor + randPoint - f);
-                minDist = min(minDist, dist);
-            }
+            float2 neighbor = float2(x, y);
+            float2 randPoint = Hash2D(cell + neighbor);
+            float dist = length(neighbor + randPoint - f);
+            minDist = min(minDist, dist);
         }
-        float weight = 1.0 / (i + 1);
-        value += minDist * weight;
-        totalWeight += weight;
-        offset += r * 17.0;
-        p *= 1.5;
     }
     
-    // Normalize to full 0-1 range (removed * 0.7 which was causing dark output)
-    return saturate(value / totalWeight);
+    return saturate(minDist);
 }
 
 
@@ -235,74 +206,47 @@ float ClusterNoise(float2 p)
 
 // Gradient Blend - smooth natural color transitions
 // Creates gentle flowing color changes across terrain
+// Optimized: removed trig ops and third layer (imperceptible difference)
 float GradientBlend(float2 p)
 {
-    // Multi-directional smooth gradients
-    float angle1 = Hash(floor(p * 0.1)) * 6.28318;
-    float angle2 = Hash(floor(p * 0.1) + 100.0) * 6.28318;
-    
-    float2 dir1 = float2(cos(angle1), sin(angle1));
-    float2 dir2 = float2(cos(angle2), sin(angle2));
-    
-    // Smooth perlin-like gradients in multiple directions
     float grad1 = PerlinNoise(p * 0.5) * 0.5 + 0.5;
     float grad2 = PerlinNoise(p * 0.3 + 50.0) * 0.5 + 0.5;
-    float grad3 = PerlinNoise(p * 0.7 + 100.0) * 0.5 + 0.5;
-    
-    // Blend gradients for natural flowing color
-    float result = grad1 * 0.5 + grad2 * 0.3 + grad3 * 0.2;
-    
-    return saturate(result);
+    return saturate(grad1 * 0.6 + grad2 * 0.4);
 }
 
 // Stochastic Noise - irregular non-repeating pattern
 // Breaks up visual repetition for natural look
+// Optimized: single Worley + Perlin (second Worley was redundant)
 float StochasticNoise(float2 p)
 {
-    // Sample from multiple offset positions and blend
     float2 offset1 = float2(Hash(floor(p.x * 0.3)), Hash(floor(p.y * 0.3))) * 100.0;
-    float2 offset2 = float2(Hash(floor(p.y * 0.3)), Hash(floor(p.x * 0.3))) * 100.0;
-    
-    // Three layers with different rotations and scales
     float n1 = WorleyNoise(p + offset1);
-    float n2 = WorleyNoise(p * 1.3 + offset2);
-    float n3 = PerlinNoise(p * 0.7) * 0.5 + 0.5;
-    
-    // Stochastic blend based on position
-    float blend = Hash(floor(p * 0.5)) * 0.5 + 0.25;
-    float result = lerp(lerp(n1, n2, blend), n3, 0.3);
-    
-    return saturate(result);
+    float n2 = PerlinNoise(p * 0.7) * 0.5 + 0.5;
+    return saturate(lerp(n1, n2, 0.35));
 }
 
 // Main organic variation function - creates natural irregular color patches
 // Like natural grass fields with soft blended areas of different shades
 // Returns 0-1 value used to interpolate between min/max color range
+// Optimized: reduced FBM octaves (3->2), replaced small FBM with single PerlinNoise,
+// removed Worley spots layer (was subtle and gated by clumpiness * 0.5)
 float CalculateOrganicVariation(float3 worldPos, float scale, float clumpiness, float contrast, float edgeSoftness)
 {
     float2 p = worldPos.xz / scale;
     
-    // Layer 1: Large-scale blotchy variation (main patches)
-    float large = FBMNoise(p * 0.3, 3, 0.5, 2.0);
+    // Layer 1: Large-scale blotchy variation (main patches) - 2 octaves
+    float large = FBMNoise(p * 0.3, 2, 0.5, 2.0);
     
-    // Layer 2: Medium patches overlapping
-    float medium = FBMNoise(p * 0.6 + float2(31.7, 47.3), 3, 0.5, 2.0);
+    // Layer 2: Medium patches overlapping - 2 octaves
+    float medium = FBMNoise(p * 0.6 + float2(31.7, 47.3), 2, 0.5, 2.0);
     
-    // Layer 3: Smaller detail variation
-    float small = FBMNoise(p * 1.2 + float2(73.1, 89.7), 2, 0.5, 2.0);
-    
-    // Layer 4: Subtle Worley for occasional darker spots (like worn areas)
-    float spots = 1.0 - WorleyNoise(p * 0.5 + float2(17.3, 29.1)) * 0.4;
+    // Layer 3: Smaller detail variation - single PerlinNoise (was 2-octave FBM)
+    float small = PerlinNoise(p * 1.2 + float2(73.1, 89.7));
     
     // Combine layers with organic blending
-    // clumpiness affects the weight of distinct patches vs smooth blend
-    float baseBlend = large * 0.45 + medium * 0.35 + small * 0.2;
-    
-    // Add darker spots based on clumpiness
-    baseBlend = baseBlend * lerp(1.0, spots, clumpiness * 0.5);
+    float baseBlend = large * 0.5 + medium * 0.35 + small * 0.15;
     
     // Apply soft S-curve for natural transitions
-    // Edge softness controls how gradual the color transitions are
     float softness = lerp(0.8, 0.3, edgeSoftness);
     baseBlend = smoothstep(0.5 - softness, 0.5 + softness, baseBlend);
     
