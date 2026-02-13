@@ -25,6 +25,11 @@ namespace GrassSystem
         private GraphicsBuffer argsBuffer;
         private ComputeBuffer interactorBuffer;
         
+        // Per-renderer instance of the compute shader.
+        // CRITICAL: Multiple renderers sharing the same ComputeShader asset causes
+        // buffer binding collisions and D3D11 DEVICE_LOST crashes.
+        // Each renderer MUST have its own instance.
+        private ComputeShader cullingShaderInstance;
         private int cullingKernel;
         private const int THREAD_GROUP_SIZE = 128;
         
@@ -68,6 +73,17 @@ namespace GrassSystem
         private bool materialDirty = false;
         private float lastMaterialCheck = 0f;
         private const float MATERIAL_CHECK_INTERVAL = 0.5f;
+        
+        // ========================================
+        // FAILSAFE: Auto-recovery system
+        // Guarantees grass ALWAYS appears, even if
+        // initial load fails (additive scenes, async loading, etc.)
+        // ========================================
+        private float lastRecoveryAttemptTime = -999f;
+        private int recoveryAttemptCount = 0;
+        private const float RECOVERY_INTERVAL = 0.5f;
+        private const float RECOVERY_BACKOFF_INTERVAL = 3.0f;
+        private const int RECOVERY_BACKOFF_THRESHOLD = 10;
         
         public List<GrassData> GrassDataList
         {
@@ -240,7 +256,8 @@ namespace GrassSystem
             {
                 // Fast path: just update buffer data without recreation
                 sourceBuffer.SetData(grassData);
-                settings.cullingShader.SetInt(PropInstanceCount, currentCount);
+                if (cullingShaderInstance != null)
+                    cullingShaderInstance.SetInt(PropInstanceCount, currentCount);
                 UpdateBounds();
                 return;
             }
@@ -441,6 +458,10 @@ namespace GrassSystem
                 Debug.LogWarning("GrassRenderer: Detected corrupted buffers after enable. Auto-repairing...", this);
                 ForceReinitialize();
             }
+            
+            // Reset failsafe recovery so it starts immediately on next Update if needed
+            recoveryAttemptCount = 0;
+            lastRecoveryAttemptTime = -999f;
         }
         
         private void OnDisable()
@@ -505,10 +526,14 @@ namespace GrassSystem
                 // Save to external asset first to ensure data is up to date
                 SaveToExternalAsset();
                 
+                // Release GPU resources BEFORE clearing data to prevent
+                // rendering with stale buffers during save interval
+                Cleanup();
+                
                 // Clear embedded data - scene file will be small
                 grassData.Clear();
                 
-                // Note: Data will be reloaded from external asset when scene opens
+                // Note: Data will be reloaded from external asset when scene opens (OnSceneSaved)
             }
         }
         
@@ -544,7 +569,7 @@ namespace GrassSystem
         /// <summary>
         /// Validates that material properties are correctly set and repairs if needed.
         /// Called periodically and after scene operations to catch Unity resets.
-        /// Also checks buffer validity and rebinds if necessary.
+        /// Also checks buffer validity, mesh changes, and rebinds if necessary.
         /// </summary>
         private void ValidateAndRepairMaterial()
         {
@@ -556,6 +581,17 @@ namespace GrassSystem
             {
                 LogEvent("VisibleBuffer invalid. Reinitializing.");
                 Initialize();
+                return;
+            }
+            
+            // Detect mesh change (e.g., user swapped mesh in SO_GrassSettings inspector)
+            // Without this check, changing the mesh after painting shows dots/artifacts
+            // because argsBuffer still has the old mesh's index count
+            Mesh currentActiveMesh = settings.GetActiveMesh(GetInstanceID());
+            if (currentActiveMesh != null && currentActiveMesh != cachedMesh)
+            {
+                LogEvent($"Mesh changed ({cachedMesh?.name ?? "null"} → {currentActiveMesh.name}). Rebuilding buffers.");
+                RebuildBuffers();
                 return;
             }
             
@@ -668,7 +704,31 @@ namespace GrassSystem
         
         private void Update()
         {
-            if (!isInitialized || grassData.Count == 0 || sourceBuffer == null)
+            // ========================================
+            // FAILSAFE: Auto-recovery when not initialized
+            // This catches ALL failure cases:
+            // - Additive scene loading where asset wasn't ready
+            // - Domain reload that corrupted buffers
+            // - OnSceneSaving cleared embedded data
+            // - Any other initialization failure
+            // ========================================
+            if (!isInitialized)
+            {
+                TryAutoRecover();
+                return;
+            }
+            
+            // Validate buffers are still alive — GPU resources can die after scene operations
+            if (sourceBuffer == null || !sourceBuffer.IsValid())
+            {
+                Debug.LogWarning("GrassRenderer: Buffers became invalid. Auto-recovering...", this);
+                isInitialized = false;
+                recoveryAttemptCount = 0; // Reset so recovery starts immediately
+                lastRecoveryAttemptTime = -999f;
+                return;
+            }
+            
+            if (grassData.Count == 0)
                 return;
             
             // Periodic check to ensure material properties are valid
@@ -687,6 +747,73 @@ namespace GrassSystem
             
             UpdateCulling(cam);
             Render();
+        }
+        
+        /// <summary>
+        /// Failsafe auto-recovery system. Attempts to load and initialize grass data
+        /// when the renderer is not initialized. Uses throttling and backoff to avoid
+        /// performance impact. NEVER stops trying — grass must always appear.
+        /// Works in both Editor and runtime builds.
+        /// </summary>
+        private void TryAutoRecover()
+        {
+            // No settings = nothing to recover
+            if (settings == null) return;
+            
+            // Throttle attempts to avoid performance impact
+            float interval = recoveryAttemptCount >= RECOVERY_BACKOFF_THRESHOLD 
+                ? RECOVERY_BACKOFF_INTERVAL 
+                : RECOVERY_INTERVAL;
+            
+            if (Time.realtimeSinceStartup - lastRecoveryAttemptTime < interval)
+                return;
+            
+            lastRecoveryAttemptTime = Time.realtimeSinceStartup;
+            recoveryAttemptCount++;
+            
+            // === CHECK 1: Try loading from external asset ===
+            if (grassData.Count == 0 && externalDataAsset != null)
+            {
+                var loaded = externalDataAsset.LoadData();
+                if (loaded.Count > 0)
+                {
+                    grassData = loaded;
+                    LogEvent($"Failsafe: Loaded {grassData.Count:N0} instances from external asset (attempt {recoveryAttemptCount})");
+                }
+            }
+            
+            // === CHECK 2: Try initializing with whatever data we have ===
+            if (grassData.Count > 0)
+            {
+                // Validate settings before attempting initialization
+                if (!settings.Validate(out string error))
+                {
+                    if (recoveryAttemptCount <= 1 || recoveryAttemptCount % 20 == 0)
+                    {
+                        Debug.LogWarning($"GrassRenderer: Settings invalid during recovery — {error}", this);
+                    }
+                    return;
+                }
+                
+                Initialize();
+                
+                if (isInitialized)
+                {
+                    Debug.Log($"GrassRenderer: ✅ Auto-recovered! {grassData.Count:N0} instances loaded (attempt {recoveryAttemptCount})", this);
+                    recoveryAttemptCount = 0;
+                    return;
+                }
+            }
+            
+            // === CHECK 3: Log warnings at key milestones ===
+            if (recoveryAttemptCount == RECOVERY_BACKOFF_THRESHOLD)
+            {
+                string assetInfo = externalDataAsset != null 
+                    ? $"ExternalAsset='{externalDataAsset.name}' (Count={externalDataAsset.InstanceCount})" 
+                    : "No external asset";
+                Debug.LogWarning($"GrassRenderer: Recovery slowing down after {RECOVERY_BACKOFF_THRESHOLD} attempts. " +
+                                 $"EmbeddedData={grassData.Count}, {assetInfo}. Will keep trying.", this);
+            }
         }
         
         private void Initialize()
@@ -754,18 +881,21 @@ namespace GrassSystem
                 argsReset[1] = 0;
                 argsBuffer.SetData(argsReset);
                 
-                cullingKernel = settings.cullingShader.FindKernel("CSMain");
+                // Create per-renderer instance of the compute shader to prevent
+                // buffer binding collisions between multiple GrassRenderers
+                cullingShaderInstance = Object.Instantiate(settings.cullingShader);
+                cullingKernel = cullingShaderInstance.FindKernel("CSMain");
                 
-                settings.cullingShader.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
-                settings.cullingShader.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
-                settings.cullingShader.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
-                settings.cullingShader.SetInt(PropInstanceCount, grassData.Count);
-                settings.cullingShader.SetFloat(PropMinFade, settings.minFadeDistance);
-                settings.cullingShader.SetFloat(PropMaxDraw, settings.maxDrawDistance);
-                settings.cullingShader.SetFloat(PropWindSpeed, settings.windSpeed);
-                settings.cullingShader.SetFloat(PropWindStrength, settings.windStrength);
-                settings.cullingShader.SetFloat(PropWindFrequency, settings.windFrequency);
-                settings.cullingShader.SetFloat(PropInteractorStrength, settings.interactorStrength);
+                cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
+                cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
+                cullingShaderInstance.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
+                cullingShaderInstance.SetInt(PropInstanceCount, grassData.Count);
+                cullingShaderInstance.SetFloat(PropMinFade, settings.minFadeDistance);
+                cullingShaderInstance.SetFloat(PropMaxDraw, settings.maxDrawDistance);
+                cullingShaderInstance.SetFloat(PropWindSpeed, settings.windSpeed);
+                cullingShaderInstance.SetFloat(PropWindStrength, settings.windStrength);
+                cullingShaderInstance.SetFloat(PropWindFrequency, settings.windFrequency);
+                cullingShaderInstance.SetFloat(PropInteractorStrength, settings.interactorStrength);
                 
                 materialInstance = new Material(settings.grassMaterial);
                 materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
@@ -947,6 +1077,17 @@ namespace GrassSystem
             visibleBuffer = null;
             argsBuffer = null;
             interactorBuffer = null;
+            cachedMesh = null;
+            
+            // Destroy per-renderer compute shader instance
+            if (cullingShaderInstance != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(cullingShaderInstance);
+                else
+                    DestroyImmediate(cullingShaderInstance);
+                cullingShaderInstance = null;
+            }
             
             if (materialInstance != null)
             {
@@ -979,13 +1120,21 @@ namespace GrassSystem
         
         private void UpdateCulling(Camera cam)
         {
+            // Guard: all buffers and shader must be valid
+            if (cullingShaderInstance == null || visibleBuffer == null || !visibleBuffer.IsValid() ||
+                argsBuffer == null || !argsBuffer.IsValid() || sourceBuffer == null || !sourceBuffer.IsValid())
+            {
+                isInitialized = false;
+                return;
+            }
+            
             visibleBuffer.SetCounterValue(0);
             argsReset[1] = 0;
             argsBuffer.SetData(argsReset);
             
             Matrix4x4 vp = cam.projectionMatrix * cam.worldToCameraMatrix;
-            settings.cullingShader.SetMatrix(PropViewProjMatrix, vp);
-            settings.cullingShader.SetVector(PropCameraPos, cam.transform.position);
+            cullingShaderInstance.SetMatrix(PropViewProjMatrix, vp);
+            cullingShaderInstance.SetVector(PropCameraPos, cam.transform.position);
             
             GeometryUtility.CalculateFrustumPlanes(cam, cameraPlanes);
             for (int i = 0; i < 6; i++)
@@ -997,21 +1146,20 @@ namespace GrassSystem
                     cameraPlanes[i].distance
                 );
             }
-            settings.cullingShader.SetVectorArray(PropFrustumPlanes, frustumPlanes);
+            cullingShaderInstance.SetVectorArray(PropFrustumPlanes, frustumPlanes);
             
             UpdateInteractors();
-            settings.cullingShader.SetFloat(PropTime, Time.time);
+            cullingShaderInstance.SetFloat(PropTime, Time.time);
             
-            // CRITICAL: Rebind buffers every frame to support multiple GrassRenderers
-            // When multiple renderers share the same ComputeShader asset, buffer bindings
-            // from one renderer would overwrite the other. Each renderer must bind its own buffers.
-            settings.cullingShader.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
-            settings.cullingShader.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
-            settings.cullingShader.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
-            settings.cullingShader.SetInt(PropInstanceCount, grassData.Count);
+            // Each renderer has its own cullingShaderInstance, so buffer bindings
+            // are fully isolated — no collisions between multiple GrassRenderers.
+            cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
+            cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
+            cullingShaderInstance.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
+            cullingShaderInstance.SetInt(PropInstanceCount, grassData.Count);
             
             int threadGroups = Mathf.CeilToInt((float)grassData.Count / THREAD_GROUP_SIZE);
-            settings.cullingShader.Dispatch(cullingKernel, threadGroups, 1, 1);
+            cullingShaderInstance.Dispatch(cullingKernel, threadGroups, 1, 1);
             
             // Use async readback to avoid GPU stall (critical for performance)
             // Only do readback in Editor for debugging - skip in builds for max performance
@@ -1047,8 +1195,8 @@ namespace GrassSystem
                     interactorData[i] = Vector4.zero;
             }
             
-            settings.cullingShader.SetVectorArray(PropInteractors, interactorData);
-            settings.cullingShader.SetInt(PropInteractorCount, count);
+            cullingShaderInstance.SetVectorArray(PropInteractors, interactorData);
+            cullingShaderInstance.SetInt(PropInteractorCount, count);
             
             materialInstance.SetVectorArray(PropInteractors, interactorData);
             materialInstance.SetInt(PropInteractorCount, count);

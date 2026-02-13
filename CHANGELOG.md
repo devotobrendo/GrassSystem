@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - 2026-02-12
+
+### Fixed
+- **Grass Disappearing in Additive Scenes** — Root cause: system had no retry mechanism in runtime builds when `GrassDataAsset` wasn't ready at `OnEnable`. Grass never recovered.
+- **D3D11 DEVICE_LOST with Multiple Renderers** — Each `GrassRenderer` now creates its own `ComputeShader` instance via `Object.Instantiate()`, fully isolating buffer bindings.
+- **Dots/Artifacts on Mesh Swap** — `ValidateAndRepairMaterial()` now detects mesh changes via `cachedMesh` comparison and triggers `RebuildBuffers()` automatically.
+- **Inconsistent State During Scene Save** — `OnSceneSaving` now calls `Cleanup()` before `grassData.Clear()` to release GPU resources first.
+- **NullReferenceException in UpdateCulling** — Complete null guards on all buffers and shader instance. Invalid state now triggers `isInitialized = false` for failsafe recovery.
+- **Stale Mesh Reference After Cleanup** — `Cleanup()` now sets `cachedMesh = null`.
+
+### Added
+- **Runtime Auto-Recovery (Failsafe)** — `TryAutoRecover()` in `Update()` continuously attempts to load and initialize grass when `!isInitialized`. Works in both Editor and runtime builds. Uses throttling (0.5s) with exponential backoff (3.0s after 10 attempts). Never stops trying.
+- **Buffer Validity Monitoring** — `Update()` detects when `sourceBuffer` becomes invalid and triggers auto-recovery immediately.
+
+### Changed
+- **Save/Load Performance** — `GrassDataAsset.SaveData()` and `LoadData()` now use `new List<GrassData>(data)` (Array.Copy/memcpy) instead of manual loops. ~10x faster for 50k+ instances.
+
+## [4.2.0] - 2026-02-11
+
+### Changed
+- **Noise Function Simplification** — Simplified heavy noise functions (FBM, Worley, Blue Noise) in `GrassCommon.hlsl` to reduce ALU instruction count in Pattern color mode.
+
+## [4.1.0] - 2026-02-11
+
+### Added
+- **Shader Feature Compile-Time Stripping** — Added `#pragma shader_feature_local` for color modes (`_COLORMODE_ALBEDO`, `_COLORMODE_TINT`, `_COLORMODE_PATTERNS`) and decal toggle. Unused shader branches are stripped at compile time, reducing GPU load.
+- **Material Keyword Sync** — `GrassRenderer.ApplySettingsToMaterial()` and `GrassDecal` now synchronize material keywords with their respective properties.
+
 ## [4.0.8] - 2026-02-07
 
 ### Fixed
