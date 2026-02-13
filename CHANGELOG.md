@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.1] - 2026-02-13
+
+### Fixed
+- **Decal Not Rendering in Builds** — `_DECALS_ON` keyword was declared as `shader_feature_local`, which strips unused variants at build time. Since the keyword is enabled at runtime by `GrassDecal.cs`, the variant was never present in builds. Changed to `multi_compile_local` in both `GrassLit.shader` and `GrassUnlit.shader`.
+
 ## [4.3.0] - 2026-02-12
 
 ### Fixed

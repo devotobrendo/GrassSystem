@@ -131,7 +131,7 @@ Shader "GrassSystem/GrassUnlit"
             
             // Compile-time stripping: only compile the active color mode + decal toggle
             #pragma shader_feature_local _COLORMODE_ALBEDO _COLORMODE_TINT _COLORMODE_PATTERNS
-            #pragma shader_feature_local _ _DECALS_ON
+            #pragma multi_compile_local _ _DECALS_ON
             
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
