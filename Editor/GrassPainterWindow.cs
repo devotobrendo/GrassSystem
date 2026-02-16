@@ -31,14 +31,11 @@ namespace GrassSystem
         private const int BATCH_SIZE = 5; // Process N positions per frame
         
         // Dirty state tracking - avoid marking dirty every stroke
-        private int strokesSinceLastSave = 0;
-        private const int STROKES_BEFORE_SAVE = 10; // Only save every N strokes
-        private bool sceneDirtyPending = false;
+        private bool hasUnsavedChanges = false;
         
         // Timed auto-backup for crash protection
         private double lastBackupTime = 0;
         private const double AUTO_BACKUP_INTERVAL = 60.0; // Backup every 60 seconds during active editing
-        private bool hasUnsavedChanges = false;
         
         // Renderer dropdown cache
         private GrassRenderer[] sceneRenderers;
@@ -78,12 +75,11 @@ namespace GrassSystem
         {
             SceneView.duringSceneGui -= OnSceneGUI;
             
-            // Flush any pending dirty state when window closes
-            if (sceneDirtyPending && targetRenderer != null)
+            // Save to external asset when window closes (crash protection)
+            if (hasUnsavedChanges && targetRenderer != null && targetRenderer.HasExternalData)
             {
-                EditorUtility.SetDirty(targetRenderer);
-                sceneDirtyPending = false;
-                strokesSinceLastSave = 0;
+                targetRenderer.SaveToExternalAsset();
+                hasUnsavedChanges = false;
             }
         }
         
@@ -171,6 +167,21 @@ namespace GrassSystem
         }
         
         private void OnGUI()
+        {
+            // Guard: prevent exception from corrupting Unity's Inspector GUI state
+            try
+            {
+                DrawWindowGUI();
+            }
+            catch (System.Exception e)
+            {
+                // ExitGUI exceptions are normal Unity flow control (e.g. EditorUtility.DisplayDialog)
+                if (e is ExitGUIException) throw;
+                Debug.LogError($"[GrassPainter] OnGUI error: {e.Message}");
+            }
+        }
+        
+        private void DrawWindowGUI()
         {
             scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
             
@@ -535,6 +546,20 @@ namespace GrassSystem
             if (targetRenderer == null || toolSettings == null)
                 return;
             
+            // Guard: prevent exception from corrupting Unity's Inspector GUI state
+            try
+            {
+                HandleSceneInput(sceneView);
+            }
+            catch (System.Exception e)
+            {
+                if (e is ExitGUIException) throw;
+                Debug.LogError($"[GrassPainter] OnSceneGUI error: {e.Message}");
+            }
+        }
+        
+        private void HandleSceneInput(SceneView sceneView)
+        {
             Event e = Event.current;
             
             // Toggle brush on/off with P key (without closing window)
@@ -785,43 +810,21 @@ namespace GrassSystem
                 // Use smart rebuild - much faster for incremental paint operations
                 targetRenderer.SmartRebuildBuffers();
                 
-                // Track strokes and only mark dirty/save periodically (avoids engasgo)
-                strokesSinceLastSave++;
-                sceneDirtyPending = true;
-                
-                if (strokesSinceLastSave >= STROKES_BEFORE_SAVE)
-                {
-                    strokesSinceLastSave = 0;
-                    sceneDirtyPending = false;
-                    
-                    // Auto-save to external asset if available (prevents data loss on crash)
-                    // Only save periodically to avoid material reset issues
-                    if (targetRenderer.HasExternalData)
-                    {
-                        targetRenderer.SaveToExternalAsset();
-                    }
-                    
-                    // Defer SetDirty to prevent UI blocking
-                    var rendererToMark = targetRenderer;
-                    EditorApplication.delayCall += () =>
-                    {
-                        if (rendererToMark != null)
-                        {
-                            EditorUtility.SetDirty(rendererToMark);
-                        }
-                    };
-                }
-                
-                // Mark that we have unsaved changes for timed backup
+                // Track strokes for timed backup only.
+                // PERF: We intentionally do NOT call SetDirty(renderer) or 
+                // SaveToExternalAsset() during paint strokes.
+                // SetDirty forces Unity to re-serialize the entire grassData list (30k+ items)
+                // which freezes the editor. Save happens on window close, manual save, or timed backup.
                 hasUnsavedChanges = true;
                 
-                // Timed auto-backup: every 60 seconds, create a JSON backup for crash recovery
+                // Timed auto-backup: every 60 seconds, save to external asset for crash recovery
                 double currentTime = EditorApplication.timeSinceStartup;
                 if (hasUnsavedChanges && currentTime - lastBackupTime > AUTO_BACKUP_INTERVAL)
                 {
                     lastBackupTime = currentTime;
                     if (targetRenderer.HasExternalData)
                     {
+                        targetRenderer.SaveToExternalAsset();
                         targetRenderer.externalDataAsset.CreateBackup();
                         hasUnsavedChanges = false;
                     }

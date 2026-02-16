@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Serialization;
 
 namespace GrassSystem
 {
@@ -16,9 +17,23 @@ namespace GrassSystem
         [Tooltip("Optional: Store grass data in an external asset instead of the scene. Recommended for large grass counts.")]
         public GrassDataAsset externalDataAsset;
         
-        [Header("Grass Data")]
-        [SerializeField, HideInInspector]
+        // ==== GRASS DATA STORAGE ====
+        // PERF FIX: grassData is [NonSerialized] to prevent Unity from serializing
+        // 500k+ items every time the Inspector is opened/refreshed.
+        // Unity creates a SerializedObject internally when any component is selected,
+        // which serializes ALL [SerializeField] fields. With 500k GrassData structs,
+        // this caused multi-second freezes on every Inspector interaction.
+        //
+        // Persistence is handled exclusively through GrassDataAsset (external asset).
+        // The legacy field below handles migration from scenes saved before this change.
+        [System.NonSerialized]
         private List<GrassData> grassData = new List<GrassData>();
+        
+        // Legacy: preserves embedded data from scenes saved before the NonSerialized change.
+        // Unity deserializes existing scene data into this field via FormerlySerializedAs.
+        // OnAfterDeserialize migrates it to the runtime grassData field, then clears it.
+        [SerializeField, HideInInspector, FormerlySerializedAs("grassData")]
+        private List<GrassData> _embeddedGrassDataLegacy = new List<GrassData>();
         
         private ComputeBuffer sourceBuffer;
         private ComputeBuffer visibleBuffer;
@@ -473,6 +488,13 @@ namespace GrassSystem
             UnityEditor.SceneManagement.EditorSceneManager.sceneSaving -= OnSceneSaving;
             UnityEditor.SceneManagement.EditorSceneManager.sceneSaved -= OnSceneSaved;
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
+            
+            // Auto-save: grassData is [NonSerialized] so it would be lost on disable.
+            // Persist to external asset to prevent data loss.
+            if (grassData != null && grassData.Count > 0 && externalDataAsset != null)
+            {
+                SaveToExternalAsset();
+            }
             #endif
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
             
@@ -540,6 +562,16 @@ namespace GrassSystem
         private void OnBeforeAssemblyReload()
         {
             LogEvent("OnBeforeAssemblyReload (Domain Reload)");
+            
+            // CRITICAL: grassData is [NonSerialized] for Inspector performance.
+            // Domain reload destroys all managed state, so we MUST persist to
+            // external asset before the reload happens.
+            if (grassData != null && grassData.Count > 0 && externalDataAsset != null)
+            {
+                SaveToExternalAsset();
+                LogEvent($"Saved {grassData.Count:N0} instances to external asset before domain reload");
+            }
+            
             // Critical: cleanup before domain reload to prevent buffer leaks
             Cleanup();
         }
@@ -1030,6 +1062,21 @@ namespace GrassSystem
             materialInstance.SetFloat("_MaxTiltAngle", settings.maxTiltAngle * Mathf.Deg2Rad);
             materialInstance.SetFloat("_TiltVariation", settings.tiltVariation);
             
+            // Light Probes settings (Unlit shader) - only apply if enabled
+            if (settings.useLightProbes)
+            {
+                materialInstance.SetFloat("_LightProbeInfluence", settings.lightProbeInfluence);
+                materialInstance.SetFloat("_AmbientBoost", settings.ambientBoost);
+                materialInstance.EnableKeyword("_LIGHTPROBES_ON");
+            }
+            else
+            {
+                // Disabled: set to zero to prevent any lighting effect
+                materialInstance.SetFloat("_LightProbeInfluence", 0f);
+                materialInstance.SetFloat("_AmbientBoost", 1f);
+                materialInstance.DisableKeyword("_LIGHTPROBES_ON");
+            }
+            
             // Depth Perception settings (Unlit shader) - only apply if enabled
             if (settings.useDepthPerception)
             {
@@ -1242,37 +1289,43 @@ namespace GrassSystem
         
         /// <summary>
         /// Called before Unity serializes this object.
-        /// Used for prefab saving and scene saving.
         /// 
-        /// IMPORTANT: We intentionally do NOT clear grassData here.
-        /// Unity calls OnBeforeSerialize extremely frequently (Inspector refresh, Undo, 
-        /// selection changes, etc.) - much more often than actual saves.
-        /// Any automatic clearing here will cause data loss after LoadFromExternalAsset().
-        /// 
-        /// File size optimization MUST be done manually via:
-        /// - "Optimize for Version Control" button in Inspector
-        /// - ClearEmbeddedDataForVersionControl() method
+        /// Since grassData is [NonSerialized], Unity never serializes the runtime list.
+        /// The legacy field is used ONLY for backward compatibility with scenes saved
+        /// before this optimization. For users without external assets, we copy runtime
+        /// data to the legacy field so it persists in the scene file.
         /// </summary>
         public void OnBeforeSerialize()
         {
-            // Intentionally empty - see comment above
+            if (externalDataAsset != null)
+            {
+                // External asset handles persistence — keep legacy field empty
+                // This is the key optimization: Unity serializes an empty list instead of 500k+ items
+                _embeddedGrassDataLegacy?.Clear();
+            }
+            else if (grassData != null && grassData.Count > 0 && !isPerformingDataOperation)
+            {
+                // No external asset — copy runtime data to legacy field for scene persistence
+                // This path is only for small grass counts without external assets
+                _embeddedGrassDataLegacy = new List<GrassData>(grassData);
+            }
         }
         
         /// <summary>
         /// Called after Unity deserializes this object.
-        /// Ensures grass is properly initialized when loading scenes or instantiating prefabs.
-        /// Loads data from external asset if embedded data is empty.
+        /// Migrates legacy embedded data to the runtime field and marks for reinitialization.
         /// </summary>
         public void OnAfterDeserialize()
         {
-            // If we have external asset but no embedded data, mark for loading from asset
-            // This handles the case where OnBeforeSerialize cleared the embedded data
-            if (externalDataAsset != null && (grassData == null || grassData.Count == 0))
+            // Migration: move legacy embedded data to runtime field
+            if (_embeddedGrassDataLegacy != null && _embeddedGrassDataLegacy.Count > 0)
             {
+                grassData = _embeddedGrassDataLegacy;
+                _embeddedGrassDataLegacy = new List<GrassData>(); // Clear legacy to free serialization weight
                 needsReinitAfterDeserialize = true;
             }
-            // Otherwise use embedded data as before
-            else if (grassData != null && grassData.Count > 0)
+            // External asset path: grassData is empty (NonSerialized), load from asset in OnEnable
+            else if (externalDataAsset != null)
             {
                 needsReinitAfterDeserialize = true;
             }

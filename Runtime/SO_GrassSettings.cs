@@ -205,6 +205,16 @@ namespace GrassSystem
         public ShadowCastingMode castShadows = ShadowCastingMode.Off;
         public bool receiveShadows = true;
         
+        [Header("Light Probes (Unlit Shader)")]
+        [Tooltip("Enable Light Probe sampling for ambient lighting in the Unlit shader")]
+        public bool useLightProbes = false;
+        [Range(0f, 1f)]
+        [Tooltip("How much Light Probes influence the final color (0 = no effect, 1 = full)")]
+        public float lightProbeInfluence = 1f;
+        [Range(0.5f, 2f)]
+        [Tooltip("Multiplier for the ambient light received from Light Probes")]
+        public float ambientBoost = 1f;
+        
         [Header("Depth Perception (Unlit Shader)")]
         [Tooltip("Enable depth perception effects for more visual depth")]
         public bool useDepthPerception = false;

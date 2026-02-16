@@ -17,6 +17,8 @@
 # Generated at runtime (user-specific)
 Editor/GrassToolSettings.asset
 Editor/GrassToolSettings.asset.meta
+Editor/LogBuild.txt
+Editor/LogBuild.txt.meta
 
 # IDE config
 .vsconfig

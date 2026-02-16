@@ -110,6 +110,11 @@ namespace GrassSystem
         private SerializedProperty heightDarkening;
         private SerializedProperty backfaceDarkening;
         
+        // Light Probes
+        private SerializedProperty useLightProbes;
+        private SerializedProperty lightProbeInfluence;
+        private SerializedProperty ambientBoost;
+        
         // Debug
         private SerializedProperty drawCullingBounds;
         
@@ -215,6 +220,10 @@ namespace GrassSystem
             heightDarkening = serializedObject.FindProperty("heightDarkening");
             backfaceDarkening = serializedObject.FindProperty("backfaceDarkening");
             useDepthPerception = serializedObject.FindProperty("useDepthPerception");
+            
+            useLightProbes = serializedObject.FindProperty("useLightProbes");
+            lightProbeInfluence = serializedObject.FindProperty("lightProbeInfluence");
+            ambientBoost = serializedObject.FindProperty("ambientBoost");
             
             drawCullingBounds = serializedObject.FindProperty("drawCullingBounds");
             
@@ -505,6 +514,19 @@ namespace GrassSystem
                 EditorGUILayout.PropertyField(instanceColorVariation, new GUIContent("Instance Color Variation", "Per-instance color variation to break up uniformity"));
                 EditorGUILayout.PropertyField(heightDarkening, new GUIContent("Height Darkening", "Darkens the base of grass blades"));
                 EditorGUILayout.PropertyField(backfaceDarkening, new GUIContent("Backface Darkening", "Darkens the backface of grass blades"));
+                EditorGUI.indentLevel--;
+            }
+            
+            EditorGUILayout.Space(10);
+            
+            // === LIGHT PROBES (Unlit Shader) ===
+            EditorGUILayout.LabelField("Light Probes (Unlit Shader)", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(useLightProbes, new GUIContent("Enable Light Probes", "Sample Light Probes for ambient lighting in the Unlit shader"));
+            if (settings.useLightProbes)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(lightProbeInfluence, new GUIContent("Light Probe Influence", "How much Light Probes affect the final color"));
+                EditorGUILayout.PropertyField(ambientBoost, new GUIContent("Ambient Boost", "Multiplier for ambient light from Light Probes"));
                 EditorGUI.indentLevel--;
             }
             

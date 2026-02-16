@@ -27,18 +27,6 @@ Shader "GrassSystem/GrassLit"
         _NaturalColor3Tip ("Color 3 Tip", Color) = (0.50, 0.70, 0.15, 1)
         _NaturalColor3Root ("Color 3 Root", Color) = (0.20, 0.30, 0.05, 1)
         
-        [Header(Color Zones)]
-        [Toggle] _UseColorZones ("Enable Color Zones", Float) = 0
-        [Enum(Stripes,0,Checkerboard,1,Noise,2,Organic,3,Patches,4)] _ZonePatternType ("Pattern Type", Float) = 0
-        _ZoneColorLight ("Light Zone Color", Color) = (0.5, 0.8, 0.3, 1)
-        _ZoneColorDark ("Dark Zone Color", Color) = (0.3, 0.55, 0.2, 1)
-        _ZoneScale ("Zone Scale", Range(1, 50)) = 5
-        _ZoneDirection ("Direction (Stripes)", Range(0, 360)) = 0
-        _ZoneSoftness ("Edge Softness", Range(0, 1)) = 0.1
-        _ZoneContrast ("Contrast (Noise)", Range(0.5, 3)) = 1.5
-        _OrganicAccentColor ("Accent Color (Organic)", Color) = (0.55, 0.6, 0.2, 1)
-        _OrganicClumpiness ("Clumpiness (Organic)", Range(0, 1)) = 0.5
-        
         [Header(Tip Cutout)]
         [Toggle] _UseTipCutout ("Use Tip Cutout", Float) = 0
         _TipCutoff ("Tip Cutoff Height", Range(0, 1)) = 0.8
@@ -572,29 +560,59 @@ Shader "GrassSystem/GrassLit"
                 // Runs once for ALL color modes — stripped entirely when no decals
                 // ========================================
                 #if defined(_DECALS_ON)
-                float2 decal1UV = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
-                float2 decal2UV = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
-                float2 decal3UV = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
-                float2 decal4UV = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
-                float2 decal5UV = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
+                // Per-layer guards: UV + sample only for enabled layers (uniform branch = coherent skip)
+                DecalResult d1, d2, d3, d4, d5;
+                d1.color = baseColor; d1.applied = 0;
+                d2.color = baseColor; d2.applied = 0;
+                d3.color = baseColor; d3.applied = 0;
+                d4.color = baseColor; d4.applied = 0;
+                d5.color = baseColor; d5.applied = 0;
                 
-                half4 decal1Sample = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, decal1UV);
-                half4 decal2Sample = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, decal2UV);
-                half4 decal3Sample = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, decal3UV);
-                half4 decal4Sample = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, decal4UV);
-                half4 decal5Sample = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, decal5UV);
+                if (_DecalEnabled > 0.5)
+                {
+                    float2 uv = CalculateDecalUV(input.positionWS, _DecalBounds, _DecalRotation);
+                    half4 s = SAMPLE_TEXTURE2D(_DecalTex, sampler_DecalTex, uv);
+                    d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, s, uv);
+                }
                 
-                DecalResult d1 = ApplyDecalLayer(baseColor, input.positionWS, _DecalEnabled, _DecalBounds, _DecalRotation, _DecalBlend, _DecalBlendMode, decal1Sample, decal1UV);
-                DecalResult d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, decal2Sample, decal2UV);
-                DecalResult d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, decal3Sample, decal3UV);
-                DecalResult d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, decal4Sample, decal4UV);
-                DecalResult d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, decal5Sample, decal5UV);
+                if (_Decal2Enabled > 0.5)
+                {
+                    float2 uv = CalculateDecalUV(input.positionWS, _Decal2Bounds, _Decal2Rotation);
+                    half4 s = SAMPLE_TEXTURE2D(_Decal2Tex, sampler_Decal2Tex, uv);
+                    d2 = ApplyDecalLayer(d1.color, input.positionWS, _Decal2Enabled, _Decal2Bounds, _Decal2Rotation, _Decal2Blend, _Decal2BlendMode, s, uv);
+                }
+                else { d2.color = d1.color; }
+                
+                if (_Decal3Enabled > 0.5)
+                {
+                    float2 uv = CalculateDecalUV(input.positionWS, _Decal3Bounds, _Decal3Rotation);
+                    half4 s = SAMPLE_TEXTURE2D(_Decal3Tex, sampler_Decal3Tex, uv);
+                    d3 = ApplyDecalLayer(d2.color, input.positionWS, _Decal3Enabled, _Decal3Bounds, _Decal3Rotation, _Decal3Blend, _Decal3BlendMode, s, uv);
+                }
+                else { d3.color = d2.color; }
+                
+                if (_Decal4Enabled > 0.5)
+                {
+                    float2 uv = CalculateDecalUV(input.positionWS, _Decal4Bounds, _Decal4Rotation);
+                    half4 s = SAMPLE_TEXTURE2D(_Decal4Tex, sampler_Decal4Tex, uv);
+                    d4 = ApplyDecalLayer(d3.color, input.positionWS, _Decal4Enabled, _Decal4Bounds, _Decal4Rotation, _Decal4Blend, _Decal4BlendMode, s, uv);
+                }
+                else { d4.color = d3.color; }
+                
+                if (_Decal5Enabled > 0.5)
+                {
+                    float2 uv = CalculateDecalUV(input.positionWS, _Decal5Bounds, _Decal5Rotation);
+                    half4 s = SAMPLE_TEXTURE2D(_Decal5Tex, sampler_Decal5Tex, uv);
+                    d5 = ApplyDecalLayer(d4.color, input.positionWS, _Decal5Enabled, _Decal5Bounds, _Decal5Rotation, _Decal5Blend, _Decal5BlendMode, s, uv);
+                }
+                else { d5.color = d4.color; }
+                
                 baseColor = d5.color;
                 
                 // Albedo mode: preserve texture variation via luma multiplication
                 if (isAlbedoMode)
                 {
-                    float anyDecalApplied = saturate(d1.applied + d2.applied + d3.applied + d4.applied + d5.applied);
+                    half anyDecalApplied = saturate(d1.applied + d2.applied + d3.applied + d4.applied + d5.applied);
                     half albedoLuma = dot(albedoTex.rgb, half3(0.299, 0.587, 0.114));
                     half lumaFactor = lerp(1.0, albedoLuma * 2.0, 0.5);
                     baseColor = lerp(baseColor, baseColor * lumaFactor, anyDecalApplied);
@@ -654,22 +672,46 @@ Shader "GrassSystem/GrassLit"
             int _InteractorCount;
             float _InteractorStrength;
             
+            // CBUFFER must match main pass layout exactly for SRP Batcher compatibility
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
                 float4 _TopTint;
                 float4 _BottomTint;
-                float4 _PatternColorA;
-                float4 _PatternColorB;
-                float _UseColorZones;
-                float _ZonePatternType;
-                float4 _ZoneColorLight;
-                float4 _ZoneColorDark;
-                float _ZoneScale;
-                float _ZoneDirection;
-                float _ZoneSoftness;
-                float _ZoneContrast;
-                float4 _OrganicAccentColor;
-                float _OrganicClumpiness;
+                
+                // Color Mode System (0=Albedo, 1=Tint, 2=Patterns)
+                float _ColorMode;
+                
+                // Pattern Mode
+                float _PatternType;
+                float4 _PatternATip;
+                float4 _PatternARoot;
+                float4 _PatternBTip;
+                float4 _PatternBRoot;
+                
+                // Natural Blend Colors (3 colors with tip/root)
+                float4 _NaturalColor1Tip;
+                float4 _NaturalColor1Root;
+                float4 _NaturalColor2Tip;
+                float4 _NaturalColor2Root;
+                float4 _NaturalColor3Tip;
+                float4 _NaturalColor3Root;
+                
+                // Pattern Dimensions
+                float _StripeWidth;
+                float _CheckerboardSize;
+                float _StripeAngle;
+                
+                // Natural Blend Settings
+                float _NaturalBlendType;
+                float _NaturalScale;
+                float _NaturalSoftness;
+                float _NaturalContrast;
+                
+                // Albedo Blend
+                float _UseAlbedoBlend;
+                float _AlbedoBlendAmount;
+                float _UseNormalMap;
+                
                 float _UseTipCutout;
                 float _TipCutoff;
                 float _AlphaCutoff;
@@ -687,6 +729,37 @@ Shader "GrassSystem/GrassLit"
                 float4 _MeshRotation;
                 float _MaxTiltAngle;
                 float _TiltVariation;
+                float _MaxBendAngle;
+                // Decal Layer 1
+                float _DecalEnabled;
+                float4 _DecalBounds;
+                float _DecalRotation;
+                float _DecalBlend;
+                float _DecalBlendMode;
+                // Decal Layer 2
+                float _Decal2Enabled;
+                float4 _Decal2Bounds;
+                float _Decal2Rotation;
+                float _Decal2Blend;
+                float _Decal2BlendMode;
+                // Decal Layer 3
+                float _Decal3Enabled;
+                float4 _Decal3Bounds;
+                float _Decal3Rotation;
+                float _Decal3Blend;
+                float _Decal3BlendMode;
+                // Decal Layer 4
+                float _Decal4Enabled;
+                float4 _Decal4Bounds;
+                float _Decal4Rotation;
+                float _Decal4Blend;
+                float _Decal4BlendMode;
+                // Decal Layer 5
+                float _Decal5Enabled;
+                float4 _Decal5Bounds;
+                float _Decal5Rotation;
+                float _Decal5Blend;
+                float _Decal5BlendMode;
             CBUFFER_END
             
             struct Attributes

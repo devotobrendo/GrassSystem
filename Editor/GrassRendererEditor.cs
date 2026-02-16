@@ -6,14 +6,20 @@ using UnityEngine;
 namespace GrassSystem
 {
     /// <summary>
-    /// Custom Editor for GrassRenderer that prevents Inspector lag
-    /// by avoiding serialization of the massive grassData list.
+    /// Custom Editor for GrassRenderer.
+    /// 
+    /// PERF: This editor intentionally avoids Unity's SerializedObject/SerializedProperty
+    /// system entirely. The default serializedObject.Update() serializes ALL [SerializeField]
+    /// fields on the target, including the massive grassData list (30k+ GrassData structs).
+    /// This caused multi-second Inspector freezes on every repaint when the object was dirty.
+    /// 
+    /// Instead, we use direct field access via the target reference and Undo.RecordObject
+    /// for proper undo support. Only the 2 lightweight fields (settings, externalDataAsset)
+    /// are ever touched by this editor — grassData is never accessed for display.
     /// </summary>
     [CustomEditor(typeof(GrassRenderer))]
     public class GrassRendererEditor : Editor
     {
-        private SerializedProperty settings;
-        private SerializedProperty externalDataAsset;
         private bool showDebugInfo = false;
         
         // Cached values to avoid accessing large list every frame
@@ -23,12 +29,8 @@ namespace GrassSystem
         
         private void OnEnable()
         {
-            // Only cache the settings property - we intentionally skip grassData
-            // to avoid performance issues with large grass counts
-            settings = serializedObject.FindProperty("settings");
-            externalDataAsset = serializedObject.FindProperty("externalDataAsset");
-            
-            // Initial count
+            if (target == null) return;
+            // Initial count — direct access, no serialization overhead
             UpdateCachedCount();
         }
         
@@ -47,10 +49,28 @@ namespace GrassSystem
         
         public override void OnInspectorGUI()
         {
-            serializedObject.Update();
+            // Guard: target can be null/destroyed during rapid scene changes or domain reload
+            if (target == null) return;
             
-            var renderer = (GrassRenderer)target;
-            
+            var renderer = target as GrassRenderer;
+            if (renderer == null) return;
+
+            try
+            {
+                DrawInspectorContent(renderer);
+            }
+            catch (System.Exception e)
+            {
+                // CRITICAL: An unhandled exception in OnInspectorGUI kills Unity's
+                // entire Inspector panel for ALL objects. Catch and display gracefully.
+                EditorGUILayout.HelpBox(
+                    $"Inspector error: {e.Message}\n\nTry reselecting the object.", 
+                    MessageType.Error);
+            }
+        }
+        
+        private void DrawInspectorContent(GrassRenderer renderer)
+        {
             // Update cached count periodically (throttled to avoid lag)
             if (EditorApplication.timeSinceStartup - lastCountUpdateTime > COUNT_UPDATE_INTERVAL)
             {
@@ -58,7 +78,15 @@ namespace GrassSystem
             }
             
             // === SETTINGS ===
-            EditorGUILayout.PropertyField(settings, new GUIContent("Grass Settings"));
+            EditorGUI.BeginChangeCheck();
+            var newSettings = (SO_GrassSettings)EditorGUILayout.ObjectField(
+                "Grass Settings", renderer.settings, typeof(SO_GrassSettings), false);
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(renderer, "Change Grass Settings");
+                renderer.settings = newSettings;
+                EditorUtility.SetDirty(renderer);
+            }
             
             if (renderer.settings == null)
             {
@@ -70,8 +98,17 @@ namespace GrassSystem
             // === EXTERNAL DATA STORAGE ===
             EditorGUILayout.LabelField("Data Storage", EditorStyles.boldLabel);
             
-            EditorGUILayout.PropertyField(externalDataAsset, new GUIContent("External Data Asset", 
-                "Store grass data in an external asset instead of the scene. Recommended for large grass counts."));
+            EditorGUI.BeginChangeCheck();
+            var newDataAsset = (GrassDataAsset)EditorGUILayout.ObjectField(
+                new GUIContent("External Data Asset", 
+                    "Store grass data in an external asset instead of the scene. Recommended for large grass counts."),
+                renderer.externalDataAsset, typeof(GrassDataAsset), false);
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(renderer, "Change External Data Asset");
+                renderer.externalDataAsset = newDataAsset;
+                EditorUtility.SetDirty(renderer);
+            }
             
             if (renderer.externalDataAsset != null)
             {
@@ -272,7 +309,10 @@ namespace GrassSystem
                     {
                         if (renderer.ClearEmbeddedDataForVersionControl())
                         {
-                            EditorUtility.SetDirty(renderer);
+                            // NOTE: We intentionally do NOT call EditorUtility.SetDirty here.
+                            // SetDirty forces Unity to re-serialize the entire component
+                            // (including grassData) which causes the Inspector freeze.
+                            // The scene will be marked dirty naturally when saved.
                             AssetDatabase.SaveAssets();
                             
                             // Reload from external asset so grass keeps rendering
@@ -320,7 +360,7 @@ namespace GrassSystem
                 EditorGUI.indentLevel--;
             }
             
-            serializedObject.ApplyModifiedProperties();
+            // No serializedObject.ApplyModifiedProperties() — we don't use serializedObject at all
         }
         
         private void CreateNewDataAsset(GrassRenderer renderer)

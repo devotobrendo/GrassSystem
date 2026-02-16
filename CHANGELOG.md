@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.1] - 2026-02-15
+
+### Fixed
+- **Critical: Editor Freeze When Selecting GrassRenderer** — Selecting a GameObject with `GrassRenderer` (500k+ instances) caused Unity to freeze for 10+ seconds. Root cause: Unity internally creates a `SerializedObject` for every selected component, which serializes ALL `[SerializeField]` fields — including the massive `grassData` List. Fix: `grassData` is now `[System.NonSerialized]` (runtime-only). Data persists exclusively through `GrassDataAsset` (external asset). A `[FormerlySerializedAs]` legacy field provides automatic migration from scenes saved before this change.
+- **Editor: Inspector Freeze After Save/Load** — `GrassRendererEditor` no longer uses `serializedObject` at all. Direct field access via `Undo.RecordObject` eliminates serialization overhead.
+- **Editor: Paint Tool Auto-Save Stutter** — Removed `EditorUtility.SetDirty(renderer)` and `SaveToExternalAsset()` from the per-stroke paint flow. Save now occurs on: painter window close, manual save button, or timed auto-backup (60s).
+
+### Optimized
+- **Conditional Light Probes (GrassUnlit)** — `SampleSH` calls and the `lightProbeColor` varying are now stripped at compile time when Light Probes are disabled via `#pragma shader_feature_local _ _LIGHTPROBES_ON`. Saves ~5 ALU in vertex shader when probes are off. Keyword sync added to `GrassRenderer.cs`.
+- **Half Precision (Both Shaders)** — `anyDecalApplied` changed from `float` to `half` in both `GrassUnlit` and `GrassLit` for reduced register pressure.
+
+## [4.4.0] - 2026-02-14
+
+### Added
+- **Light Probes (Unlit Shader)** — Per-vertex SH sampling for ambient lighting in `GrassUnlit.shader`. Controlled via `SO_GrassSettings` with Influence (0–1) and Ambient Boost (0.5–2.0) sliders. Default: disabled (zero visual change on upgrade).
+- **Depth Perception (Unlit Shader)** — Three effects to break visual uniformity: Instance Color Variation, Height Darkening, and Backface Darkening. All default to 0 (no visual change on upgrade).
+- **Editor UI** — New collapsible sections for Light Probes and Depth Perception in the Grass Settings inspector.
+
+### Fixed
+- **SRP Batcher Break (GrassUnlit)** — ShadowCaster CBUFFER had legacy properties (`_PatternColorA`, `_UseColorZones`) that did not match the main pass layout. Fixed by aligning layouts byte-for-byte.
+- **SRP Batcher Break (GrassLit)** — Same CBUFFER mismatch in ShadowCaster pass. Missing `_MaxBendAngle`, `_ColorMode`, and all 5 Decal layers. Fixed.
+- **Orphaned Properties (GrassUnlit)** — Removed 13 Color Zones properties and `_UseOnlyAlbedoColor` from the Properties block (not used in shader code, not in CBUFFER, not synced by C#).
+- **Orphaned Properties (GrassLit)** — Removed 10 Color Zones properties from the Properties block (same issue).
+
+### Optimized
+- **Decal Guard Branches** — Both shaders now skip UV calculation and texture sampling for disabled decal layers via uniform branch guards. Previously all 5 layers were unconditionally sampled.
+
 ## [4.3.1] - 2026-02-13
 
 ### Fixed
