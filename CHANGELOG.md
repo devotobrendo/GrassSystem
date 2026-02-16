@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.2] - 2026-02-16
+
+### Fixed
+- **Critical: Inspector Crash During Rapid Painting** — Rapid brush clicks permanently corrupted Unity's IMGUI stack, causing the Inspector to go blank for ALL objects (only fixable by toggling Debug/Normal mode). Root causes: (1) `Handles.BeginGUI()`/`EndGUI()` pairs had no `try/finally`, so exceptions left the GUI stack permanently broken. (2) `OnSceneGUI` processed Layout events, causing stack mismatches. (3) `SceneView.RepaintAll()` was called unconditionally every frame, amplifying corruption. Fix: event gating, `try/finally` on all `BeginGUI`/`EndGUI` pairs, conditional repaint.
+- **Critical: Inspector Freeze (Root Cause)** — `OnBeforeSerialize` was copying `grassData` (500k+ items) to `_embeddedGrassDataLegacy` on every `SetDirty`/`Undo` call. Now unconditionally clears the legacy field — it exists only for one-time migration of old scenes. Persistence is 100% through `GrassDataAsset`.
+- **Eliminated All `SetDirty(renderer)` Calls** — Replaced 8 occurrences across `GrassRendererEditor` and `GrassPainterWindow` with `EditorSceneManager.MarkSceneDirty` (marks scene without serializing the component) and `SaveToExternalAsset` (persists data directly).
+
+### Added
+- **Configurable Auto-Save Interval** — New `autoSaveInterval` field on `GrassRenderer` (10s–10min, default 1min). Displayed as editable min:sec fields in the Inspector. The Grass Painter reads this value instead of the hardcoded 60s constant.
+
 ## [4.4.1] - 2026-02-15
 
 ### Fixed

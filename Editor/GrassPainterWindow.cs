@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace GrassSystem
@@ -35,7 +36,6 @@ namespace GrassSystem
         
         // Timed auto-backup for crash protection
         private double lastBackupTime = 0;
-        private const double AUTO_BACKUP_INTERVAL = 60.0; // Backup every 60 seconds during active editing
         
         // Renderer dropdown cache
         private GrassRenderer[] sceneRenderers;
@@ -118,7 +118,10 @@ namespace GrassSystem
                 if (previousRenderer.GrassDataList != null && previousRenderer.GrassDataList.Count > 0)
                 {
                     previousRenderer.RebuildBuffers();
-                    EditorUtility.SetDirty(previousRenderer);
+                    if (previousRenderer.HasExternalData)
+                    {
+                        previousRenderer.SaveToExternalAsset();
+                    }
                 }
             }
             
@@ -546,21 +549,50 @@ namespace GrassSystem
             if (targetRenderer == null || toolSettings == null)
                 return;
             
-            // Guard: prevent exception from corrupting Unity's Inspector GUI state
+            Event e = Event.current;
+            
+            // CRITICAL: Only process events that we actually handle.
+            // Processing Layout events with Handles drawing code can corrupt Unity's
+            // internal IMGUI stack, which permanently kills the Inspector panel for ALL objects.
+            // The only fix is toggling Debug/Normal mode — exactly the symptom reported.
+            if (e.type != EventType.Repaint &&
+                e.type != EventType.MouseDown &&
+                e.type != EventType.MouseUp &&
+                e.type != EventType.MouseDrag &&
+                e.type != EventType.MouseMove &&
+                e.type != EventType.KeyDown &&
+                e.type != EventType.ScrollWheel)
+            {
+                return;
+            }
+            
+            // Guard: prevent exception from corrupting Unity's IMGUI GUI state.
+            // NOTE: A bare try/catch is NOT enough — if an exception escapes between
+            // Handles.BeginGUI() and Handles.EndGUI(), the IMGUI stack is permanently
+            // corrupted. The drawing methods below use try/finally on those pairs.
             try
             {
                 HandleSceneInput(sceneView);
             }
-            catch (System.Exception e)
+            catch (System.Exception ex)
             {
-                if (e is ExitGUIException) throw;
-                Debug.LogError($"[GrassPainter] OnSceneGUI error: {e.Message}");
+                if (ex is ExitGUIException) throw;
+                Debug.LogError($"[GrassPainter] OnSceneGUI error: {ex.Message}\n{ex.StackTrace}");
             }
         }
         
         private void HandleSceneInput(SceneView sceneView)
         {
             Event e = Event.current;
+            
+            // CRITICAL: Suppress Unity's default SceneView interactions (object selection,
+            // context menu, etc.) while the Grass Painter window is open.
+            // Without this, any mouse click not consumed by e.Use() triggers Unity's
+            // default object selection handler — which desynchronizes the Inspector
+            // and causes it to go permanently blank for ALL objects.
+            // This is the standard pattern used by Unity's Terrain, ProBuilder, and Polybrush tools.
+            int controlID = GUIUtility.GetControlID(FocusType.Passive);
+            HandleUtility.AddDefaultControl(controlID);
             
             // Toggle brush on/off with P key (without closing window)
             if (e.type == EventType.KeyDown && e.keyCode == KeyCode.P)
@@ -585,6 +617,11 @@ namespace GrassSystem
             // Draw processing indicator if deferred processing is active
             if (isProcessingDeferred)
             {
+                // Consume mouse events to prevent Unity from selecting objects during processing
+                if (e.type == EventType.MouseDown || e.type == EventType.MouseUp || e.type == EventType.MouseDrag)
+                {
+                    e.Use();
+                }
                 DrawProcessingIndicator(sceneView);
                 return; // Block input during processing
             }
@@ -647,7 +684,13 @@ namespace GrassSystem
                 e.Use();
             }
             
-            SceneView.RepaintAll();
+            // Only trigger repaint during active painting or processing,
+            // NOT unconditionally on every event — that causes repaint storms
+            // that amplify IMGUI stack issues and hurt editor performance.
+            if (isPainting || isProcessingDeferred)
+            {
+                SceneView.RepaintAll();
+            }
         }
         
         private void QueuePaintPosition(Vector3 position, Vector3 normal)
@@ -680,21 +723,30 @@ namespace GrassSystem
             Handles.color = disabledColor;
             Handles.DrawWireDisc(hitPoint, hitNormal, toolSettings.brushSize);
             
-            // Draw "PAUSED" text
+            // Draw "PAUSED" text — wrapped in try/finally to guarantee EndGUI is called.
+            // If EndGUI is skipped due to an exception, Unity's IMGUI stack is permanently
+            // corrupted, killing the Inspector for ALL objects in the scene.
             Handles.BeginGUI();
-            Vector2 screenPos = HandleUtility.WorldToGUIPoint(hitPoint);
-            GUIStyle style = new GUIStyle(GUI.skin.label)
+            try
             {
-                alignment = TextAnchor.MiddleCenter,
-                fontStyle = FontStyle.Bold,
-                fontSize = 12
-            };
-            style.normal.textColor = new Color(1f, 1f, 1f, 0.7f);
-            Rect rect = new Rect(screenPos.x - 40, screenPos.y - 10, 80, 20);
-            GUI.Label(rect, "PAUSED (P)", style);
-            Handles.EndGUI();
+                Vector2 screenPos = HandleUtility.WorldToGUIPoint(hitPoint);
+                GUIStyle style = new GUIStyle(GUI.skin.label)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold,
+                    fontSize = 12
+                };
+                style.normal.textColor = new Color(1f, 1f, 1f, 0.7f);
+                Rect rect = new Rect(screenPos.x - 40, screenPos.y - 10, 80, 20);
+                GUI.Label(rect, "PAUSED (P)", style);
+            }
+            finally
+            {
+                Handles.EndGUI();
+            }
             
-            SceneView.RepaintAll();
+            // NOTE: Removed SceneView.RepaintAll() here — it was causing repaint loops.
+            // The SceneView will repaint naturally on mouse move events.
         }
         
         private void DrawPendingPreview()
@@ -731,21 +783,28 @@ namespace GrassSystem
                 Handles.color = processingColor;
                 Handles.DrawSolidDisc(center, Vector3.up, radius);
                 
-                // Draw progress text
+                // Draw progress text — wrapped in try/finally to guarantee EndGUI.
+                // Missing EndGUI permanently corrupts Unity's IMGUI stack.
                 Handles.BeginGUI();
-                Vector2 screenPos = HandleUtility.WorldToGUIPoint(center);
-                string progressText = $"Processing {processedCount}/{totalToProcess}...";
-                GUIStyle style = new GUIStyle(GUI.skin.label)
+                try
                 {
-                    alignment = TextAnchor.MiddleCenter,
-                    fontStyle = FontStyle.Bold,
-                    fontSize = 14
-                };
-                style.normal.textColor = Color.white;
-                
-                Rect rect = new Rect(screenPos.x - 80, screenPos.y - 15, 160, 30);
-                GUI.Label(rect, progressText, style);
-                Handles.EndGUI();
+                    Vector2 screenPos = HandleUtility.WorldToGUIPoint(center);
+                    string progressText = $"Processing {processedCount}/{totalToProcess}...";
+                    GUIStyle style = new GUIStyle(GUI.skin.label)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontStyle = FontStyle.Bold,
+                        fontSize = 14
+                    };
+                    style.normal.textColor = Color.white;
+                    
+                    Rect rect = new Rect(screenPos.x - 80, screenPos.y - 15, 160, 30);
+                    GUI.Label(rect, progressText, style);
+                }
+                finally
+                {
+                    Handles.EndGUI();
+                }
             }
             
             SceneView.RepaintAll();
@@ -817,9 +876,11 @@ namespace GrassSystem
                 // which freezes the editor. Save happens on window close, manual save, or timed backup.
                 hasUnsavedChanges = true;
                 
-                // Timed auto-backup: every 60 seconds, save to external asset for crash recovery
+                // Timed auto-backup: save to external asset for crash recovery
+                // Uses configurable interval from GrassRenderer.autoSaveInterval
                 double currentTime = EditorApplication.timeSinceStartup;
-                if (hasUnsavedChanges && currentTime - lastBackupTime > AUTO_BACKUP_INTERVAL)
+                float backupInterval = targetRenderer.autoSaveInterval;
+                if (hasUnsavedChanges && currentTime - lastBackupTime > backupInterval)
                 {
                     lastBackupTime = currentTime;
                     if (targetRenderer.HasExternalData)
@@ -1185,13 +1246,17 @@ namespace GrassSystem
             
             targetRenderer.RebuildBuffers();
             
-            // Defer SetDirty to next frame to prevent UI blocking
-            var rendererToMark = targetRenderer;
+            // Persist to external asset instead of SetDirty to avoid serialization freeze
+            var rendererToSave = targetRenderer;
             EditorApplication.delayCall += () =>
             {
-                if (rendererToMark != null)
+                if (rendererToSave != null)
                 {
-                    EditorUtility.SetDirty(rendererToMark);
+                    if (rendererToSave.HasExternalData)
+                    {
+                        rendererToSave.SaveToExternalAsset();
+                    }
+                    EditorSceneManager.MarkSceneDirty(rendererToSave.gameObject.scene);
                 }
             };
         }
@@ -1313,14 +1378,18 @@ namespace GrassSystem
             // Skipping Undo.RecordObject for performance - clearing large grass counts would be too slow
             targetRenderer.ClearGrass();
             
-            // Defer SetDirty to next frame to prevent UI blocking
-            var rendererToMark = targetRenderer;
+            // Persist to external asset instead of SetDirty to avoid serialization freeze
+            var rendererToSave = targetRenderer;
             EditorApplication.delayCall += () =>
             {
-                if (rendererToMark != null)
+                if (rendererToSave != null)
                 {
-                    EditorUtility.SetDirty(rendererToMark);
-                    Undo.ClearUndo(rendererToMark);
+                    if (rendererToSave.HasExternalData)
+                    {
+                        rendererToSave.SaveToExternalAsset();
+                    }
+                    EditorSceneManager.MarkSceneDirty(rendererToSave.gameObject.scene);
+                    Undo.ClearUndo(rendererToSave);
                 }
             };
         }

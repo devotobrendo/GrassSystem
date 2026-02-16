@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace GrassSystem
@@ -85,7 +86,7 @@ namespace GrassSystem
             {
                 Undo.RecordObject(renderer, "Change Grass Settings");
                 renderer.settings = newSettings;
-                EditorUtility.SetDirty(renderer);
+                EditorSceneManager.MarkSceneDirty(renderer.gameObject.scene);
             }
             
             if (renderer.settings == null)
@@ -107,7 +108,7 @@ namespace GrassSystem
             {
                 Undo.RecordObject(renderer, "Change External Data Asset");
                 renderer.externalDataAsset = newDataAsset;
-                EditorUtility.SetDirty(renderer);
+                EditorSceneManager.MarkSceneDirty(renderer.gameObject.scene);
             }
             
             if (renderer.externalDataAsset != null)
@@ -334,12 +335,51 @@ namespace GrassSystem
                     "Yes, Clear All", "Cancel"))
                 {
                     renderer.ClearGrass();
-                    EditorUtility.SetDirty(renderer);
+                    if (renderer.externalDataAsset != null)
+                    {
+                        renderer.SaveToExternalAsset();
+                    }
+                    EditorSceneManager.MarkSceneDirty(renderer.gameObject.scene);
                     UpdateCachedCount();
                 }
             }
             
             EditorGUILayout.Space(10);
+            
+            // === AUTO-SAVE SETTINGS ===
+            EditorGUILayout.LabelField("Auto-Save", EditorStyles.boldLabel);
+            
+            // Convert seconds to minutes and seconds for display
+            int totalSeconds = Mathf.RoundToInt(renderer.autoSaveInterval);
+            int displayMinutes = totalSeconds / 60;
+            int displaySeconds = totalSeconds % 60;
+            
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel(new GUIContent("Save Interval", 
+                "How often the painter auto-saves to the external data asset during painting sessions."));
+            
+            EditorGUI.BeginChangeCheck();
+            int newMinutes = EditorGUILayout.IntField(displayMinutes, GUILayout.Width(35));
+            EditorGUILayout.LabelField("min", GUILayout.Width(28));
+            int newSeconds = EditorGUILayout.IntField(displaySeconds, GUILayout.Width(35));
+            EditorGUILayout.LabelField("sec", GUILayout.Width(28));
+            EditorGUILayout.EndHorizontal();
+            
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(renderer, "Change Auto-Save Interval");
+                float newInterval = Mathf.Clamp(newMinutes * 60 + newSeconds, 10f, 600f);
+                renderer.autoSaveInterval = newInterval;
+                EditorSceneManager.MarkSceneDirty(renderer.gameObject.scene);
+            }
+            
+            // Show human-readable summary
+            string intervalText = displayMinutes > 0 
+                ? $"{displayMinutes}m {displaySeconds:00}s" 
+                : $"{displaySeconds}s";
+            EditorGUILayout.HelpBox(
+                $"Auto-saves every {intervalText} during painting. Range: 10s–10min.", 
+                MessageType.None);
             
             // === DEBUG INFO (collapsible) ===
             showDebugInfo = EditorGUILayout.Foldout(showDebugInfo, "Debug Information", true);
@@ -385,7 +425,7 @@ namespace GrassSystem
             // Assign to renderer
             Undo.RecordObject(renderer, "Assign External Data Asset");
             renderer.externalDataAsset = asset;
-            EditorUtility.SetDirty(renderer);
+            EditorSceneManager.MarkSceneDirty(renderer.gameObject.scene);
             
             // If renderer has existing grass data, save it to the new asset
             if (renderer.GrassDataList != null && renderer.GrassDataList.Count > 0)

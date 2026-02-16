@@ -17,6 +17,11 @@ namespace GrassSystem
         [Tooltip("Optional: Store grass data in an external asset instead of the scene. Recommended for large grass counts.")]
         public GrassDataAsset externalDataAsset;
         
+        [Header("Auto-Save")]
+        [Tooltip("Interval in seconds for automatic backup saves to the external data asset during painting. Range: 10s–600s.")]
+        [Range(10f, 600f)]
+        public float autoSaveInterval = 60f;
+        
         // ==== GRASS DATA STORAGE ====
         // PERF FIX: grassData is [NonSerialized] to prevent Unity from serializing
         // 500k+ items every time the Inspector is opened/refreshed.
@@ -1297,18 +1302,17 @@ namespace GrassSystem
         /// </summary>
         public void OnBeforeSerialize()
         {
-            if (externalDataAsset != null)
-            {
-                // External asset handles persistence — keep legacy field empty
-                // This is the key optimization: Unity serializes an empty list instead of 500k+ items
-                _embeddedGrassDataLegacy?.Clear();
-            }
-            else if (grassData != null && grassData.Count > 0 && !isPerformingDataOperation)
-            {
-                // No external asset — copy runtime data to legacy field for scene persistence
-                // This path is only for small grass counts without external assets
-                _embeddedGrassDataLegacy = new List<GrassData>(grassData);
-            }
+            // PERF FIX: NEVER populate _embeddedGrassDataLegacy during editor operations.
+            // Unity calls OnBeforeSerialize on every SetDirty, Undo snapshot, and Inspector
+            // interaction. Copying 500k+ items here caused multi-second freezes.
+            //
+            // The legacy field exists ONLY for backward-compatibility migration.
+            // OnAfterDeserialize migrates old embedded data to the runtime field.
+            // After migration, the legacy field stays empty forever.
+            //
+            // Persistence is handled exclusively through GrassDataAsset.
+            // Users MUST create a GrassDataAsset to persist their data.
+            _embeddedGrassDataLegacy?.Clear();
         }
         
         /// <summary>
