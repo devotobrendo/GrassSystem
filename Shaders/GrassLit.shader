@@ -122,8 +122,12 @@ Shader "GrassSystem/GrassLit"
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
             #pragma multi_compile_instancing
             
-            // Compile-time stripping: only compile the active color mode + decal toggle
-            #pragma shader_feature_local _COLORMODE_ALBEDO _COLORMODE_TINT _COLORMODE_PATTERNS
+            // Compile-time variants: all color modes are always available.
+            // MUST use multi_compile_local (not shader_feature_local) because GrassRenderer
+            // sets keywords at runtime via materialInstance.EnableKeyword(), not on the
+            // Material asset. shader_feature_local would strip variants based on the
+            // asset's saved keywords, causing white grass when no keyword is saved.
+            #pragma multi_compile_local _COLORMODE_ALBEDO _COLORMODE_TINT _COLORMODE_PATTERNS
             #pragma multi_compile_local _ _DECALS_ON
             
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
