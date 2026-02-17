@@ -114,6 +114,17 @@ Shader "GrassSystem/GrassLit"
             
             Cull Off
             
+            // Stencil: mark grass pixels so URP Decal Projectors can skip them.
+            // Bit 6 (value 64) is unused by URP's internal stencil operations.
+            // On the Decal material, set Stencil { Ref 64 ReadMask 64 Comp NotEqual }
+            // to exclude grass from decal projection.
+            Stencil
+            {
+                Ref 64
+                Comp Always
+                Pass Replace
+            }
+            
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
