@@ -204,6 +204,8 @@ namespace GrassSystem
         [Header("Rendering")]
         public ShadowCastingMode castShadows = ShadowCastingMode.Off;
         public bool receiveShadows = true;
+        [Tooltip("Rendering Layer Mask for the grass. Use this to exclude grass from Decal Projectors by assigning a different layer.")]
+        public uint renderingLayerMask = 1;
         
         [Header("Light Probes (Unlit Shader)")]
         [Tooltip("Enable Light Probe sampling for ambient lighting in the Unlit shader")]
@@ -214,6 +216,13 @@ namespace GrassSystem
         [Range(0.5f, 2f)]
         [Tooltip("Multiplier for the ambient light received from Light Probes")]
         public float ambientBoost = 1f;
+        
+        [Header("Shadow Receiving (Unlit Shader)")]
+        [Tooltip("Enable shadow receiving from the main directional light in the Unlit shader")]
+        public bool useReceiveShadows = false;
+        [Range(0f, 1f)]
+        [Tooltip("How dark shadows appear on grass (0 = no shadow, 1 = fully dark)")]
+        public float shadowIntensity = 0.5f;
         
         [Header("Depth Perception (Unlit Shader)")]
         [Tooltip("Enable depth perception effects for more visual depth")]

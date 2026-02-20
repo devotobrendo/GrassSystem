@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.1] - 2026-02-19
+
+### Added
+- **Shadow Receiving (Unlit Shader)** — `GrassUnlit.shader` can now receive shadows from the main directional light. Controlled via `SO_GrassSettings` with an Enable toggle and Shadow Intensity slider (0–1, default 0.5). Uses `multi_compile_local _ _RECEIVE_SHADOWS_ON` for zero GPU cost when disabled. Keyword sync added to `GrassRenderer.ApplySettingsToMaterial()`. Default: disabled (no visual change on upgrade).
+
 ## [4.4.2] - 2026-02-16
 
 ### Fixed

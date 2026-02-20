@@ -103,6 +103,7 @@ namespace GrassSystem
         // Rendering
         private SerializedProperty castShadows;
         private SerializedProperty receiveShadows;
+        private SerializedProperty renderingLayerMask;
         
         // Depth Perception
         private SerializedProperty useDepthPerception;
@@ -114,6 +115,10 @@ namespace GrassSystem
         private SerializedProperty useLightProbes;
         private SerializedProperty lightProbeInfluence;
         private SerializedProperty ambientBoost;
+        
+        // Shadow Receiving
+        private SerializedProperty useReceiveShadows;
+        private SerializedProperty shadowIntensity;
         
         // Debug
         private SerializedProperty drawCullingBounds;
@@ -215,6 +220,7 @@ namespace GrassSystem
             
             castShadows = serializedObject.FindProperty("castShadows");
             receiveShadows = serializedObject.FindProperty("receiveShadows");
+            renderingLayerMask = serializedObject.FindProperty("renderingLayerMask");
             
             instanceColorVariation = serializedObject.FindProperty("instanceColorVariation");
             heightDarkening = serializedObject.FindProperty("heightDarkening");
@@ -224,6 +230,9 @@ namespace GrassSystem
             useLightProbes = serializedObject.FindProperty("useLightProbes");
             lightProbeInfluence = serializedObject.FindProperty("lightProbeInfluence");
             ambientBoost = serializedObject.FindProperty("ambientBoost");
+            
+            useReceiveShadows = serializedObject.FindProperty("useReceiveShadows");
+            shadowIntensity = serializedObject.FindProperty("shadowIntensity");
             
             drawCullingBounds = serializedObject.FindProperty("drawCullingBounds");
             
@@ -503,6 +512,15 @@ namespace GrassSystem
             EditorGUILayout.PropertyField(castShadows);
             EditorGUILayout.PropertyField(receiveShadows);
             
+            // Rendering Layer Mask — use int field since EditorGUILayout doesn't have a native uint field
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField(new GUIContent("Rendering Layer Mask", "Controls which rendering layer the grass belongs to. Use a different layer than the ground to exclude grass from Decal Projectors."));
+            EditorGUI.indentLevel++;
+            renderingLayerMask.longValue = (uint)EditorGUILayout.IntField(
+                new GUIContent("Layer Mask", "Bitmask — Default=1, Light Layer 1=2, Light Layer 2=4, etc."),
+                (int)renderingLayerMask.longValue);
+            EditorGUI.indentLevel--;
+            
             EditorGUILayout.Space(10);
             
             // === DEPTH PERCEPTION (Unlit Shader) ===
@@ -527,6 +545,18 @@ namespace GrassSystem
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(lightProbeInfluence, new GUIContent("Light Probe Influence", "How much Light Probes affect the final color"));
                 EditorGUILayout.PropertyField(ambientBoost, new GUIContent("Ambient Boost", "Multiplier for ambient light from Light Probes"));
+                EditorGUI.indentLevel--;
+            }
+            
+            EditorGUILayout.Space(10);
+            
+            // === SHADOW RECEIVING (Unlit Shader) ===
+            EditorGUILayout.LabelField("Shadow Receiving (Unlit Shader)", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(useReceiveShadows, new GUIContent("Enable Shadow Receiving", "Receive shadows from the main directional light in the Unlit shader"));
+            if (settings.useReceiveShadows)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(shadowIntensity, new GUIContent("Shadow Intensity", "How dark shadows appear (0 = no shadow, 1 = fully dark)"));
                 EditorGUI.indentLevel--;
             }
             

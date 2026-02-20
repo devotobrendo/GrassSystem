@@ -40,6 +40,9 @@ Shader "GrassSystem/GrassUnlit"
         _AmbientBoost ("Ambient Boost", Range(0, 2)) = 1.0
         _LightProbeInfluence ("Light Probe Influence", Range(0, 1)) = 1.0
         
+        [Header(Shadow Receiving)]
+        _ShadowIntensity ("Shadow Intensity", Range(0, 1)) = 0.5
+        
         [Header(Depth Perception)]
         _InstanceColorVariation ("Instance Color Variation", Range(0, 0.3)) = 0
         _HeightDarkening ("Height Darkening", Range(0, 0.5)) = 0
@@ -127,6 +130,10 @@ Shader "GrassSystem/GrassUnlit"
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
             
+            // Shadow receiving: URP main light shadow variants
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile _ _SHADOWS_SOFT
+            
             // Compile-time variants: all color modes + light probes are always available.
             // MUST use multi_compile_local (not shader_feature_local) because GrassRenderer
             // sets keywords at runtime via materialInstance.EnableKeyword(), not on the
@@ -135,6 +142,7 @@ Shader "GrassSystem/GrassUnlit"
             #pragma multi_compile_local _COLORMODE_ALBEDO _COLORMODE_TINT _COLORMODE_PATTERNS
             #pragma multi_compile_local _ _DECALS_ON
             #pragma multi_compile_local _ _LIGHTPROBES_ON
+            #pragma multi_compile_local _ _RECEIVE_SHADOWS_ON
             
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -208,6 +216,7 @@ Shader "GrassSystem/GrassUnlit"
                 float _WindFrequency;
                 float _AmbientBoost;
                 float _LightProbeInfluence;
+                float _ShadowIntensity;
                 float _InstanceColorVariation;
                 float _HeightDarkening;
                 float _BackfaceDarkening;
@@ -268,6 +277,9 @@ Shader "GrassSystem/GrassUnlit"
                 half instanceVariation : TEXCOORD6;
                 #if defined(_LIGHTPROBES_ON)
                 half3 lightProbeColor : TEXCOORD7;
+                #endif
+                #if defined(_RECEIVE_SHADOWS_ON)
+                float4 shadowCoord : TEXCOORD8;
                 #endif
             };
             
@@ -373,6 +385,11 @@ Shader "GrassSystem/GrassUnlit"
                 // Light Probe sampling — stripped entirely when disabled
                 #if defined(_LIGHTPROBES_ON)
                 output.lightProbeColor = SampleSH(output.normalWS);
+                #endif
+                
+                // Shadow coord — stripped entirely when shadow receiving is disabled
+                #if defined(_RECEIVE_SHADOWS_ON)
+                output.shadowCoord = TransformWorldToShadowCoord(worldPos);
                 #endif
                 
                 return output;
@@ -594,6 +611,16 @@ Shader "GrassSystem/GrassUnlit"
                 baseColor *= isFrontFace ? 1.0 : (1.0 - _BackfaceDarkening);
                 
                 // ========================================
+                // SHARED: Shadow Receiving (main light shadows for Unlit)
+                // Stripped entirely when shadow receiving is disabled
+                // ========================================
+                #if defined(_RECEIVE_SHADOWS_ON)
+                half shadowAtten = MainLightRealtimeShadow(input.shadowCoord);
+                // Blend between full brightness and shadow based on intensity
+                baseColor *= lerp(1.0, shadowAtten, _ShadowIntensity);
+                #endif
+                
+                // ========================================
                 // SHARED: Light Probes (ambient lighting for Unlit)
                 // Stripped entirely when Light Probes are disabled
                 // ========================================
@@ -682,6 +709,7 @@ Shader "GrassSystem/GrassUnlit"
                 float _WindFrequency;
                 float _AmbientBoost;
                 float _LightProbeInfluence;
+                float _ShadowIntensity;
                 float _InstanceColorVariation;
                 float _HeightDarkening;
                 float _BackfaceDarkening;

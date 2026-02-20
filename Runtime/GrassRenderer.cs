@@ -1082,6 +1082,18 @@ namespace GrassSystem
                 materialInstance.DisableKeyword("_LIGHTPROBES_ON");
             }
             
+            // Shadow Receiving settings (Unlit shader) - only apply if enabled
+            if (settings.useReceiveShadows)
+            {
+                materialInstance.SetFloat("_ShadowIntensity", settings.shadowIntensity);
+                materialInstance.EnableKeyword("_RECEIVE_SHADOWS_ON");
+            }
+            else
+            {
+                materialInstance.SetFloat("_ShadowIntensity", 0f);
+                materialInstance.DisableKeyword("_RECEIVE_SHADOWS_ON");
+            }
+            
             // Depth Perception settings (Unlit shader) - only apply if enabled
             if (settings.useDepthPerception)
             {
@@ -1264,7 +1276,8 @@ namespace GrassSystem
                 worldBounds = renderBounds,
                 shadowCastingMode = settings.castShadows,
                 receiveShadows = settings.receiveShadows,
-                layer = gameObject.layer
+                layer = gameObject.layer,
+                renderingLayerMask = settings.renderingLayerMask
             };
             
             Graphics.RenderMeshIndirect(rp, cachedMesh, argsBuffer);
