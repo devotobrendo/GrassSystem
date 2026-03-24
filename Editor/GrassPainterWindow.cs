@@ -53,7 +53,7 @@ namespace GrassSystem
             // This prevents issues when processing was interrupted by a reload
         }
         
-        [MenuItem("Tools/Grass Painter")]
+        [MenuItem("Tools/Grass System/Grass Painter")]
         public static void ShowWindow()
         {
             var window = GetWindow<GrassPainterWindow>("Grass Painter");
