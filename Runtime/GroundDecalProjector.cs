@@ -110,14 +110,6 @@ namespace GrassSystem
             CleanupMaterial();
         }
 
-        private void Update()
-        {
-            if (QuadSizeChanged())
-                RebuildQuad();
-
-            if (MaterialDirty())
-                SyncMaterial();
-        }
 
         private void OnValidate()
         {

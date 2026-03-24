@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.2] - 2026-03-24
+
+### Optimized
+- **Ground Decal Performance** — `GroundDecalProjector` `Update()` polling has been restricted to Editor-only (and disabled in Play Mode). This removes unnecessary CPU overhead for static decals in runtime.
+
 ## [4.5.1] - 2026-02-19
 
 ### Added
