@@ -300,9 +300,9 @@ namespace GrassSystem
                 EditorUtility.DisplayDialog("Bake Complete",
                     $"Baked {decals.Count} decal(s) and applied to {renderers.Length} renderer(s).\n\n" +
                     $"Bake Asset: {AssetDatabase.GetAssetPath(loadedBakeAsset)}\n" +
-                    $"Override: {overrideResult.path}\n" +
-                    $"Multiply: {multiplyResult.path}\n" +
-                    $"Additive: {additiveResult.path}\n" +
+                    $"Override: {FormatBakeResultPath(overrideResult)}\n" +
+                    $"Multiply: {FormatBakeResultPath(multiplyResult)}\n" +
+                    $"Additive: {FormatBakeResultPath(additiveResult)}\n" +
                     $"Bounds: ({mapBounds.x:F1}, {mapBounds.y:F1})  size {mapBounds.z:F1} x {mapBounds.w:F1} m",
                     "OK");
             }
@@ -364,11 +364,19 @@ namespace GrassSystem
             DecalBlendMode targetMode,
             string fileNameBase)
         {
-            RenderTextureFormat rtFormat = RenderTextureFormat.ARGBHalf;
-            RenderTextureReadWrite readWrite = RenderTextureReadWrite.Linear;
-            TextureFormat textureFormat = TextureFormat.RGBAHalf;
-            bool linearTexture = true;
-            string extension = "exr";
+            var modeDecals = sortedDecals.Where(d => d.blendMode == targetMode).ToList();
+            if (modeDecals.Count == 0)
+            {
+                DeleteExistingBakeAsset($"{outputFolder}/{fileNameBase}.png");
+                return new BakedMapResult();
+            }
+
+            bool isColorMap = targetMode == DecalBlendMode.Override;
+            RenderTextureFormat rtFormat = RenderTextureFormat.ARGB32;
+            RenderTextureReadWrite readWrite = isColorMap ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear;
+            TextureFormat textureFormat = TextureFormat.RGBA32;
+            bool linearTexture = !isColorMap;
+            string extension = "png";
             Color clearColor = targetMode == DecalBlendMode.Multiply
                 ? new Color(1f, 1f, 1f, 0f)
                 : new Color(0f, 0f, 0f, 0f);
@@ -385,7 +393,6 @@ namespace GrassSystem
             RenderTexture src = rtA;
             RenderTexture dst = rtB;
 
-            var modeDecals = sortedDecals.Where(d => d.blendMode == targetMode).ToList();
             for (int i = 0; i < modeDecals.Count; i++)
             {
                 var decal = modeDecals[i];
@@ -428,7 +435,7 @@ namespace GrassSystem
             RenderTexture.ReleaseTemporary(rtB);
 
             string savePath = $"{outputFolder}/{fileNameBase}.{extension}";
-            byte[] bytes = result.EncodeToEXR(Texture2D.EXRFlags.None);
+            byte[] bytes = result.EncodeToPNG();
             File.WriteAllBytes(savePath, bytes);
             DestroyImmediate(result);
 
@@ -436,10 +443,12 @@ namespace GrassSystem
             var importer = AssetImporter.GetAtPath(savePath) as TextureImporter;
             if (importer != null)
             {
-                importer.sRGBTexture = false;
-                importer.textureCompression = TextureImporterCompression.Uncompressed;
+                importer.sRGBTexture = isColorMap;
+                importer.textureCompression = TextureImporterCompression.Compressed;
+                importer.crunchedCompression = true;
                 importer.filterMode = FilterMode.Bilinear;
                 importer.maxTextureSize = resolution;
+                importer.mipmapEnabled = false;
                 importer.alphaIsTransparency = false;
                 importer.SaveAndReimport();
             }
@@ -449,6 +458,19 @@ namespace GrassSystem
                 path = savePath,
                 asset = AssetDatabase.LoadAssetAtPath<Texture2D>(savePath)
             };
+        }
+
+        private string FormatBakeResultPath(BakedMapResult result)
+        {
+            return string.IsNullOrEmpty(result.path) ? "Not generated" : result.path;
+        }
+
+        private void DeleteExistingBakeAsset(string assetPath)
+        {
+            if (!File.Exists(assetPath))
+                return;
+
+            AssetDatabase.DeleteAsset(assetPath);
         }
 
         private GrassDecalBakeAsset SaveOrUpdateBakeAsset(
