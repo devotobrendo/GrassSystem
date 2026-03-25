@@ -256,6 +256,23 @@ namespace GrassSystem
             }
             
             EditorGUILayout.Space(10);
+
+            // === BAKED DECALS ===
+            EditorGUILayout.LabelField("Baked Decals", EditorStyles.boldLabel);
+            EditorGUI.BeginDisabledGroup(true);
+            EditorGUILayout.ObjectField(
+                new GUIContent("Bake Asset", "Bake asset currently assigned to this GrassRenderer and reapplied automatically on scene load."),
+                renderer.BakedDecalAsset, typeof(GrassDecalBakeAsset), false);
+            if (renderer.BakedDecalAsset != null)
+            {
+                EditorGUILayout.ObjectField("Override Map", renderer.BakedDecalAsset.overrideMap, typeof(Texture2D), false);
+                EditorGUILayout.ObjectField("Multiply Map", renderer.BakedDecalAsset.multiplyMap, typeof(Texture2D), false);
+                EditorGUILayout.ObjectField("Additive Map", renderer.BakedDecalAsset.additiveMap, typeof(Texture2D), false);
+                EditorGUILayout.Vector4Field("Bake Bounds", renderer.BakedDecalAsset.bounds);
+            }
+            EditorGUI.EndDisabledGroup();
+            
+            EditorGUILayout.Space(10);
             
             // === STATISTICS (cached to avoid lag) ===
             EditorGUILayout.LabelField("Statistics", EditorStyles.boldLabel);

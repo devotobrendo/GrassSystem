@@ -22,6 +22,10 @@ namespace GrassSystem
         [Range(10f, 600f)]
         public float autoSaveInterval = 60f;
         
+        [Header("Baked Decals")]
+        [Tooltip("Optional baked decal asset applied automatically whenever this GrassRenderer rebuilds its material.")]
+        [SerializeField] private GrassDecalBakeAsset bakedDecalAsset;
+        
         // ==== GRASS DATA STORAGE ====
         // PERF FIX: grassData is [NonSerialized] to prevent Unity from serializing
         // 500k+ items every time the Inspector is opened/refreshed.
@@ -116,6 +120,7 @@ namespace GrassSystem
         }
         
         public int VisibleGrassCount => lastVisibleCount;
+        public GrassDecalBakeAsset BakedDecalAsset => bakedDecalAsset;
         
         /// <summary>
         /// Gets the material instance used for rendering. Used by GrassDecal for applying decals.
@@ -1107,6 +1112,45 @@ namespace GrassSystem
                 materialInstance.SetFloat("_InstanceColorVariation", 0f);
                 materialInstance.SetFloat("_HeightDarkening", 0f);
                 materialInstance.SetFloat("_BackfaceDarkening", 0f);
+            }
+
+            ApplyBakedDecalToMaterial();
+        }
+
+        public void SetBakedDecalAsset(GrassDecalBakeAsset bakeAsset)
+        {
+            bakedDecalAsset = bakeAsset;
+            ApplyBakedDecalToMaterial();
+        }
+
+        public void ClearBakedDecalAsset()
+        {
+            bakedDecalAsset = null;
+            ApplyBakedDecalToMaterial();
+        }
+
+        private void ApplyBakedDecalToMaterial()
+        {
+            if (materialInstance == null)
+                return;
+
+            if (bakedDecalAsset != null)
+            {
+                materialInstance.SetTexture("_BakedOverrideMap", bakedDecalAsset.overrideMap);
+                materialInstance.SetTexture("_BakedMultiplyMap", bakedDecalAsset.multiplyMap);
+                materialInstance.SetTexture("_BakedAdditiveMap", bakedDecalAsset.additiveMap);
+                materialInstance.SetVector("_BakedDecalBounds", bakedDecalAsset.bounds);
+                materialInstance.SetTexture("_BakedDecalMap", null);
+                materialInstance.EnableKeyword("_BAKED_DECALS");
+                materialInstance.DisableKeyword("_DECALS_ON");
+            }
+            else
+            {
+                materialInstance.SetTexture("_BakedDecalMap", null);
+                materialInstance.SetTexture("_BakedOverrideMap", null);
+                materialInstance.SetTexture("_BakedMultiplyMap", null);
+                materialInstance.SetTexture("_BakedAdditiveMap", null);
+                materialInstance.DisableKeyword("_BAKED_DECALS");
             }
         }
         

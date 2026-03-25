@@ -95,6 +95,12 @@ Shader "GrassSystem/GrassUnlit"
         _Decal5Rotation ("Decal 5 Rotation", Float) = 0
         _Decal5Blend ("Decal 5 Blend", Range(0, 1)) = 1
         [Enum(Override,0,Multiply,1,Additive,2)] _Decal5BlendMode ("Decal 5 Blend Mode", Float) = 0
+        
+        [Header(Baked Decal Map)]
+        _BakedOverrideMap ("Baked Override Map", 2D) = "black" {}
+        _BakedMultiplyMap ("Baked Multiply Map", 2D) = "white" {}
+        _BakedAdditiveMap ("Baked Additive Map", 2D) = "black" {}
+        _BakedDecalBounds ("Baked Decal Bounds (minX, minZ, sizeX, sizeZ)", Vector) = (0, 0, 100, 100)
     }
     
     SubShader
@@ -141,6 +147,7 @@ Shader "GrassSystem/GrassUnlit"
             // asset's saved keywords, causing white grass when no keyword is saved.
             #pragma multi_compile_local _COLORMODE_ALBEDO _COLORMODE_TINT _COLORMODE_PATTERNS
             #pragma multi_compile_local _ _DECALS_ON
+            #pragma multi_compile_local _ _BAKED_DECALS
             #pragma multi_compile_local _ _LIGHTPROBES_ON
             #pragma multi_compile_local _ _RECEIVE_SHADOWS_ON
             
@@ -161,6 +168,9 @@ Shader "GrassSystem/GrassUnlit"
             TEXTURE2D(_Decal3Tex);
             TEXTURE2D(_Decal4Tex);
             TEXTURE2D(_Decal5Tex);
+            TEXTURE2D(_BakedOverrideMap);
+            TEXTURE2D(_BakedMultiplyMap);
+            TEXTURE2D(_BakedAdditiveMap);
             SAMPLER(sampler_MainTex);
             SAMPLER(sampler_TipMask);
             SAMPLER(sampler_DecalTex);
@@ -168,6 +178,9 @@ Shader "GrassSystem/GrassUnlit"
             SAMPLER(sampler_Decal3Tex);
             SAMPLER(sampler_Decal4Tex);
             SAMPLER(sampler_Decal5Tex);
+            SAMPLER(sampler_BakedOverrideMap);
+            SAMPLER(sampler_BakedMultiplyMap);
+            SAMPLER(sampler_BakedAdditiveMap);
             
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
@@ -206,7 +219,6 @@ Shader "GrassSystem/GrassUnlit"
                 // Albedo Blend
                 float _UseAlbedoBlend;
                 float _AlbedoBlendAmount;
-                float _UseNormalMap;
                 
                 float _UseTipCutout;
                 float _TipCutoff;
@@ -255,6 +267,8 @@ Shader "GrassSystem/GrassUnlit"
                 float _Decal5Rotation;
                 float _Decal5Blend;
                 float _Decal5BlendMode;
+                // Baked Decal Map
+                float4 _BakedDecalBounds;
             CBUFFER_END
             
             struct Attributes
@@ -596,8 +610,35 @@ Shader "GrassSystem/GrassUnlit"
                 }
                 #endif // _DECALS_ON
                 
-                // ========================================
-                // SHARED: Depth Perception (breaks visual uniformity)
+                // Baked decal map: single texture sample replaces all 5 runtime layers
+                #if defined(_BAKED_DECALS)
+                {
+                    float2 bakedUV = (input.positionWS.xz - _BakedDecalBounds.xy) / _BakedDecalBounds.zw;
+                    float2 inBounds = step(float2(0, 0), bakedUV) * step(bakedUV, float2(1, 1));
+                    float isInMap = inBounds.x * inBounds.y;
+                    
+                    half4 bakedOverride = SAMPLE_TEXTURE2D(_BakedOverrideMap, sampler_BakedOverrideMap, bakedUV);
+                    half4 bakedMultiply = SAMPLE_TEXTURE2D(_BakedMultiplyMap, sampler_BakedMultiplyMap, bakedUV);
+                    half4 bakedAdditive = SAMPLE_TEXTURE2D(_BakedAdditiveMap, sampler_BakedAdditiveMap, bakedUV);
+
+                    float overrideCoverage = bakedOverride.a * isInMap;
+                    float multiplyCoverage = bakedMultiply.a * isInMap;
+                    float additiveCoverage = bakedAdditive.a * isInMap;
+                    float decalCoverage = saturate(overrideCoverage + multiplyCoverage + additiveCoverage);
+
+                    baseColor = lerp(baseColor, baseColor * bakedMultiply.rgb, multiplyCoverage);
+                    baseColor += bakedAdditive.rgb * isInMap;
+                    baseColor = lerp(baseColor, bakedOverride.rgb, overrideCoverage);
+                    
+                    // Albedo mode: preserve texture variation exactly like runtime decals do
+                    if (isAlbedoMode)
+                    {
+                        half albedoLuma = dot(albedoTex.rgb, half3(0.299, 0.587, 0.114));
+                        half lumaFactor = lerp(1.0, albedoLuma * 2.0, 0.5);
+                        baseColor = lerp(baseColor, baseColor * lumaFactor, decalCoverage);
+                    }
+                }
+                #endif
                 // All effects disabled by default (values = 0 = no change)
                 // ========================================
                 
@@ -699,7 +740,6 @@ Shader "GrassSystem/GrassUnlit"
                 // Albedo Blend
                 float _UseAlbedoBlend;
                 float _AlbedoBlendAmount;
-                float _UseNormalMap;
                 
                 float _UseTipCutout;
                 float _TipCutoff;
@@ -748,6 +788,8 @@ Shader "GrassSystem/GrassUnlit"
                 float _Decal5Rotation;
                 float _Decal5Blend;
                 float _Decal5BlendMode;
+                // Baked Decal Map
+                float4 _BakedDecalBounds;
             CBUFFER_END
             
             struct Attributes
