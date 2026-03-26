@@ -33,6 +33,7 @@ namespace GrassSystem
         
         // Dirty state tracking - avoid marking dirty every stroke
         private bool hasUnsavedChanges = false;
+        private readonly HashSet<GrassRenderer> dirtyRenderers = new HashSet<GrassRenderer>();
         
         // Timed auto-backup for crash protection
         private double lastBackupTime = 0;
@@ -75,12 +76,8 @@ namespace GrassSystem
         {
             SceneView.duringSceneGui -= OnSceneGUI;
             
-            // Save to external asset when window closes (crash protection)
-            if (hasUnsavedChanges && targetRenderer != null && targetRenderer.HasExternalData)
-            {
-                targetRenderer.SaveToExternalAsset();
-                hasUnsavedChanges = false;
-            }
+            if (toolSettings != null && toolSettings.autoSaveEnabled)
+                SaveDirtyRenderers(createBackup: false, force: false);
         }
         
         /// <summary>
@@ -118,10 +115,8 @@ namespace GrassSystem
                 if (previousRenderer.GrassDataList != null && previousRenderer.GrassDataList.Count > 0)
                 {
                     previousRenderer.RebuildBuffers();
-                    if (previousRenderer.HasExternalData)
-                    {
-                        previousRenderer.SaveToExternalAsset();
-                    }
+                    if (toolSettings != null && toolSettings.autoSaveEnabled)
+                        SaveRendererExternalData(previousRenderer, createBackup: false, force: false);
                 }
             }
             
@@ -257,6 +252,8 @@ namespace GrassSystem
             }
             
             EditorGUILayout.Space(10);
+            DrawAutoSavePanel();
+            EditorGUILayout.Space(10);
             
             int grassCount = targetRenderer.GrassDataList?.Count ?? 0;
             int avgBladesPerCluster = toolSettings.useClusterSpawning 
@@ -354,6 +351,71 @@ namespace GrassSystem
             
             if (GUI.changed && toolSettings != null)
                 EditorUtility.SetDirty(toolSettings);
+        }
+        
+        private void DrawAutoSavePanel()
+        {
+            if (toolSettings == null)
+                return;
+            
+            EditorGUILayout.BeginVertical("box");
+            EditorGUILayout.LabelField("AUTO SAVE", EditorStyles.boldLabel);
+            
+            bool autoSaveEnabled = EditorGUILayout.ToggleLeft("Enable automatic GrassData save", toolSettings.autoSaveEnabled);
+            if (autoSaveEnabled != toolSettings.autoSaveEnabled)
+            {
+                toolSettings.autoSaveEnabled = autoSaveEnabled;
+                EditorUtility.SetDirty(toolSettings);
+            }
+            
+            if (toolSettings.autoSaveEnabled)
+            {
+                EditorGUILayout.HelpBox("Enabled. Pending GrassData changes will be saved automatically to the external asset.", MessageType.Info);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("Disabled by default. Changes stay pending until you save manually or another persistence event happens.", MessageType.Warning);
+            }
+            
+            EditorGUI.BeginDisabledGroup(targetRenderer == null || !targetRenderer.HasExternalData);
+            float newInterval = EditorGUILayout.Slider("Auto Save Interval (s)", targetRenderer != null ? targetRenderer.autoSaveInterval : 60f, 10f, 600f);
+            if (targetRenderer != null && !Mathf.Approximately(newInterval, targetRenderer.autoSaveInterval))
+            {
+                Undo.RecordObject(targetRenderer, "Change Grass Auto Save Interval");
+                targetRenderer.autoSaveInterval = newInterval;
+                EditorUtility.SetDirty(targetRenderer);
+            }
+            EditorGUI.EndDisabledGroup();
+            
+            int pendingRendererCount = dirtyRenderers.Count;
+            string pendingLabel = pendingRendererCount > 0
+                ? $"Save Pending Changes ({pendingRendererCount})"
+                : "Save Pending Changes";
+            
+            EditorGUILayout.BeginHorizontal();
+            
+            EditorGUI.BeginDisabledGroup(targetRenderer == null || !targetRenderer.HasExternalData);
+            if (GUILayout.Button("Manual Save Current"))
+            {
+                SaveRendererExternalData(targetRenderer, createBackup: false, force: true);
+            }
+            EditorGUI.EndDisabledGroup();
+            
+            EditorGUI.BeginDisabledGroup(pendingRendererCount == 0);
+            if (GUILayout.Button(pendingLabel))
+            {
+                SaveDirtyRenderers(createBackup: false, force: true);
+            }
+            EditorGUI.EndDisabledGroup();
+            
+            EditorGUILayout.EndHorizontal();
+            
+            if (targetRenderer != null && !targetRenderer.HasExternalData)
+            {
+                EditorGUILayout.HelpBox("Auto save requires an External Data Asset on the selected GrassRenderer.", MessageType.None);
+            }
+            
+            EditorGUILayout.EndVertical();
         }
         
         private void DrawToolSettings()
@@ -874,21 +936,17 @@ namespace GrassSystem
                 // SaveToExternalAsset() during paint strokes.
                 // SetDirty forces Unity to re-serialize the entire grassData list (30k+ items)
                 // which freezes the editor. Save happens on window close, manual save, or timed backup.
-                hasUnsavedChanges = true;
+                MarkRendererDataDirty(targetRenderer);
                 
                 // Timed auto-backup: save to external asset for crash recovery
                 // Uses configurable interval from GrassRenderer.autoSaveInterval
                 double currentTime = EditorApplication.timeSinceStartup;
                 float backupInterval = targetRenderer.autoSaveInterval;
-                if (hasUnsavedChanges && currentTime - lastBackupTime > backupInterval)
+                if (toolSettings != null && toolSettings.autoSaveEnabled &&
+                    hasUnsavedChanges && currentTime - lastBackupTime > backupInterval)
                 {
                     lastBackupTime = currentTime;
-                    if (targetRenderer.HasExternalData)
-                    {
-                        targetRenderer.SaveToExternalAsset();
-                        targetRenderer.externalDataAsset.CreateBackup();
-                        hasUnsavedChanges = false;
-                    }
+                    SaveDirtyRenderers(createBackup: true, force: false);
                 }
             }
             
@@ -1244,6 +1302,7 @@ namespace GrassSystem
                 GenerateOnMesh(meshFilter);
             }
             
+            MarkRendererDataDirty(targetRenderer);
             targetRenderer.RebuildBuffers();
             
             // Persist to external asset instead of SetDirty to avoid serialization freeze
@@ -1252,9 +1311,9 @@ namespace GrassSystem
             {
                 if (rendererToSave != null)
                 {
-                    if (rendererToSave.HasExternalData)
+                    if (toolSettings != null && toolSettings.autoSaveEnabled && rendererToSave.HasExternalData)
                     {
-                        rendererToSave.SaveToExternalAsset();
+                        SaveRendererExternalData(rendererToSave, createBackup: false, force: false);
                     }
                     EditorSceneManager.MarkSceneDirty(rendererToSave.gameObject.scene);
                 }
@@ -1377,6 +1436,7 @@ namespace GrassSystem
             if (targetRenderer == null) return;
             // Skipping Undo.RecordObject for performance - clearing large grass counts would be too slow
             targetRenderer.ClearGrass();
+            MarkRendererDataDirty(targetRenderer);
             
             // Persist to external asset instead of SetDirty to avoid serialization freeze
             var rendererToSave = targetRenderer;
@@ -1384,14 +1444,60 @@ namespace GrassSystem
             {
                 if (rendererToSave != null)
                 {
-                    if (rendererToSave.HasExternalData)
+                    if (toolSettings != null && toolSettings.autoSaveEnabled && rendererToSave.HasExternalData)
                     {
-                        rendererToSave.SaveToExternalAsset();
+                        SaveRendererExternalData(rendererToSave, createBackup: false, force: false);
                     }
                     EditorSceneManager.MarkSceneDirty(rendererToSave.gameObject.scene);
                     Undo.ClearUndo(rendererToSave);
                 }
             };
+        }
+        
+        private void MarkRendererDataDirty(GrassRenderer renderer)
+        {
+            if (renderer == null)
+                return;
+            
+            renderer.MarkExternalDataDirty();
+            dirtyRenderers.Add(renderer);
+            hasUnsavedChanges = dirtyRenderers.Count > 0;
+        }
+        
+        private bool SaveRendererExternalData(GrassRenderer renderer, bool createBackup, bool force)
+        {
+            if (renderer == null || !renderer.HasExternalData)
+                return false;
+            
+            bool saved = renderer.SaveToExternalAsset(force);
+            if (!saved)
+                return false;
+            
+            AssetDatabase.SaveAssetIfDirty(renderer.externalDataAsset);
+            
+            if (createBackup && renderer.externalDataAsset != null)
+                renderer.externalDataAsset.CreateBackup();
+            
+            dirtyRenderers.Remove(renderer);
+            hasUnsavedChanges = dirtyRenderers.Count > 0;
+            return true;
+        }
+        
+        private void SaveDirtyRenderers(bool createBackup, bool force)
+        {
+            if (dirtyRenderers.Count == 0)
+            {
+                hasUnsavedChanges = false;
+                return;
+            }
+            
+            var dirtySnapshot = new List<GrassRenderer>(dirtyRenderers);
+            foreach (var renderer in dirtySnapshot)
+            {
+                SaveRendererExternalData(renderer, createBackup, force);
+            }
+            
+            hasUnsavedChanges = dirtyRenderers.Count > 0;
         }
     }
     

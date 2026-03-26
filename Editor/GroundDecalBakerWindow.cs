@@ -53,8 +53,6 @@ namespace GrassSystem
         private string     _resultAtlasPath;
         private GameObject _resultGameObject;
 
-        // --- Window Initialization ---
-
         [MenuItem("Tools/Grass System/Ground Decal Baker")]
         public static void OpenWindow()
         {
@@ -72,8 +70,6 @@ namespace GrassSystem
         private void OnDisable() => SavePrefs();
 
         private void OnSelectionChange() => Repaint();
-
-        // --- Prefs ---
 
         private void LoadPrefs()
         {
@@ -166,8 +162,8 @@ namespace GrassSystem
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Use Scene Selection"))  PopulateFromSelection();
-                if (GUILayout.Button("Clear"))                _decals.Clear();
+                if (GUILayout.Button("Use Scene Selection")) PopulateFromSelection();
+                if (GUILayout.Button("Clear")) _decals.Clear();
             }
 
             if (_decals.Count == 0)
@@ -191,8 +187,10 @@ namespace GrassSystem
             {
                 var projectors = go.GetComponentsInChildren<GroundDecalProjector>(includeInactive: true);
                 foreach (var p in projectors)
+                {
                     if (!_decals.Contains(p))
                         _decals.Add(p);
+                }
             }
             Repaint();
         }
@@ -218,7 +216,6 @@ namespace GrassSystem
                     string chosen = EditorUtility.OpenFolderPanel("Select Output Folder", "Assets", "");
                     if (!string.IsNullOrEmpty(chosen))
                     {
-                        // Convert absolute path to project-relative
                         if (chosen.StartsWith(Application.dataPath))
                             chosen = "Assets" + chosen.Substring(Application.dataPath.Length);
                         _outputFolder = chosen;
@@ -226,8 +223,8 @@ namespace GrassSystem
                 }
             }
 
-            _assetName              = EditorGUILayout.TextField("Asset Name",       _assetName);
-            _gameObjectName         = EditorGUILayout.TextField("GameObject Name",  _gameObjectName);
+            _assetName = EditorGUILayout.TextField("Asset Name", _assetName);
+            _gameObjectName = EditorGUILayout.TextField("GameObject Name", _gameObjectName);
             _disableOriginalsAfterBake = EditorGUILayout.Toggle("Disable Originals After Bake", _disableOriginalsAfterBake);
         }
 
@@ -242,18 +239,15 @@ namespace GrassSystem
                 return;
             }
 
-            // Check for null materials
             var nullMat = _decals.Where(d => d != null && d.decalMaterial == null).ToList();
             if (nullMat.Count > 0)
                 _errors.Add($"{nullMat.Count} decal(s) have a null decalMaterial.");
 
-            // Check shader compatibility
             var validDecals  = _decals.Where(d => d != null && d.decalMaterial != null).ToList();
             var shaderGroups = validDecals.GroupBy(d => d.decalMaterial.shader.name).ToList();
             if (shaderGroups.Count > 1)
                 _errors.Add($"Decals use {shaderGroups.Count} different shaders. Only the most common shader group will be baked.");
 
-            // Check read/write
             foreach (var d in validDecals)
             {
                 var tex = d.decalMaterial.GetTexture("_MainTex") as Texture2D;
@@ -265,11 +259,9 @@ namespace GrassSystem
                     _warnings.Add($"Texture '{tex.name}' is not Read/Write enabled (will be fixed automatically).");
             }
 
-            // Check output folder
             if (!AssetDatabase.IsValidFolder(_outputFolder))
                 _warnings.Add($"Output folder '{_outputFolder}' does not exist and will be created.");
 
-            // Atlas size warning
             int maxAtlas = AtlasSizeOptions[_maxAtlasSizeIndex];
             if (validDecals.Count > 16 && maxAtlas < 4096)
                 _warnings.Add("Large number of decals may exceed atlas capacity. Consider increasing Max Atlas Size.");
@@ -290,8 +282,6 @@ namespace GrassSystem
 
         private void DrawBakeButton()
         {
-            bool hasErrors = _errors.Any(e => !e.Contains("different shaders")); // shader mismatch is non-blocking
-            // Re-check: real blocking errors
             bool realErrors = _decals.Count == 0
                 || _decals.Any(d => d != null && d.decalMaterial == null);
 
@@ -305,9 +295,9 @@ namespace GrassSystem
         private void DrawResultSection()
         {
             EditorGUILayout.LabelField("Result", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Mesh:",     _resultMeshPath,  EditorStyles.miniLabel);
-            EditorGUILayout.LabelField("Material:", _resultMatPath,   EditorStyles.miniLabel);
-            EditorGUILayout.LabelField("Atlas:",    _resultAtlasPath, EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("Mesh:", _resultMeshPath, EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("Material:", _resultMatPath, EditorStyles.miniLabel);
+            EditorGUILayout.LabelField("Atlas:", _resultAtlasPath, EditorStyles.miniLabel);
 
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -324,8 +314,8 @@ namespace GrassSystem
 
         private void ExecuteBake()
         {
-            _resultMeshPath  = null;
-            _resultMatPath   = null;
+            _resultMeshPath = null;
+            _resultMatPath = null;
             _resultAtlasPath = null;
             _resultGameObject = null;
 
@@ -333,44 +323,46 @@ namespace GrassSystem
 
             try
             {
-                EditorUtility.DisplayProgressBar("Baking Decals", "Validating decals…", 0.05f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Validating decals...", 0.05f);
                 var (validDecals, shaderName, skippedCount) = ValidateAndGroupDecals();
 
-                EditorUtility.DisplayProgressBar("Baking Decals", "Ensuring textures are readable…", 0.15f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Ensuring textures are readable...", 0.15f);
                 var textures = EnsureTexturesReadable(validDecals);
 
-                EditorUtility.DisplayProgressBar("Baking Decals", "Building texture atlas…", 0.30f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Building texture atlas...", 0.30f);
                 EnsureOutputFolder();
 
                 AssetDatabase.StartAssetEditing();
                 assetEditingStarted = true;
 
                 string atlasPath = $"{_outputFolder}/{_assetName}_Atlas.png";
+                DeleteAssetIfExists(atlasPath);
                 var (atlas, atlasRects) = BuildAtlas(textures, atlasPath);
 
                 AssetDatabase.StopAssetEditing();
                 assetEditingStarted = false;
 
-                // Re-import atlas so Unity recognizes it as a proper asset
                 AssetDatabase.ImportAsset(atlasPath, ImportAssetOptions.ForceUpdate);
+                MakeAtlasReadable(atlasPath, AtlasSizeOptions[_maxAtlasSizeIndex]);
                 var atlasAsset = AssetDatabase.LoadAssetAtPath<Texture2D>(atlasPath);
-                MakeAtlasReadable(atlasPath);
 
-                EditorUtility.DisplayProgressBar("Baking Decals", "Building combined mesh…", 0.55f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Building combined mesh...", 0.55f);
                 string meshPath = $"{_outputFolder}/{_assetName}.asset";
+                DeleteAssetIfExists(meshPath);
                 var bakedMesh = BuildCombinedMesh(validDecals, textures, atlasRects, meshPath);
 
-                EditorUtility.DisplayProgressBar("Baking Decals", "Creating baked material…", 0.70f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Creating baked material...", 0.70f);
                 string matPath = $"{_outputFolder}/{_assetName}_Mat.mat";
+                DeleteAssetIfExists(matPath);
                 var bakedMat = CreateBakedMaterial(atlasAsset ?? atlas, validDecals, shaderName, matPath);
 
-                EditorUtility.DisplayProgressBar("Baking Decals", "Creating baked GameObject…", 0.85f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Creating baked GameObject...", 0.85f);
                 _resultGameObject = CreateBakedGameObject(bakedMesh, bakedMat);
 
-                EditorUtility.DisplayProgressBar("Baking Decals", "Disabling originals…", 0.92f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Disabling originals...", 0.92f);
                 DisableOriginals(validDecals);
 
-                EditorUtility.DisplayProgressBar("Baking Decals", "Finalizing assets…", 0.98f);
+                EditorUtility.DisplayProgressBar("Baking Decals", "Finalizing assets...", 0.98f);
                 FinalizeAssets(meshPath, matPath, atlasPath);
 
                 string msg = $"Bake complete!\n" +
@@ -420,7 +412,6 @@ namespace GrassSystem
             return (dominantDecals, dominant, skipped);
         }
 
-        // Importante: PackTextures exige que a textura original seja legível na CPU (isReadable).
         private List<Texture2D> EnsureTexturesReadable(List<GroundDecalProjector> decals)
         {
             Texture2D whiteFallback = null;
@@ -440,6 +431,7 @@ namespace GrassSystem
                         whiteFallback.SetPixels32(pixels);
                         whiteFallback.Apply();
                     }
+
                     result.Add(whiteFallback);
                     continue;
                 }
@@ -466,7 +458,6 @@ namespace GrassSystem
         {
             int maxSize = AtlasSizeOptions[_maxAtlasSizeIndex];
 
-            // Collect unique textures, preserving insertion order
             var unique = new List<Texture2D>();
             var uniqueSet = new HashSet<Texture2D>();
             foreach (var t in textures)
@@ -478,7 +469,6 @@ namespace GrassSystem
             var atlas = new Texture2D(maxSize, maxSize, TextureFormat.RGBA32, true);
             Rect[] rects = atlas.PackTextures(unique.ToArray(), _padding, maxSize, false);
 
-            // Build lookup: original texture → atlas rect
             var atlasRects = new Dictionary<Texture2D, Rect>(unique.Count);
             for (int i = 0; i < unique.Count; i++)
                 atlasRects[unique[i]] = rects[i];
@@ -491,17 +481,32 @@ namespace GrassSystem
             return (atlas, atlasRects);
         }
 
-        // Desabilita a compressão do atlas na importação para manter a precisão total dos pixels.
-        private static void MakeAtlasReadable(string atlasPath)
+        private static void MakeAtlasReadable(string atlasPath, int maxTextureSize)
         {
             var importer = AssetImporter.GetAtPath(atlasPath) as TextureImporter;
             if (importer == null) return;
-            importer.isReadable   = true;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
+            importer.textureType = TextureImporterType.Default;
+            importer.isReadable = true;
+            importer.alphaSource = TextureImporterAlphaSource.FromInput;
+            importer.alphaIsTransparency = true;
+            importer.maxTextureSize = maxTextureSize;
+            importer.textureCompression = TextureImporterCompression.Compressed;
+            importer.crunchedCompression = true;
+            importer.compressionQuality = (int)TextureCompressionQuality.Normal;
+            importer.npotScale = TextureImporterNPOTScale.None;
+
+            TextureImporterPlatformSettings defaultSettings = new TextureImporterPlatformSettings();
+            defaultSettings.name = "DefaultTexturePlatform";
+            defaultSettings.overridden = false;
+            defaultSettings.maxTextureSize = maxTextureSize;
+            defaultSettings.textureCompression = TextureImporterCompression.Compressed;
+            defaultSettings.crunchedCompression = true;
+            defaultSettings.compressionQuality = (int)TextureCompressionQuality.Normal;
+            importer.SetPlatformTextureSettings(defaultSettings);
+
             importer.SaveAndReimport();
         }
 
-        // Passa a opacidade individual de cada decal pro canal Alpha do Vertex Color na malha final.
         private Mesh BuildCombinedMesh(
             List<GroundDecalProjector> decals,
             List<Texture2D> textures,
@@ -522,7 +527,6 @@ namespace GrassSystem
 
                 atlasRects.TryGetValue(tex, out Rect atlasRegion);
 
-                // Local-space quad vertices (matches GroundDecalProjector.RebuildQuad)
                 float halfW = decal.width  * 0.5f;
                 float halfH = decal.height * 0.5f;
                 float yOff  = decal.yOffset;
@@ -535,7 +539,6 @@ namespace GrassSystem
                     new(-halfW, yOff,  halfH),
                 };
 
-                // Base UVs: mirrors the quad winding [BL, BR, TR, TL]
                 var baseUVs = new Vector2[]
                 {
                     new(0f, 0f),
@@ -548,21 +551,18 @@ namespace GrassSystem
 
                 for (int v = 0; v < 4; v++)
                 {
-                    // World-space vertex
                     vertices[baseVert + v] = decal.transform.TransformPoint(localVerts[v]);
                     normals [baseVert + v] = Vector3.up;
                     colors  [baseVert + v] = new Color(1f, 1f, 1f, decal.opacity);
 
-                    // Apply per-instance tiling/offset, then remap to atlas rect
                     float u = baseUVs[v].x * decal.tiling.x + decal.offset.x;
                     float vCoord = baseUVs[v].y * decal.tiling.y + decal.offset.y;
 
                     uvs[baseVert + v] = new Vector2(
-                        atlasRegion.x + u        * atlasRegion.width,
-                        atlasRegion.y + vCoord   * atlasRegion.height);
+                        atlasRegion.x + u * atlasRegion.width,
+                        atlasRegion.y + vCoord * atlasRegion.height);
                 }
 
-                // Triangles: [0,2,1, 0,3,2] with per-quad offset
                 int baseTri = i * 6;
                 triangles[baseTri + 0] = baseVert + 0;
                 triangles[baseTri + 1] = baseVert + 2;
@@ -588,7 +588,6 @@ namespace GrassSystem
             return bakedMesh;
         }
 
-        // O Shader obrigatoriamente precisa ler IN.color.a pra obedecer a opacidade que foi cozinhada.
         private Material CreateBakedMaterial(
             Texture2D atlas,
             List<GroundDecalProjector> decals,
@@ -599,19 +598,20 @@ namespace GrassSystem
             if (shader == null)
                 throw new System.Exception($"Shader '{shaderName}' not found. Make sure it is included in the build.");
 
-            // Start from the first decal's material to inherit render state, keywords, etc.
             var bakedMat = new Material(decals[0].decalMaterial) { name = _assetName };
 
             bakedMat.SetTexture("_MainTex", atlas);
-            // UVs are already packed into the mesh — reset ST to identity
             bakedMat.SetVector("_MainTex_ST", new Vector4(1f, 1f, 0f, 0f));
-            // Opacity is encoded in vertex color alpha; set global _Blend to 1 as fallback
-            bakedMat.SetFloat("_Blend", 1f);
+            float avgOpacity = decals.Average(d => d.opacity);
+            if (bakedMat.HasProperty("_Blend"))
+                bakedMat.SetFloat("_Blend", avgOpacity);
 
             float avgDraw = decals.Average(d => d.drawDistance);
             float avgFade = decals.Average(d => d.startFade);
-            bakedMat.SetFloat("_DrawDistance", avgDraw);
-            bakedMat.SetFloat("_StartFade",    avgFade);
+            if (bakedMat.HasProperty("_DrawDistance"))
+                bakedMat.SetFloat("_DrawDistance", avgDraw);
+            if (bakedMat.HasProperty("_StartFade"))
+                bakedMat.SetFloat("_StartFade", avgFade);
 
             AssetDatabase.CreateAsset(bakedMat, matPath);
             return bakedMat;
@@ -625,13 +625,13 @@ namespace GrassSystem
             mf.sharedMesh = mesh;
 
             var mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial              = material;
-            mr.shadowCastingMode           = ShadowCastingMode.Off;
-            mr.receiveShadows              = false;
-            mr.lightProbeUsage             = LightProbeUsage.Off;
-            mr.reflectionProbeUsage        = ReflectionProbeUsage.Off;
-            mr.motionVectorGenerationMode  = MotionVectorGenerationMode.ForceNoMotion;
-            mr.allowOcclusionWhenDynamic   = false;
+            mr.sharedMaterial = material;
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            mr.lightProbeUsage = LightProbeUsage.Off;
+            mr.reflectionProbeUsage = ReflectionProbeUsage.Off;
+            mr.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+            mr.allowOcclusionWhenDynamic = false;
 
             go.transform.position = Vector3.zero;
 
@@ -651,8 +651,6 @@ namespace GrassSystem
             }
         }
 
-        // --- Stage 8 — Finalize ---
-
         private void FinalizeAssets(string meshPath, string matPath, string atlasPath)
         {
             AssetDatabase.SaveAssets();
@@ -663,14 +661,12 @@ namespace GrassSystem
             _resultAtlasPath = atlasPath;
         }
 
-        // --- Helpers ---
-
         private void EnsureOutputFolder()
         {
             if (AssetDatabase.IsValidFolder(_outputFolder)) return;
 
-            string[] parts   = _outputFolder.Split('/');
-            string   current = parts[0];
+            string[] parts = _outputFolder.Split('/');
+            string current = parts[0];
 
             for (int i = 1; i < parts.Length; i++)
             {
@@ -679,6 +675,15 @@ namespace GrassSystem
                     AssetDatabase.CreateFolder(current, parts[i]);
                 current = next;
             }
+        }
+
+        private static void DeleteAssetIfExists(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath))
+                return;
+
+            if (AssetDatabase.LoadMainAssetAtPath(assetPath) != null)
+                AssetDatabase.DeleteAsset(assetPath);
         }
     }
 }

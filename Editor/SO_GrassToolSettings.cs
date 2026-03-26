@@ -114,6 +114,10 @@ namespace GrassSystem
         public int maxGrassToGenerate = 100000;
         [Range(0.01f, 1f)]
         public float generationDensity = 0.5f;
+
+        [Header("Auto Save")]
+        [Tooltip("When enabled, Grass Painter automatically saves pending GrassData changes to external assets.")]
+        public bool autoSaveEnabled = false;
         
         public void ResetToDefaults()
         {
@@ -144,6 +148,7 @@ namespace GrassSystem
             minBladesPerCluster = 3;
             maxBladesPerCluster = 6;
             clusterRadius = 0.1f;
+            autoSaveEnabled = false;
         }
         
         // ========================================

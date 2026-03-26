@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.0] - 2026-03-26
+
+### Added
+- **Grass Decal Baker** - Added a dedicated `Grass Decal Baker` tool to bake grass decals into textures, save them in `GrassDecalBakeAsset`, and apply the baked result directly in `GrassLit` and `GrassUnlit`.
+- **Grass Decal Bake Improvements** - Added automatic application after bake, generation of only the maps that are actually needed, filtering by selected `GrassRenderer`, and a cleaner flow for loading, applying, and removing baked decals.
+- **Baked Decal Support in `GrassRenderer`** - Added persistent baked decal references so baked maps survive material rebuilds and scene reloads. The inspector now also shows the linked bake asset and generated maps for quick checking.
+- **Ground Decal Baker** - Added a dedicated `Ground Decal Baker` tool to merge multiple `GroundDecalProjector` objects into one baked mesh and atlas.
+- **Ground Decal Atlas Improvements** - Added square power-of-two atlas output based on the selected max atlas size, clean replacement of previous bake assets on rebake, and atlas import settings that keep the selected texture size.
+- **Ground Decal Texture Import Settings** - Added `Normal Quality` compression with `Use Crunch Compression` for baked ground decal atlases while letting Unity choose a compatible platform format automatically.
+- **Ground Decal Baked Material Setup** - Added automatic baked material opacity setup based on the average `opacity` of the selected `GroundDecalProjector` objects.
+- **PNG Bake Texture Storage** - Added PNG output for baked decal textures with runtime-friendly import settings to help reduce package size.
+- **Grass Painter Auto Save Controls** - Added a highlighted `AUTO SAVE` panel with autosave disabled by default, configurable save interval, and manual save controls for the current renderer or all pending renderer changes.
+- **GrassData Save Tracking** - Added explicit dirty-state tracking for external grass data saves so autosave only happens when enabled, while manual saves still write immediately to disk for version control.
+
 ## [4.5.2] - 2026-03-24
 
 ### Optimized

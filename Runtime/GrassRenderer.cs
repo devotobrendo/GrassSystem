@@ -108,6 +108,7 @@ namespace GrassSystem
         private const float RECOVERY_INTERVAL = 0.5f;
         private const float RECOVERY_BACKOFF_INTERVAL = 3.0f;
         private const int RECOVERY_BACKOFF_THRESHOLD = 10;
+        [System.NonSerialized] private bool externalDataDirty;
         
         public List<GrassData> GrassDataList
         {
@@ -115,12 +116,14 @@ namespace GrassSystem
             set
             {
                 grassData = value;
+                externalDataDirty = true;
                 if (isInitialized) RebuildBuffers();
             }
         }
         
         public int VisibleGrassCount => lastVisibleCount;
         public GrassDecalBakeAsset BakedDecalAsset => bakedDecalAsset;
+        public bool HasUnsavedExternalChanges => externalDataDirty;
         
         /// <summary>
         /// Gets the material instance used for rendering. Used by GrassDecal for applying decals.
@@ -294,7 +297,13 @@ namespace GrassSystem
         public void ClearGrass()
         {
             grassData.Clear();
+            externalDataDirty = true;
             Cleanup();
+        }
+
+        public void MarkExternalDataDirty()
+        {
+            externalDataDirty = true;
         }
         
         // ========================================
@@ -338,17 +347,21 @@ namespace GrassSystem
         /// Does nothing if no external asset is assigned.
         /// </summary>
         /// <returns>True if save was successful.</returns>
-        public bool SaveToExternalAsset()
+        public bool SaveToExternalAsset(bool force = false)
         {
             if (externalDataAsset == null)
             {
                 Debug.LogWarning("GrassRenderer: No external data asset assigned.", this);
                 return false;
             }
+
+            if (!force && !externalDataDirty)
+                return false;
             
             string sceneName = gameObject.scene.name;
             // Save both data and settings reference for proper restoration
             externalDataAsset.SaveData(grassData, sceneName, settings);
+            externalDataDirty = false;
             
             Debug.Log($"GrassRenderer: Saved {grassData.Count:N0} grass instances to {externalDataAsset.name}", this);
             return true;
@@ -379,6 +392,7 @@ namespace GrassSystem
                 
                 // Load data and force full reinitialization
                 grassData = externalDataAsset.LoadData();
+                externalDataDirty = false;
                 
                 Cleanup();
                 if (grassData.Count > 0)
@@ -550,22 +564,27 @@ namespace GrassSystem
             if (gameObject.scene == scene && 
                 externalDataAsset != null && 
                 grassData != null && 
-                grassData.Count > 0 &&
-                externalDataAsset.InstanceCount == grassData.Count)
+                grassData.Count > 0)
             {
-                LogEvent($"OnSceneSaving ({scene.name}) - Clearing embedded data to optimize file size");
-                
-                // Save to external asset first to ensure data is up to date
-                SaveToExternalAsset();
-                
-                // Release GPU resources BEFORE clearing data to prevent
-                // rendering with stale buffers during save interval
-                Cleanup();
-                
-                // Clear embedded data - scene file will be small
-                grassData.Clear();
-                
-                // Note: Data will be reloaded from external asset when scene opens (OnSceneSaved)
+                if (externalDataDirty)
+                {
+                    LogEvent($"OnSceneSaving ({scene.name}) - Persisting dirty grass data to external asset");
+                    SaveToExternalAsset();
+                }
+
+                if (externalDataAsset.InstanceCount == grassData.Count)
+                {
+                    LogEvent($"OnSceneSaving ({scene.name}) - Clearing embedded data to optimize file size");
+                    
+                    // Release GPU resources BEFORE clearing data to prevent
+                    // rendering with stale buffers during save interval
+                    Cleanup();
+                    
+                    // Clear embedded data - scene file will be small
+                    grassData.Clear();
+                    
+                    // Note: Data will be reloaded from external asset when scene opens (OnSceneSaved)
+                }
             }
         }
         
