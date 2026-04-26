@@ -22,9 +22,9 @@ Shader "GrassSystem/GroundDecal"
     {
         Tags 
         { 
-            "RenderType" = "Transparent"
+            "RenderType" = "AlphaTest"
             "RenderPipeline" = "UniversalPipeline"
-            "Queue" = "Transparent-1"
+            "Queue" = "AlphaTest+50"
         }
         
         Pass
