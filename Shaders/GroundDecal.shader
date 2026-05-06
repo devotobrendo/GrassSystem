@@ -104,24 +104,24 @@ Shader "GrassSystem/GroundDecal"
             
             half4 frag(Varyings input) : SV_Target
             {
-                half4 decal = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv) * _Color;
-                half distFade = input.fogAndFade.y;
-                half alpha = decal.a * _Blend * distFade;
-                
+                float4 decal = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv) * _Color;
+                float distFade = input.fogAndFade.y;
+                float alpha = decal.a * _Blend * distFade;
+                float3 rgb = decal.rgb;
+                float a = alpha;
+
                 // Branchless blend mode
-                half isMultiply = step(0.5, _BlendMode) * step(_BlendMode, 1.5);
-                half isAdditive = step(1.5, _BlendMode);
-                
-                half3 rgb = decal.rgb;
-                half a = alpha;
-                
-                rgb = lerp(rgb, lerp(half3(1, 1, 1), decal.rgb, decal.a), isMultiply);
-                rgb = lerp(rgb, decal.rgb * alpha, isAdditive);
+                float isAdditive = step(1.5, _BlendMode);
+                float isMultiply = saturate(step(0.5, _BlendMode) - isAdditive);
+                float3 multiplyRgb = lerp(1.0.xxx, decal.rgb, decal.a);
+                float3 additiveRgb = decal.rgb * alpha;
+                rgb = lerp(rgb, multiplyRgb, isMultiply);
+                rgb = lerp(rgb, additiveRgb, isAdditive);
+
                 a = lerp(a, step(0.001, alpha), isAdditive);
-                
-                rgb = MixFog(rgb, input.fogAndFade.x);
-                
-                return half4(rgb, a);
+                rgb = MixFog(rgb, saturate(input.fogAndFade.x));
+
+                return float4(rgb, a);
             }
             ENDHLSL
         }
