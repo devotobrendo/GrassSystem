@@ -14,16 +14,12 @@ struct GrassInput
 struct GrassOutput
 {
     float3 position;
-    float3 normal;
     float2 widthHeight;
-    float3 color;
-    float patternMask;
     float distanceScale;
 };
 
 StructuredBuffer<GrassInput> _SourceBuffer;
 AppendStructuredBuffer<GrassOutput> _VisibleBuffer;
-RWStructuredBuffer<uint> _IndirectArgsBuffer;
 
 float4x4 _ViewProjectionMatrix;
 float3 _CameraPosition;
@@ -31,19 +27,6 @@ float4 _FrustumPlanes[6];
 
 float _MinFadeDistance;
 float _MaxDrawDistance;
-float _MinHeight;
-float _MaxHeight;
-float _MinWidth;
-float _MaxWidth;
-
-float4 _Interactors[16];
-int _InteractorCount;
-float _InteractorStrength;
-
-float _Time;
-float _WindSpeed;
-float _WindStrength;
-float _WindFrequency;
 
 uint _InstanceCount;
 
@@ -72,35 +55,6 @@ float CalculateDistanceScale(float3 position)
     return 1.0 - saturate((dist - _MinFadeDistance) / (_MaxDrawDistance - _MinFadeDistance));
 }
 
-float3 CalculateInteractionOffset(float3 position)
-{
-    float3 totalOffset = float3(0, 0, 0);
-    
-    [loop]
-    for (int i = 0; i < _InteractorCount; i++)
-    {
-        float3 interactorPos = _Interactors[i].xyz;
-        float radius = _Interactors[i].w;
-        
-        if (radius <= 0)
-            continue;
-        
-        float3 toGrass = position - interactorPos;
-        float dist = length(toGrass.xz);
-        
-        if (dist < radius && dist > 0.001)
-        {
-            float influence = 1.0 - saturate(dist / radius);
-            influence = influence * influence;
-            
-            float3 pushDir = normalize(float3(toGrass.x, 0, toGrass.z));
-            totalOffset += pushDir * influence * _InteractorStrength;
-        }
-    }
-    
-    return totalOffset;
-}
-
 [numthreads(128, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -119,12 +73,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     
     GrassOutput output;
     output.position = input.position;
-    output.normal = input.normal;
     output.widthHeight = input.widthHeight;
-    output.color = input.color;
-    output.patternMask = input.patternMask;
     output.distanceScale = distScale;
-    
+
     _VisibleBuffer.Append(output);
-    InterlockedAdd(_IndirectArgsBuffer[1], 1);
 }

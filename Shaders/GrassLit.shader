@@ -291,8 +291,6 @@ Shader "GrassSystem/GrassLit"
                 float3 positionWS : TEXCOORD1;
                 float3 normalWS : TEXCOORD2;
                 float3 viewDirWS : TEXCOORD3;
-                float3 grassColor : TEXCOORD4;
-                float patternMask : TEXCOORD5;
                 float fogFactor : TEXCOORD6;
                 float3 tangentWS : TEXCOORD7;
                 float3 bitangentWS : TEXCOORD8;
@@ -373,7 +371,6 @@ Shader "GrassSystem/GrassLit"
                 float3 worldPos = TransformGrassVertex(
                     input.positionOS.xyz,
                     grassData.position,
-                    grassData.normal,
                     grassData.widthHeight.x,
                     grassData.widthHeight.y,
                     grassData.distanceScale,
@@ -401,8 +398,6 @@ Shader "GrassSystem/GrassLit"
                 output.bitangentWS = cross(output.normalWS, tangent) * input.tangentOS.w;
                 
                 output.viewDirWS = GetWorldSpaceNormalizeViewDir(worldPos);
-                output.grassColor = grassData.color;
-                output.patternMask = grassData.patternMask;
                 output.fogFactor = ComputeFogFactor(output.positionCS.z);
                 
                 return output;
@@ -850,7 +845,6 @@ Shader "GrassSystem/GrassLit"
                 float3 worldPos = TransformGrassVertex(
                     input.positionOS.xyz,
                     grassData.position,
-                    grassData.normal,
                     grassData.widthHeight.x,
                     grassData.widthHeight.y,
                     grassData.distanceScale,

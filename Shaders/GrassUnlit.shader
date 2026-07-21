@@ -285,8 +285,6 @@ Shader "GrassSystem/GrassUnlit"
                 float2 uv : TEXCOORD0;
                 float3 positionWS : TEXCOORD1;
                 float3 normalWS : TEXCOORD2;
-                half3 grassColor : TEXCOORD3;
-                float patternMask : TEXCOORD4;
                 half fogFactor : TEXCOORD5;
                 half instanceVariation : TEXCOORD6;
                 #if defined(_LIGHTPROBES_ON)
@@ -371,7 +369,6 @@ Shader "GrassSystem/GrassUnlit"
                 float3 worldPos = TransformGrassVertex(
                     input.positionOS.xyz,
                     grassData.position,
-                    grassData.normal,
                     grassData.widthHeight.x,
                     grassData.widthHeight.y,
                     grassData.distanceScale,
@@ -389,8 +386,6 @@ Shader "GrassSystem/GrassUnlit"
                 output.positionCS = TransformWorldToHClip(worldPos);
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.normalWS = float3(0, 1, 0);
-                output.grassColor = grassData.color;
-                output.patternMask = grassData.patternMask;
                 output.fogFactor = ComputeFogFactor(output.positionCS.z);
                 
                 // Per-instance variation for depth perception (uses existing hash, very cheap)
@@ -824,7 +819,6 @@ Shader "GrassSystem/GrassUnlit"
                 float3 worldPos = TransformGrassVertex(
                     input.positionOS.xyz,
                     grassData.position,
-                    grassData.normal,
                     grassData.widthHeight.x,
                     grassData.widthHeight.y,
                     grassData.distanceScale,

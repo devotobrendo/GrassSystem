@@ -65,7 +65,6 @@ namespace GrassSystem
         
         private static readonly int PropSourceBuffer = Shader.PropertyToID("_SourceBuffer");
         private static readonly int PropVisibleBuffer = Shader.PropertyToID("_VisibleBuffer");
-        private static readonly int PropIndirectArgs = Shader.PropertyToID("_IndirectArgsBuffer");
         private static readonly int PropGrassBuffer = Shader.PropertyToID("_GrassBuffer");
         private static readonly int PropViewProjMatrix = Shader.PropertyToID("_ViewProjectionMatrix");
         private static readonly int PropCameraPos = Shader.PropertyToID("_CameraPosition");
@@ -76,10 +75,6 @@ namespace GrassSystem
         private static readonly int PropInteractors = Shader.PropertyToID("_Interactors");
         private static readonly int PropInteractorCount = Shader.PropertyToID("_InteractorCount");
         private static readonly int PropInteractorStrength = Shader.PropertyToID("_InteractorStrength");
-        private static readonly int PropTime = Shader.PropertyToID("_Time");
-        private static readonly int PropWindSpeed = Shader.PropertyToID("_WindSpeed");
-        private static readonly int PropWindStrength = Shader.PropertyToID("_WindStrength");
-        private static readonly int PropWindFrequency = Shader.PropertyToID("_WindFrequency");
         
         private Vector4[] frustumPlanes = new Vector4[6];
         private Plane[] cameraPlanes = new Plane[6];
@@ -90,7 +85,6 @@ namespace GrassSystem
         private const int MAX_DEFERRED_RETRIES = 5;
         #endif
         
-        private uint[] readbackArgs = new uint[5];
         private int lastVisibleCount;
         
         // Track if material needs reapplication (after scene save, domain reload, etc.)
@@ -949,14 +943,9 @@ namespace GrassSystem
                 
                 cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
                 cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
-                cullingShaderInstance.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
                 cullingShaderInstance.SetInt(PropInstanceCount, grassData.Count);
                 cullingShaderInstance.SetFloat(PropMinFade, settings.minFadeDistance);
                 cullingShaderInstance.SetFloat(PropMaxDraw, settings.maxDrawDistance);
-                cullingShaderInstance.SetFloat(PropWindSpeed, settings.windSpeed);
-                cullingShaderInstance.SetFloat(PropWindStrength, settings.windStrength);
-                cullingShaderInstance.SetFloat(PropWindFrequency, settings.windFrequency);
-                cullingShaderInstance.SetFloat(PropInteractorStrength, settings.interactorStrength);
                 
                 materialInstance = new Material(settings.grassMaterial);
                 materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
@@ -1256,9 +1245,7 @@ namespace GrassSystem
             }
             
             visibleBuffer.SetCounterValue(0);
-            argsReset[1] = 0;
-            argsBuffer.SetData(argsReset);
-            
+
             Matrix4x4 vp = cam.projectionMatrix * cam.worldToCameraMatrix;
             cullingShaderInstance.SetMatrix(PropViewProjMatrix, vp);
             cullingShaderInstance.SetVector(PropCameraPos, cam.transform.position);
@@ -1276,18 +1263,17 @@ namespace GrassSystem
             cullingShaderInstance.SetVectorArray(PropFrustumPlanes, frustumPlanes);
             
             UpdateInteractors();
-            cullingShaderInstance.SetFloat(PropTime, Time.time);
             
             // Each renderer has its own cullingShaderInstance, so buffer bindings
             // are fully isolated — no collisions between multiple GrassRenderers.
             cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
             cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
-            cullingShaderInstance.SetBuffer(cullingKernel, PropIndirectArgs, argsBuffer);
-            cullingShaderInstance.SetInt(PropInstanceCount, grassData.Count);
-            
+
             int threadGroups = Mathf.CeilToInt((float)grassData.Count / THREAD_GROUP_SIZE);
             cullingShaderInstance.Dispatch(cullingKernel, threadGroups, 1, 1);
-            
+
+            GraphicsBuffer.CopyCount(visibleBuffer, argsBuffer, sizeof(uint));
+
             // Use async readback to avoid GPU stall (critical for performance)
             // Only do readback in Editor for debugging - skip in builds for max performance
             #if UNITY_EDITOR
@@ -1321,9 +1307,6 @@ namespace GrassSystem
                 else
                     interactorData[i] = Vector4.zero;
             }
-            
-            cullingShaderInstance.SetVectorArray(PropInteractors, interactorData);
-            cullingShaderInstance.SetInt(PropInteractorCount, count);
             
             materialInstance.SetVectorArray(PropInteractors, interactorData);
             materialInstance.SetInt(PropInteractorCount, count);

@@ -6,10 +6,7 @@
 struct GrassDrawData
 {
     float3 position;
-    float3 normal;
     float2 widthHeight;
-    float3 color;
-    float patternMask;
     float distanceScale;
 };
 
@@ -365,7 +362,6 @@ float Hash(float2 p)
 float3 TransformGrassVertex(
     float3 localPos,
     float3 worldPivot,
-    float3 surfaceNormal,
     float width,
     float height,
     float distanceScale,
@@ -455,7 +451,6 @@ float3 TransformGrassVertex(
 float3 TransformGrassVertex(
     float3 localPos,
     float3 worldPivot,
-    float3 surfaceNormal,
     float width,
     float height,
     float distanceScale,
@@ -465,7 +460,7 @@ float3 TransformGrassVertex(
 )
 {
     return TransformGrassVertex(
-        localPos, worldPivot, surfaceNormal,
+        localPos, worldPivot,
         width, height, distanceScale,
         windOffset, interactionOffset, uvY,
         0.0, float3(0, 0, 0), 0.0, 0.0,
@@ -473,11 +468,10 @@ float3 TransformGrassVertex(
     );
 }
 
-// 13-parameter version for backward compatibility
+// 12-parameter version for backward compatibility
 float3 TransformGrassVertex(
     float3 localPos,
     float3 worldPivot,
-    float3 surfaceNormal,
     float width,
     float height,
     float distanceScale,
@@ -491,7 +485,7 @@ float3 TransformGrassVertex(
 )
 {
     return TransformGrassVertex(
-        localPos, worldPivot, surfaceNormal,
+        localPos, worldPivot,
         width, height, distanceScale,
         windOffset, interactionOffset, uvY,
         useUniformScale, meshRotation, maxTiltAngle, tiltVariation,

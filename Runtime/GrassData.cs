@@ -30,12 +30,9 @@ namespace GrassSystem
     public struct GrassDrawData
     {
         public Vector3 position;
-        public Vector3 normal;
         public Vector2 widthHeight;
-        public Vector3 color;
-        public float patternMask;
         public float distanceScale;
-        
-        public static int Stride => sizeof(float) * 13;
+
+        public static int Stride => sizeof(float) * 6;
     }
 }
