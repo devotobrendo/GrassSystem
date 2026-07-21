@@ -1,0 +1,17 @@
+{
+    "name": "GrassSystem.Consoles",
+    "rootNamespace": "GrassSystem.Consoles",
+    "references": [
+        "Unity.RenderPipelines.Universal.Runtime",
+        "GrassSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

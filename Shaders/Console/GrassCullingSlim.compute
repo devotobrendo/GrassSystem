@@ -1,0 +1,77 @@
+// Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
+
+#pragma kernel CSMain
+
+struct GrassInputSlim
+{
+    float3 position;
+    float2 widthHeight;
+};
+
+struct GrassOutput
+{
+    float3 position;
+    float2 widthHeight;
+    float distanceScale;
+};
+
+StructuredBuffer<GrassInputSlim> _SourceBuffer;
+AppendStructuredBuffer<GrassOutput> _VisibleBuffer;
+
+float4x4 _ViewProjectionMatrix;
+float3 _CameraPosition;
+float4 _FrustumPlanes[6];
+
+float _MinFadeDistance;
+float _MaxDrawDistance;
+
+uint _InstanceCount;
+
+bool IsInFrustum(float3 position, float radius)
+{
+    [unroll]
+    for (int i = 0; i < 6; i++)
+    {
+        float dist = dot(_FrustumPlanes[i].xyz, position) + _FrustumPlanes[i].w;
+        if (dist < -radius)
+            return false;
+    }
+    return true;
+}
+
+float CalculateDistanceScale(float3 position)
+{
+    float dist = distance(_CameraPosition, position);
+
+    if (dist > _MaxDrawDistance)
+        return 0.0;
+
+    if (dist < _MinFadeDistance)
+        return 1.0;
+
+    return 1.0 - saturate((dist - _MinFadeDistance) / (_MaxDrawDistance - _MinFadeDistance));
+}
+
+[numthreads(128, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _InstanceCount)
+        return;
+
+    GrassInputSlim input = _SourceBuffer[id.x];
+
+    float bladeRadius = max(input.widthHeight.x, input.widthHeight.y) * 0.5;
+    if (!IsInFrustum(input.position, bladeRadius))
+        return;
+
+    float distScale = CalculateDistanceScale(input.position);
+    if (distScale <= 0.01)
+        return;
+
+    GrassOutput output;
+    output.position = input.position;
+    output.widthHeight = input.widthHeight;
+    output.distanceScale = distScale;
+
+    _VisibleBuffer.Append(output);
+}
