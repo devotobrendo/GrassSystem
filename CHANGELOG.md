@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.6.3] - 2026-07-20
+
+### Optimized
+- **GPU Draw Buffer Slimmed (52B → 24B)** — Removed the unused `normal`, `color`, and `patternMask` fields from the `GrassDrawData` draw struct. The on-disk `GrassData` layout is unchanged, so existing grass assets are untouched. Lossless: no visual or behavioral change.
+- **Cull Counting via CopyCount** — Replaced the per-instance `InterlockedAdd` on the indirect args counter with a single `GraphicsBuffer.CopyCount`, avoiding atomic contention during culling.
+
+### Removed
+- **Dead CPU Uploads** — Removed the per-frame compute uploads for wind and interactors. The compute path for these was unused; the material path is preserved, so wind and interaction behave exactly as before.
+- **Dead Compute and Vertex Code** — Removed unused compute uniforms, the unused `CalculateInteractionOffset` function, and the unused `surfaceNormal` parameter from `TransformGrassVertex`.
+
 ## [4.6.1] - 2026-04-25
 
 ### Fixed
