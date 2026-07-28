@@ -82,6 +82,9 @@ Shader "GrassSystem/GrassUnlitConsole"
         _BakedMultiplyMap ("Baked Multiply Map", 2D) = "white" {}
         _BakedAdditiveMap ("Baked Additive Map", 2D) = "black" {}
         _BakedDecalBounds ("Baked Decal Bounds (minX, minZ, sizeX, sizeZ)", Vector) = (0, 0, 100, 100)
+
+        [Header(Debug)]
+        _DebugBladeScale ("Debug Blade Scale (fill test)", Range(0, 1)) = 1
     }
 
     SubShader
@@ -120,6 +123,7 @@ Shader "GrassSystem/GrassUnlitConsole"
             #pragma multi_compile_local _ _BAKED_DECALS
             #pragma multi_compile_local _ _LIGHTPROBES_ON
             #pragma multi_compile_local _ _RECEIVE_SHADOWS_ON
+            #pragma multi_compile_local _ _TIPCUTOUT_ON
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -197,6 +201,7 @@ Shader "GrassSystem/GrassUnlitConsole"
                 float _Decal5Blend;
                 float _Decal5BlendMode;
                 float4 _BakedDecalBounds;
+                float _DebugBladeScale;
             CBUFFER_END
 
             struct Attributes
@@ -301,6 +306,8 @@ Shader "GrassSystem/GrassUnlitConsole"
                     _MaxBendAngle
                 );
 
+                worldPos = grassData.position + (worldPos - grassData.position) * _DebugBladeScale;
+
                 output.positionWS = worldPos;
                 output.positionCS = TransformWorldToHClip(worldPos);
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
@@ -321,12 +328,11 @@ Shader "GrassSystem/GrassUnlitConsole"
 
             half4 frag(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV_Target
             {
-                if (_UseTipCutout > 0.5)
-                {
-                    half tipMask = SAMPLE_TEXTURE2D(_TipMask, sampler_TipMask, input.uv).a;
-                    if (input.uv.y > _TipCutoff && tipMask < _AlphaCutoff)
-                        discard;
-                }
+                #if defined(_TIPCUTOUT_ON)
+                half tipMask = SAMPLE_TEXTURE2D(_TipMask, sampler_TipMask, input.uv).a;
+                if (input.uv.y > _TipCutoff && tipMask < _AlphaCutoff)
+                    discard;
+                #endif
 
                 half4 albedoTex = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                 half3 baseColor = albedoTex.rgb;
@@ -500,6 +506,7 @@ Shader "GrassSystem/GrassUnlitConsole"
                 float _Decal5Blend;
                 float _Decal5BlendMode;
                 float4 _BakedDecalBounds;
+                float _DebugBladeScale;
             CBUFFER_END
 
             struct Attributes
@@ -545,6 +552,8 @@ Shader "GrassSystem/GrassUnlitConsole"
                     _MaxTiltAngle,
                     _TiltVariation
                 );
+
+                worldPos = grassData.position + (worldPos - grassData.position) * _DebugBladeScale;
 
                 float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
                 output.positionCS = TransformWorldToHClip(ApplyShadowBias(worldPos, normalWS, _LightDirection));

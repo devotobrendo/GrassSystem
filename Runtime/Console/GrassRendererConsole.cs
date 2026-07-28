@@ -20,6 +20,20 @@ namespace GrassSystem.Consoles
         [Tooltip("Optional baked decal asset applied automatically whenever this renderer rebuilds its material.")]
         [SerializeField] private GrassDecalBakeAsset bakedDecalAsset;
 
+        [Header("Console Optimization")]
+        [Range(0f, 1f)]
+        [Tooltip("Fraction of far blades kept by GPU thinning. 1 = off (no thinning). Lower thins distant grass, removing whole instances (fewer verts + fill). Switch target ~0.5.")]
+        public float farKeepFraction = 1f;
+        [Tooltip("Distance (m) beyond which grass thins toward Far Keep Fraction over a ~5m blend. Nearer than this, all blades are kept.")]
+        public float thinStartDistance = 10f;
+        [Tooltip("Runtime blade size multiplier. Default mode: x = width, y = height (independent). Custom Mesh mode: x = uniform scale, y ignored (mesh keeps its modeled proportions). 1,1 = original.")]
+        public Vector2 sizeScale = Vector2.one;
+        [Range(0f, 1f)]
+        [Tooltip("How much thinned-away blades widen the survivors to keep ground coverage. 1 = full (far grass widens as you thin). 0 = off (grass just gets sparser, no widening).")]
+        public float coverageCompensation = 1f;
+
+        public static float DebugFarKeepOverride = -1f;
+
         [System.NonSerialized]
         private GrassDataConsole[] grassData = System.Array.Empty<GrassDataConsole>();
 
@@ -45,6 +59,10 @@ namespace GrassSystem.Consoles
         private static readonly int PropFrustumPlanes = Shader.PropertyToID("_FrustumPlanes");
         private static readonly int PropMinFade = Shader.PropertyToID("_MinFadeDistance");
         private static readonly int PropMaxDraw = Shader.PropertyToID("_MaxDrawDistance");
+        private static readonly int PropFarKeep = Shader.PropertyToID("_FarKeepFraction");
+        private static readonly int PropThinStart = Shader.PropertyToID("_ThinStartDistance");
+        private static readonly int PropSizeScale = Shader.PropertyToID("_SizeScale");
+        private static readonly int PropCoverageComp = Shader.PropertyToID("_CoverageCompensation");
         private static readonly int PropInstanceCount = Shader.PropertyToID("_InstanceCount");
         private static readonly int PropInteractors = Shader.PropertyToID("_Interactors");
         private static readonly int PropInteractorCount = Shader.PropertyToID("_InteractorCount");
@@ -187,6 +205,17 @@ namespace GrassSystem.Consoles
         private void OnBeforeAssemblyReload()
         {
             Cleanup();
+        }
+
+        private void OnValidate()
+        {
+            farKeepFraction = Mathf.Clamp01(farKeepFraction);
+            thinStartDistance = Mathf.Max(0f, thinStartDistance);
+            if (!Application.isPlaying && isInitialized)
+            {
+                UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
+                UnityEditor.SceneView.RepaintAll();
+            }
         }
 #endif
 
@@ -376,7 +405,10 @@ namespace GrassSystem.Consoles
             if (settings.tipMaskTexture != null)
                 materialInstance.SetTexture("_TipMask", settings.tipMaskTexture);
 
-            materialInstance.SetFloat("_UseTipCutout", settings.useTipCutout ? 1 : 0);
+            if (settings.useTipCutout)
+                materialInstance.EnableKeyword("_TIPCUTOUT_ON");
+            else
+                materialInstance.DisableKeyword("_TIPCUTOUT_ON");
             materialInstance.SetFloat("_TipCutoff", settings.tipCutoffHeight);
 
             materialInstance.SetFloat("_WindSpeed", settings.windSpeed);
@@ -569,6 +601,11 @@ namespace GrassSystem.Consoles
 
             cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
             cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
+            float effFarKeep = DebugFarKeepOverride >= 0f ? DebugFarKeepOverride : farKeepFraction;
+            cullingShaderInstance.SetFloat(PropFarKeep, Mathf.Clamp01(effFarKeep));
+            cullingShaderInstance.SetFloat(PropThinStart, thinStartDistance);
+            cullingShaderInstance.SetVector(PropSizeScale, sizeScale);
+            cullingShaderInstance.SetFloat(PropCoverageComp, Mathf.Clamp01(coverageCompensation));
 
             int threadGroups = Mathf.CeilToInt((float)grassData.Length / THREAD_GROUP_SIZE);
             cullingShaderInstance.Dispatch(cullingKernel, threadGroups, 1, 1);

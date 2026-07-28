@@ -24,6 +24,10 @@ float4 _FrustumPlanes[6];
 
 float _MinFadeDistance;
 float _MaxDrawDistance;
+float _FarKeepFraction;
+float _ThinStartDistance;
+float2 _SizeScale;
+float _CoverageCompensation;
 
 uint _InstanceCount;
 
@@ -39,19 +43,6 @@ bool IsInFrustum(float3 position, float radius)
     return true;
 }
 
-float CalculateDistanceScale(float3 position)
-{
-    float dist = distance(_CameraPosition, position);
-
-    if (dist > _MaxDrawDistance)
-        return 0.0;
-
-    if (dist < _MinFadeDistance)
-        return 1.0;
-
-    return 1.0 - saturate((dist - _MinFadeDistance) / (_MaxDrawDistance - _MinFadeDistance));
-}
-
 [numthreads(128, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
@@ -64,13 +55,34 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (!IsInFrustum(input.position, bladeRadius))
         return;
 
-    float distScale = CalculateDistanceScale(input.position);
+    float dist = distance(_CameraPosition, input.position);
+    if (dist > _MaxDrawDistance)
+        return;
+
+    float distScale = (dist < _MinFadeDistance)
+        ? 1.0
+        : 1.0 - saturate((dist - _MinFadeDistance) / (_MaxDrawDistance - _MinFadeDistance));
     if (distScale <= 0.01)
         return;
 
+    float thinT = saturate((dist - _ThinStartDistance) / 5.0);
+    float keep = lerp(1.0, _FarKeepFraction, thinT);
+
+    uint h = id.x;
+    h = (h ^ 61u) ^ (h >> 16u);
+    h *= 9u;
+    h ^= h >> 4u;
+    h *= 0x27d4eb2du;
+    h ^= h >> 15u;
+    float rnd = h * (1.0 / 4294967295.0);
+    if (rnd > keep)
+        return;
+
+    float widthComp = lerp(1.0, rsqrt(max(keep, 0.001)), _CoverageCompensation);
+
     GrassOutput output;
     output.position = input.position;
-    output.widthHeight = input.widthHeight;
+    output.widthHeight = float2(input.widthHeight.x * widthComp, input.widthHeight.y) * _SizeScale;
     output.distanceScale = distScale;
 
     _VisibleBuffer.Append(output);
