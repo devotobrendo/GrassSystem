@@ -656,7 +656,7 @@ namespace GrassSystem.Consoles
             {
                 worldBounds = renderBounds,
                 shadowCastingMode = settings.castShadows,
-                receiveShadows = settings.receiveShadows,
+                receiveShadows = true,
                 layer = gameObject.layer,
                 renderingLayerMask = settings.renderingLayerMask
             };

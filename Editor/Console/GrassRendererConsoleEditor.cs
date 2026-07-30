@@ -32,7 +32,7 @@ namespace GrassSystem.Consoles.Editor
         private static readonly string[] ReferencesProps = { "grassMode", "cullingShader", "grassMaterial", "grassMesh" };
         private static readonly string[] WindProps = { "windSpeed", "windStrength", "windFrequency" };
         private static readonly string[] TiltProps = { "maxTiltAngle", "tiltVariation" };
-        private static readonly string[] ShadowsLightProps = { "receiveShadows", "castShadows", "useReceiveShadows", "shadowIntensity", "useLightProbes", "lightProbeInfluence", "ambientBoost" };
+        private static readonly string[] ShadowsLightProps = { "castShadows", "useReceiveShadows", "shadowIntensity", "useLightProbes", "lightProbeInfluence", "ambientBoost" };
         private static readonly string[] DepthProps = { "useDepthPerception", "instanceColorVariation", "heightDarkening", "backfaceDarkening" };
         private static readonly string[] TipProps = { "useTipCutout", "tipMaskTexture", "tipCutoffHeight", "albedoTexture" };
         private static readonly string[] InteractionProps = { "interactorStrength", "maxInteractors", "maxBendAngle" };
@@ -42,8 +42,7 @@ namespace GrassSystem.Consoles.Editor
 
         private static readonly System.Collections.Generic.Dictionary<string, GUIContent> LabelOverrides = new System.Collections.Generic.Dictionary<string, GUIContent>
         {
-            { "receiveShadows", new GUIContent("Receive Shadows (URP flag)", "Standard URP renderer flag. Keep it on. On its own it does NOT show shadows on the unlit grass - the toggle that does is 'Receive Shadows (Unlit)' below.") },
-            { "useReceiveShadows", new GUIContent("Receive Shadows (Unlit)", "THIS is the toggle that makes the grass receive shadows: it enables the _RECEIVE_SHADOWS_ON path plus Shadow Intensity in the unlit shader.") },
+            { "useReceiveShadows", new GUIContent("Receive Shadows", "Makes the unlit grass receive shadows: enables the _RECEIVE_SHADOWS_ON path plus Shadow Intensity. The standard URP receive-shadows flag is forced on automatically for the console path.") },
         };
 
         private void OnEnable()
