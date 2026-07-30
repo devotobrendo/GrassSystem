@@ -76,6 +76,7 @@ namespace GrassSystem.Consoles.Editor
         private Vector2 scrollPos;
         private bool scanned;
         private int selectedTab;
+        private MigrationResult lastMigration;
 
         private GUIContent refreshLabel;
         private GUIContent scanProjectLabel;
@@ -212,7 +213,70 @@ namespace GrassSystem.Consoles.Editor
 
         private void DrawMigrateTab()
         {
-            EditorGUILayout.HelpBox("Automated migration — coming. Pending architecture sign-off.", MessageType.Info);
+            var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (!activeScene.IsValid())
+            {
+                EditorGUILayout.HelpBox("No valid open scene.", MessageType.Warning);
+                return;
+            }
+
+            EditorGUILayout.LabelField("Active Scene", activeScene.name, headerStyle);
+            GUILayout.Space(6);
+
+            EditorGUILayout.HelpBox("Migrates the OPEN scene's grass to the console renderer (additive — the original is kept but disabled). Save the scene afterward.", MessageType.Info);
+            GUILayout.Space(6);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Migrate Open Scene", GUILayout.Height(26)))
+                {
+                    if (EditorUtility.DisplayDialog("Migrate Scene", $"Migrate scene '{activeScene.name}'? This adds console renderers and creates assets.", "Migrate", "Cancel"))
+                        lastMigration = GrassSceneMigrator.MigrateOpenScene();
+                }
+
+                if (GUILayout.Button("Revert Open Scene", GUILayout.Height(26)))
+                {
+                    if (EditorUtility.DisplayDialog("Revert Scene", $"Revert console migration in scene '{activeScene.name}'?", "Revert", "Cancel"))
+                    {
+                        GrassSceneMigrator.RevertOpenScene();
+                        lastMigration = null;
+                    }
+                }
+            }
+
+            if (lastMigration == null)
+                return;
+
+            GUILayout.Space(10);
+
+            if (!lastMigration.ok)
+            {
+                EditorGUILayout.HelpBox(lastMigration.error, MessageType.Error);
+                return;
+            }
+
+            GUILayout.Label($"Renderers migrated: {lastMigration.renderersMigrated}", cellStyle);
+            GUILayout.Label($"Decal: {lastMigration.decalOutcome}", cellStyle);
+
+            if (lastMigration.notes != null && lastMigration.notes.Count > 0)
+            {
+                GUILayout.Space(4);
+                if (lastMigration.notes.Count > 6)
+                {
+                    scrollPos = EditorGUILayout.BeginScrollView(scrollPos, GUILayout.Height(140));
+                    for (int i = 0; i < lastMigration.notes.Count; i++)
+                        GUILayout.Label(lastMigration.notes[i], EditorStyles.miniLabel);
+                    EditorGUILayout.EndScrollView();
+                }
+                else
+                {
+                    for (int i = 0; i < lastMigration.notes.Count; i++)
+                        GUILayout.Label(lastMigration.notes[i], EditorStyles.miniLabel);
+                }
+            }
+
+            GUILayout.Space(8);
+            EditorGUILayout.HelpBox("Scene marked dirty — save it (Ctrl+S) to persist.", MessageType.Warning);
         }
 
         private void DrawStandardizeTab()

@@ -3,7 +3,8 @@
     "rootNamespace": "GrassSystem.Consoles",
     "references": [
         "GrassSystem.Consoles",
-        "GrassSystem"
+        "GrassSystem",
+        "GrassSystem.Editor"
     ],
     "includePlatforms": [
         "Editor"
