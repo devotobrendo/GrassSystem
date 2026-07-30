@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditorInternal;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace GrassSystem
@@ -225,85 +224,22 @@ namespace GrassSystem
             return false;
         }
 
-        private Vector4 ComputeMapBounds(List<GrassDecal> decals)
-        {
-            float minX = float.MaxValue, minZ = float.MaxValue;
-            float maxX = float.MinValue, maxZ = float.MinValue;
-
-            foreach (var decal in decals)
-            {
-                float halfX = decal.size.x / 2f;
-                float halfZ = decal.size.y / 2f;
-                Vector3[] corners = new Vector3[]
-                {
-                    decal.transform.TransformPoint(new Vector3(-halfX, 0, -halfZ)),
-                    decal.transform.TransformPoint(new Vector3( halfX, 0, -halfZ)),
-                    decal.transform.TransformPoint(new Vector3( halfX, 0,  halfZ)),
-                    decal.transform.TransformPoint(new Vector3(-halfX, 0,  halfZ))
-                };
-                foreach (var c in corners)
-                {
-                    minX = Mathf.Min(minX, c.x);
-                    minZ = Mathf.Min(minZ, c.z);
-                    maxX = Mathf.Max(maxX, c.x);
-                    maxZ = Mathf.Max(maxZ, c.z);
-                }
-            }
-
-            // 1 world-unit padding
-            return new Vector4(minX - 1f, minZ - 1f, (maxX - minX) + 2f, (maxZ - minZ) + 2f);
-        }
-
-        private void EnsureFolderExists(string folder)
-        {
-            if (AssetDatabase.IsValidFolder(folder)) return;
-            string[] parts = folder.Split('/');
-            string current = parts[0];
-            for (int i = 1; i < parts.Length; i++)
-            {
-                string next = current + "/" + parts[i];
-                if (!AssetDatabase.IsValidFolder(next))
-                    AssetDatabase.CreateFolder(current, parts[i]);
-                current = next;
-            }
-        }
-
         private void ExecuteBake(List<GrassDecal> decals, GrassRenderer[] renderers)
         {
             try
             {
                 EditorUtility.DisplayProgressBar("Baking Decal Map", "Preparing...", 0f);
 
-                EnsureTexturesReadable(decals);
-
-                Vector4 mapBounds = ComputeMapBounds(decals);
-
-                // Sort by layer priority so lower layers render first (higher layers override)
-                var sorted = decals.OrderBy(d => (int)d.layer).ToList();
-
-                Shader bakeShader = Shader.Find("Hidden/GrassSystem/DecalBake");
-                if (bakeShader == null)
-                    throw new System.Exception("Shader 'Hidden/GrassSystem/DecalBake' not found. Ensure GrassDecalBake.shader is in the project.");
-
-                Material bakeMat = new Material(bakeShader);
-
-                EnsureFolderExists(outputFolder);
-                var overrideResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Override, $"{assetName}_Override");
-                var multiplyResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Multiply, $"{assetName}_Multiply");
-                var additiveResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Additive, $"{assetName}_Additive");
-
-                DestroyImmediate(bakeMat);
-
-                loadedBakeAsset = SaveOrUpdateBakeAsset(overrideResult, multiplyResult, additiveResult, mapBounds);
+                loadedBakeAsset = GrassDecalBakeService.Bake(decals, outputFolder, assetName, resolution, false, false);
                 ApplyBakeToRenderers(loadedBakeAsset, renderers, disableOriginalsAfterBake);
 
                 EditorUtility.DisplayDialog("Bake Complete",
                     $"Baked {decals.Count} decal(s) and applied to {renderers.Length} renderer(s).\n\n" +
                     $"Bake Asset: {AssetDatabase.GetAssetPath(loadedBakeAsset)}\n" +
-                    $"Override: {FormatBakeResultPath(overrideResult)}\n" +
-                    $"Multiply: {FormatBakeResultPath(multiplyResult)}\n" +
-                    $"Additive: {FormatBakeResultPath(additiveResult)}\n" +
-                    $"Bounds: ({mapBounds.x:F1}, {mapBounds.y:F1})  size {mapBounds.z:F1} x {mapBounds.w:F1} m",
+                    $"Override: {FormatBakeResultPath(loadedBakeAsset.overrideMap)}\n" +
+                    $"Multiply: {FormatBakeResultPath(loadedBakeAsset.multiplyMap)}\n" +
+                    $"Additive: {FormatBakeResultPath(loadedBakeAsset.additiveMap)}\n" +
+                    $"Bounds: ({loadedBakeAsset.bounds.x:F1}, {loadedBakeAsset.bounds.y:F1})  size {loadedBakeAsset.bounds.z:F1} x {loadedBakeAsset.bounds.w:F1} m",
                     "OK");
             }
             catch (System.Exception e)
@@ -341,161 +277,9 @@ namespace GrassSystem
             Debug.Log($"[GrassDecalBaker] Removed baked maps from {renderers.Length} renderer(s) and re-enabled original decals.");
         }
 
-        private void EnsureTexturesReadable(List<GrassDecal> decals)
+        private string FormatBakeResultPath(Texture2D map)
         {
-            foreach (var decal in decals)
-            {
-                if (decal.decalTexture == null) continue;
-                string path = AssetDatabase.GetAssetPath(decal.decalTexture);
-                if (string.IsNullOrEmpty(path)) continue;
-                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
-                if (importer != null && !importer.isReadable)
-                {
-                    importer.isReadable = true;
-                    importer.SaveAndReimport();
-                }
-            }
-        }
-
-        private BakedMapResult BakeModeMap(
-            List<GrassDecal> sortedDecals,
-            Vector4 mapBounds,
-            Material bakeMat,
-            DecalBlendMode targetMode,
-            string fileNameBase)
-        {
-            var modeDecals = sortedDecals.Where(d => d.blendMode == targetMode).ToList();
-            if (modeDecals.Count == 0)
-            {
-                DeleteExistingBakeAsset($"{outputFolder}/{fileNameBase}.png");
-                return new BakedMapResult();
-            }
-
-            bool isColorMap = targetMode == DecalBlendMode.Override;
-            RenderTextureFormat rtFormat = RenderTextureFormat.ARGB32;
-            RenderTextureReadWrite readWrite = isColorMap ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear;
-            TextureFormat textureFormat = TextureFormat.RGBA32;
-            bool linearTexture = !isColorMap;
-            string extension = "png";
-            Color clearColor = targetMode == DecalBlendMode.Multiply
-                ? new Color(1f, 1f, 1f, 0f)
-                : new Color(0f, 0f, 0f, 0f);
-
-            var rtA = RenderTexture.GetTemporary(resolution, resolution, 0, rtFormat, readWrite);
-            var rtB = RenderTexture.GetTemporary(resolution, resolution, 0, rtFormat, readWrite);
-            rtA.filterMode = FilterMode.Bilinear;
-            rtB.filterMode = FilterMode.Bilinear;
-
-            RenderTexture.active = rtA;
-            GL.Clear(true, true, clearColor);
-            RenderTexture.active = null;
-
-            RenderTexture src = rtA;
-            RenderTexture dst = rtB;
-
-            for (int i = 0; i < modeDecals.Count; i++)
-            {
-                var decal = modeDecals[i];
-                float modeBaseProgress = GetModeProgressStart(targetMode);
-                EditorUtility.DisplayProgressBar(
-                    "Baking Decal Map",
-                    $"{targetMode} {i + 1}/{modeDecals.Count}: {decal.gameObject.name}",
-                    modeBaseProgress + 0.20f * ((float)i / Mathf.Max(1, modeDecals.Count)));
-
-                float totalRotation = (decal.rotation + decal.transform.eulerAngles.y) * Mathf.Deg2Rad;
-                bakeMat.SetTexture("_DecalTex", decal.decalTexture);
-                bakeMat.SetTexture("_PreviousMap", src);
-                bakeMat.SetVector("_DecalBounds", new Vector4(
-                    decal.transform.position.x,
-                    decal.transform.position.z,
-                    decal.size.x,
-                    decal.size.y));
-                bakeMat.SetFloat("_DecalRotation", totalRotation);
-                bakeMat.SetFloat("_DecalBlend", decal.blend);
-                bakeMat.SetFloat("_DecalBlendMode", (float)decal.blendMode);
-                bakeMat.SetFloat("_BakeTargetMode", (float)targetMode);
-                bakeMat.SetVector("_MapBounds", mapBounds);
-
-                Graphics.Blit(src, dst, bakeMat);
-                (src, dst) = (dst, src);
-            }
-
-            EditorUtility.DisplayProgressBar(
-                "Baking Decal Map",
-                $"Saving {targetMode} map...",
-                GetModeSaveProgress(targetMode));
-
-            Texture2D result = new Texture2D(resolution, resolution, textureFormat, false, linearTexture);
-            RenderTexture.active = src;
-            result.ReadPixels(new Rect(0, 0, resolution, resolution), 0, 0);
-            result.Apply();
-            RenderTexture.active = null;
-
-            RenderTexture.ReleaseTemporary(rtA);
-            RenderTexture.ReleaseTemporary(rtB);
-
-            string savePath = $"{outputFolder}/{fileNameBase}.{extension}";
-            byte[] bytes = result.EncodeToPNG();
-            File.WriteAllBytes(savePath, bytes);
-            DestroyImmediate(result);
-
-            AssetDatabase.ImportAsset(savePath, ImportAssetOptions.ForceUpdate);
-            var importer = AssetImporter.GetAtPath(savePath) as TextureImporter;
-            if (importer != null)
-            {
-                importer.sRGBTexture = isColorMap;
-                importer.textureCompression = TextureImporterCompression.Compressed;
-                importer.crunchedCompression = true;
-                importer.filterMode = FilterMode.Bilinear;
-                importer.maxTextureSize = resolution;
-                importer.mipmapEnabled = false;
-                importer.alphaIsTransparency = false;
-                importer.SaveAndReimport();
-            }
-
-            return new BakedMapResult
-            {
-                path = savePath,
-                asset = AssetDatabase.LoadAssetAtPath<Texture2D>(savePath)
-            };
-        }
-
-        private string FormatBakeResultPath(BakedMapResult result)
-        {
-            return string.IsNullOrEmpty(result.path) ? "Not generated" : result.path;
-        }
-
-        private void DeleteExistingBakeAsset(string assetPath)
-        {
-            if (!File.Exists(assetPath))
-                return;
-
-            AssetDatabase.DeleteAsset(assetPath);
-        }
-
-        private GrassDecalBakeAsset SaveOrUpdateBakeAsset(
-            BakedMapResult overrideResult,
-            BakedMapResult multiplyResult,
-            BakedMapResult additiveResult,
-            Vector4 bounds)
-        {
-            string bakeAssetPath = $"{outputFolder}/{assetName}.asset";
-            var bakeAsset = AssetDatabase.LoadAssetAtPath<GrassDecalBakeAsset>(bakeAssetPath);
-            if (bakeAsset == null)
-            {
-                bakeAsset = CreateInstance<GrassDecalBakeAsset>();
-                AssetDatabase.CreateAsset(bakeAsset, bakeAssetPath);
-            }
-
-            bakeAsset.overrideMap = overrideResult.asset;
-            bakeAsset.multiplyMap = multiplyResult.asset;
-            bakeAsset.additiveMap = additiveResult.asset;
-            bakeAsset.bounds = bounds;
-
-            EditorUtility.SetDirty(bakeAsset);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-            return bakeAsset;
+            return map == null ? "Not generated" : AssetDatabase.GetAssetPath(map);
         }
 
         private void ApplyBakeToRenderers(GrassDecalBakeAsset bakeAsset, GrassRenderer[] renderers, bool disableOriginalDecals)
@@ -522,38 +306,6 @@ namespace GrassSystem
                 }
             }
             Debug.Log($"[GrassDecalBaker] Applied bake '{bakeAsset.name}' to {renderers.Length} renderer(s).");
-        }
-
-        private struct BakedMapResult
-        {
-            public string path;
-            public Texture2D asset;
-        }
-
-        private float GetModeProgressStart(DecalBlendMode mode)
-        {
-            switch (mode)
-            {
-                case DecalBlendMode.Override:
-                    return 0.10f;
-                case DecalBlendMode.Multiply:
-                    return 0.35f;
-                default:
-                    return 0.60f;
-            }
-        }
-
-        private float GetModeSaveProgress(DecalBlendMode mode)
-        {
-            switch (mode)
-            {
-                case DecalBlendMode.Override:
-                    return 0.30f;
-                case DecalBlendMode.Multiply:
-                    return 0.55f;
-                default:
-                    return 0.80f;
-            }
         }
 
     }

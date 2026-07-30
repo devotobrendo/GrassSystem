@@ -118,24 +118,15 @@ namespace GrassSystem.Consoles.Editor
                 return;
             }
 
-            var slim = new GrassDataConsole[source.Count];
-            for (int i = 0; i < source.Count; i++)
-            {
-                GrassData g = source[i];
-                slim[i] = new GrassDataConsole(g.position, g.widthHeight.x, g.widthHeight.y);
-            }
-
             GrassDataConsoleAsset targetAsset = ResolveTargetAsset(originAssetPath);
             if (targetAsset == null)
                 return;
 
-            targetAsset.SaveData(slim, sceneName, originAssetPath);
-            EditorUtility.SetDirty(targetAsset);
-            AssetDatabase.SaveAssets();
+            GrassConsoleDataBakeService.Bake(source, sceneName, originAssetPath, targetAsset);
             AssetDatabase.Refresh();
 
             string savedPath = AssetDatabase.GetAssetPath(targetAsset);
-            Debug.Log($"GrassConsoleConverter: Baked {slim.Length:N0} slim instance(s) ({slim.Length * GrassDataConsole.Stride / 1024f:N1} KB) -> {savedPath}. Source data untouched.", targetAsset);
+            Debug.Log($"GrassConsoleConverter: Baked {source.Count:N0} slim instance(s) ({source.Count * GrassDataConsole.Stride / 1024f:N1} KB) -> {savedPath}. Source data untouched.", targetAsset);
 
             if (targetRenderer != null)
             {
