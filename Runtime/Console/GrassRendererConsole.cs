@@ -115,6 +115,11 @@ namespace GrassSystem.Consoles
             Debug.Log($"GrassRendererConsole: Reinitialized. instances={grassData.Length}, isInitialized={isInitialized}", this);
         }
 
+        public void MarkMaterialDirty()
+        {
+            materialDirty = true;
+        }
+
         public bool AreBuffersValid()
         {
             if (!isInitialized) return false;
