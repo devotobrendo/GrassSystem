@@ -52,6 +52,9 @@ namespace GrassSystem.Consoles
         private Vector4[] interactorData = new Vector4[16];
         private Material materialInstance;
         private Mesh cachedMesh;
+        private RenderTexture runtimeDecalMap;
+        private Texture pendingDecalOverlay;
+        private Vector4 pendingDecalOverlayBounds;
 
         private static readonly int PropSourceBuffer = Shader.PropertyToID("_SourceBuffer");
         private static readonly int PropVisibleBuffer = Shader.PropertyToID("_VisibleBuffer");
@@ -559,6 +562,36 @@ namespace GrassSystem.Consoles
             ApplyBakedDecalToMaterial();
         }
 
+        public void SetRuntimeDecalOverlay(Texture overlay, Vector4 overlayBoundsXZ)
+        {
+            pendingDecalOverlay = overlay;
+            pendingDecalOverlayBounds = overlayBoundsXZ;
+
+            if (materialInstance == null || bakedDecalAsset == null)
+            {
+                Debug.LogWarning("GrassRendererConsole: runtime decal overlay stored but not applied yet — the renderer needs an initialized material and a bakedDecalAsset. It will be applied automatically once both exist.", this);
+                return;
+            }
+
+            ApplyRuntimeDecalOverlay();
+        }
+
+        public void ClearRuntimeDecalOverlay()
+        {
+            pendingDecalOverlay = null;
+            GrassRuntimeDecalCompositor.Release(ref runtimeDecalMap);
+            ApplyBakedDecalToMaterial();
+        }
+
+        private void ApplyRuntimeDecalOverlay()
+        {
+            if (pendingDecalOverlay == null || materialInstance == null || bakedDecalAsset == null)
+                return;
+
+            if (GrassRuntimeDecalCompositor.Composite(bakedDecalAsset.overrideMap, bakedDecalAsset.bounds, pendingDecalOverlay, pendingDecalOverlayBounds, ref runtimeDecalMap))
+                materialInstance.SetTexture("_BakedOverrideMap", runtimeDecalMap);
+        }
+
         private void ApplyBakedDecalToMaterial()
         {
             if (materialInstance == null)
@@ -580,6 +613,11 @@ namespace GrassSystem.Consoles
                 materialInstance.SetTexture("_BakedAdditiveMap", null);
                 materialInstance.DisableKeyword("_BAKED_DECALS");
             }
+
+            if (runtimeDecalMap == null && pendingDecalOverlay != null)
+                ApplyRuntimeDecalOverlay();
+            else if (runtimeDecalMap != null)
+                materialInstance.SetTexture("_BakedOverrideMap", runtimeDecalMap);
         }
 
         private void UpdateBounds()
@@ -623,6 +661,8 @@ namespace GrassSystem.Consoles
                 else
                     DestroyImmediate(materialInstance);
             }
+
+            GrassRuntimeDecalCompositor.Release(ref runtimeDecalMap);
 
             isInitialized = false;
         }
