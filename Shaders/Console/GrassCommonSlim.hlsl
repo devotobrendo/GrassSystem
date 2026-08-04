@@ -77,6 +77,7 @@ float3 TransformGrassVertex(
     {
         scaledPos.x *= width;
         scaledPos.y *= height * distanceScale;
+        scaledPos.z *= width;
     }
 
     float tiltHash1 = Hash(worldPivot.xz + float2(3.14159, 2.71828));

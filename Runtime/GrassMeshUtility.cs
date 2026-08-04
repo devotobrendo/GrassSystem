@@ -5,7 +5,14 @@ using UnityEngine;
 
 namespace GrassSystem
 {
-    public enum GrassProceduralType { Blade, Tapered, Quad, Cross, Tuft }
+    public enum GrassProceduralType
+    {
+        Blade = 0,
+        Tapered = 1,
+        Soft = 5,
+        Tuft = 4,
+        Clump = 6
+    }
 
     public static class GrassMeshUtility
     {
@@ -33,9 +40,9 @@ namespace GrassSystem
             {
                 case GrassProceduralType.Blade: return GenerateZeldaStyleBlade();
                 case GrassProceduralType.Tapered: return GenerateTaperedBlade();
-                case GrassProceduralType.Quad: return GenerateQuadBlade();
-                case GrassProceduralType.Cross: return GenerateCrossBlade();
+                case GrassProceduralType.Soft: return GenerateSoftBlade();
                 case GrassProceduralType.Tuft: return GenerateTuftBlade();
+                case GrassProceduralType.Clump: return GenerateClumpBlade();
                 default: return GenerateZeldaStyleBlade();
             }
         }
@@ -102,78 +109,44 @@ namespace GrassSystem
             return BuildMesh("TaperedGrassBlade", vertices, uvs, normals, triangles);
         }
 
-        private static Mesh GenerateQuadBlade()
+        private static Mesh GenerateSoftBlade()
         {
             Vector3[] vertices =
             {
                 new Vector3(-0.5f, 0f, 0f),
                 new Vector3(0.5f, 0f, 0f),
-                new Vector3(-0.5f, 1f, 0f),
-                new Vector3(0.5f, 1f, 0f)
+                new Vector3(-0.34f, 0.5f, 0f),
+                new Vector3(0.34f, 0.5f, 0f),
+                new Vector3(-0.15f, 0.85f, 0f),
+                new Vector3(0.15f, 0.85f, 0f),
+                new Vector3(0f, 1f, 0f)
             };
 
             Vector2[] uvs =
             {
                 new Vector2(0f, 0f),
                 new Vector2(1f, 0f),
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f)
+                new Vector2(0.16f, 0.5f),
+                new Vector2(0.84f, 0.5f),
+                new Vector2(0.35f, 0.85f),
+                new Vector2(0.65f, 0.85f),
+                new Vector2(0.5f, 1f)
             };
 
             Vector3[] normals =
             {
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
                 Vector3.back,
                 Vector3.back,
                 Vector3.back,
                 Vector3.back
             };
 
-            int[] triangles = { 0, 2, 1, 1, 2, 3 };
+            int[] triangles = { 0, 2, 1, 1, 2, 3, 2, 4, 3, 3, 4, 5, 4, 6, 5 };
 
-            return BuildMesh("QuadGrassBlade", vertices, uvs, normals, triangles);
-        }
-
-        private static Mesh GenerateCrossBlade()
-        {
-            Vector3[] vertices =
-            {
-                new Vector3(-0.5f, 0f, 0f),
-                new Vector3(0.5f, 0f, 0f),
-                new Vector3(-0.5f, 1f, 0f),
-                new Vector3(0.5f, 1f, 0f),
-                new Vector3(0f, 0f, -0.5f),
-                new Vector3(0f, 0f, 0.5f),
-                new Vector3(0f, 1f, -0.5f),
-                new Vector3(0f, 1f, 0.5f)
-            };
-
-            Vector2[] uvs =
-            {
-                new Vector2(0f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f)
-            };
-
-            Vector3[] normals =
-            {
-                Vector3.back,
-                Vector3.back,
-                Vector3.back,
-                Vector3.back,
-                Vector3.left,
-                Vector3.left,
-                Vector3.left,
-                Vector3.left
-            };
-
-            int[] triangles = { 0, 2, 1, 1, 2, 3, 4, 6, 5, 5, 6, 7 };
-
-            return BuildMesh("CrossGrassBlade", vertices, uvs, normals, triangles);
+            return BuildMesh("SoftGrassBlade", vertices, uvs, normals, triangles);
         }
 
         private static Mesh GenerateTuftBlade()
@@ -220,6 +193,52 @@ namespace GrassSystem
             int[] triangles = { 0, 2, 1, 3, 5, 4, 6, 8, 7 };
 
             return BuildMesh("TuftGrassBlade", vertices, uvs, normals, triangles);
+        }
+
+        private static readonly (float cx, float cz, float halfWidth, float height, float yawDeg)[] ClumpBladeLayout =
+        {
+            ( 0.00f,  0.00f, 0.20f, 1.00f,   0f),
+            (-0.38f,  0.10f, 0.17f, 0.82f,  35f),
+            ( 0.36f, -0.08f, 0.18f, 0.88f, -30f),
+            (-0.12f, -0.34f, 0.16f, 0.74f,  70f),
+            ( 0.16f,  0.34f, 0.15f, 0.70f, -65f)
+        };
+
+        private static Mesh GenerateClumpBlade()
+        {
+            int bladeCount = ClumpBladeLayout.Length;
+            Vector3[] vertices = new Vector3[bladeCount * 3];
+            Vector2[] uvs = new Vector2[bladeCount * 3];
+            Vector3[] normals = new Vector3[bladeCount * 3];
+            int[] triangles = new int[bladeCount * 3];
+
+            for (int i = 0; i < bladeCount; i++)
+            {
+                var blade = ClumpBladeLayout[i];
+                float yaw = blade.yawDeg * Mathf.Deg2Rad;
+                float dx = Mathf.Cos(yaw) * blade.halfWidth;
+                float dz = -Mathf.Sin(yaw) * blade.halfWidth;
+
+                int baseIndex = i * 3;
+
+                vertices[baseIndex] = new Vector3(blade.cx - dx, 0f, blade.cz - dz);
+                vertices[baseIndex + 1] = new Vector3(blade.cx + dx, 0f, blade.cz + dz);
+                vertices[baseIndex + 2] = new Vector3(blade.cx, blade.height, blade.cz);
+
+                uvs[baseIndex] = new Vector2(0f, 0f);
+                uvs[baseIndex + 1] = new Vector2(1f, 0f);
+                uvs[baseIndex + 2] = new Vector2(0.5f, 1f);
+
+                normals[baseIndex] = Vector3.back;
+                normals[baseIndex + 1] = Vector3.back;
+                normals[baseIndex + 2] = Vector3.back;
+
+                triangles[baseIndex] = baseIndex;
+                triangles[baseIndex + 1] = baseIndex + 2;
+                triangles[baseIndex + 2] = baseIndex + 1;
+            }
+
+            return BuildMesh("ClumpGrassBlade", vertices, uvs, normals, triangles);
         }
 
         private static Mesh BuildMesh(string name, Vector3[] vertices, Vector2[] uvs, Vector3[] normals, int[] triangles)

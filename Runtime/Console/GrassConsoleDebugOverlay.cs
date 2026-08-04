@@ -291,15 +291,15 @@ namespace GrassSystem.Consoles
                     }
                     else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Tapered)
                     {
-                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Quad;
+                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Soft;
                     }
-                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Quad)
-                    {
-                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Cross;
-                    }
-                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Cross)
+                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Soft)
                     {
                         GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Tuft;
+                    }
+                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Tuft)
+                    {
+                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Clump;
                     }
                     else
                     {
