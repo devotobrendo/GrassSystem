@@ -22,7 +22,7 @@ namespace GrassSystem.Consoles
         public float backgroundAlpha = 0.75f;
 
         private const int RowOverride = 0;
-        private const int RowGlobalDensity = 1;
+        private const int RowInstanceDensity = 1;
         private const int RowFarKeep = 2;
         private const int RowThinStart = 3;
         private const int RowCoverage = 4;
@@ -35,7 +35,7 @@ namespace GrassSystem.Consoles
         private static readonly string[] RowLabels =
         {
             "Override",
-            "Global Density",
+            "Instance Density",
             "Far Keep",
             "Thin Start",
             "Coverage",
@@ -73,7 +73,6 @@ namespace GrassSystem.Consoles
 
         private bool showOverlay;
         private int selectedRow;
-        private float globalDensityValue = 1f;
         private GrassSystemState systemState;
         private int lastStickYDirection;
         private float fineRepeatTimer;
@@ -416,7 +415,7 @@ namespace GrassSystem.Consoles
             GrassConsoleDebug.ThinStartDistance = source.thinStartDistance;
             GrassConsoleDebug.CoverageCompensation = source.coverageCompensation;
             GrassConsoleDebug.SizeScale = source.sizeScale;
-            globalDensityValue = source.farKeepFraction;
+            GrassConsoleDebug.InstanceDensity = source.instanceDensity;
         }
 
         private void ApplySystemState(GrassSystemState state)
@@ -490,7 +489,7 @@ namespace GrassSystem.Consoles
         {
             switch (row)
             {
-                case RowGlobalDensity: return globalDensityValue;
+                case RowInstanceDensity: return GrassConsoleDebug.InstanceDensity;
                 case RowFarKeep: return GrassConsoleDebug.FarKeepFraction;
                 case RowThinStart: return GrassConsoleDebug.ThinStartDistance;
                 case RowCoverage: return GrassConsoleDebug.CoverageCompensation;
@@ -504,10 +503,9 @@ namespace GrassSystem.Consoles
         {
             switch (row)
             {
-                case RowGlobalDensity:
-                    globalDensityValue = Mathf.Clamp01(value);
-                    GrassConsoleDebug.FarKeepFraction = globalDensityValue;
-                    GrassConsoleDebug.ThinStartDistance = 0f;
+                case RowInstanceDensity:
+                    GrassConsoleDebug.InstanceDensityOverrideEnabled = true;
+                    GrassConsoleDebug.InstanceDensity = Mathf.Clamp(value, 0.01f, 1f);
                     break;
                 case RowFarKeep:
                     GrassConsoleDebug.FarKeepFraction = Mathf.Clamp01(value);
@@ -531,6 +529,7 @@ namespace GrassSystem.Consoles
         {
             switch (row)
             {
+                case RowInstanceDensity: return (0.01f, 1f);
                 case RowThinStart: return (0f, 50f);
                 case RowSizeX: return (0.01f, 3f);
                 case RowSizeY: return (0.01f, 3f);

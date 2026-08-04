@@ -9,6 +9,8 @@ namespace GrassSystem.Consoles
     public static class GrassConsoleDebug
     {
         public static bool OverrideEnabled;
+        public static bool InstanceDensityOverrideEnabled;
+        public static float InstanceDensity = 1f;
         public static bool ReadoutEnabled;
         public static float FarKeepFraction = 1f;
         public static float ThinStartDistance = 0f;

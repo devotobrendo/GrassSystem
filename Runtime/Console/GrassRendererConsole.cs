@@ -129,9 +129,12 @@ namespace GrassSystem.Consoles
             }
         }
 
+        private float EffectiveInstanceDensity =>
+            GrassConsoleDebug.InstanceDensityOverrideEnabled ? GrassConsoleDebug.InstanceDensity : instanceDensity;
+
         private GrassDataConsole[] BuildUploadData()
         {
-            float keep = Mathf.Clamp01(instanceDensity);
+            float keep = Mathf.Clamp01(EffectiveInstanceDensity);
             if (keep >= 1f || grassData.Length == 0)
                 return grassData;
 
@@ -320,14 +323,16 @@ namespace GrassSystem.Consoles
 
         private bool ConsumeDensityChange()
         {
-            if (!Mathf.Approximately(instanceDensity, lastSeenDensity))
+            float density = EffectiveInstanceDensity;
+
+            if (!Mathf.Approximately(density, lastSeenDensity))
             {
-                lastSeenDensity = instanceDensity;
+                lastSeenDensity = density;
                 densityChangeTime = Time.realtimeSinceStartup;
                 return false;
             }
 
-            if (densityChangeTime < 0f || Mathf.Approximately(instanceDensity, lastAppliedDensity))
+            if (densityChangeTime < 0f || Mathf.Approximately(density, lastAppliedDensity))
                 return false;
 
             if (Time.realtimeSinceStartup - densityChangeTime < DENSITY_DEBOUNCE)
@@ -470,8 +475,8 @@ namespace GrassSystem.Consoles
             {
                 GrassDataConsole[] uploadData = BuildUploadData();
                 activeInstanceCount = uploadData.Length;
-                lastAppliedDensity = instanceDensity;
-                lastSeenDensity = instanceDensity;
+                lastAppliedDensity = EffectiveInstanceDensity;
+                lastSeenDensity = lastAppliedDensity;
                 densityChangeTime = -1f;
 
                 sourceBuffer = new ComputeBuffer(activeInstanceCount, GrassDataConsole.Stride, ComputeBufferType.Structured);
