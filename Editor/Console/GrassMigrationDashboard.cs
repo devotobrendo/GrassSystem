@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using GrassSystem;
@@ -77,11 +78,19 @@ namespace GrassSystem.Consoles.Editor
         private bool scanned;
         private int selectedTab;
         private MigrationResult lastMigration;
+        private GrassObjectRenameResult lastRename;
+        private List<StandardizePlanEntry> standardizePlan;
+        private StandardizeApplyResult lastApply;
 
         private GUIContent refreshLabel;
         private GUIContent scanProjectLabel;
         private GUIContent notScannedLabel;
         private GUIContent summaryLabel;
+        private GUIContent buildPlanLabel;
+        private GUIContent rebuildPlanLabel;
+        private GUIContent applyStandardizeLabel;
+        private GUIContent standardizeHintLabel;
+        private GUIContent standardizeSummaryLabel;
         private GUIContent[] tabLabels;
         private GUIContent[] headerLabels;
         private GUIStyle headerStyle;
@@ -106,6 +115,11 @@ namespace GrassSystem.Consoles.Editor
             scanProjectLabel = new GUIContent("Scan Project", "Scan the project for grass migration status. Can take a while on large projects.");
             notScannedLabel = new GUIContent("Not scanned yet.");
             summaryLabel = new GUIContent(string.Empty);
+            buildPlanLabel = new GUIContent("Build Plan", "Scan grass Data/Settings/Decal/Material assets and preview a standardized folder + naming layout.");
+            rebuildPlanLabel = new GUIContent("Rebuild", "Re-scan and recompute the standardization plan.");
+            applyStandardizeLabel = new GUIContent("Apply Standardization", "Move all Ready assets into Assets/Grass/. GUIDs are preserved.");
+            standardizeHintLabel = new GUIContent("Not built yet.");
+            standardizeSummaryLabel = new GUIContent(string.Empty);
             tabLabels = new[]
             {
                 new GUIContent("Status"),
@@ -244,6 +258,41 @@ namespace GrassSystem.Consoles.Editor
                 }
             }
 
+            GUILayout.Space(6);
+
+            if (GUILayout.Button("Rename Scene Objects", GUILayout.Height(24)))
+            {
+                if (EditorUtility.DisplayDialog("Rename Scene Objects", "Rename grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention? (Undoable)", "Rename", "Cancel"))
+                    lastRename = GrassSceneObjectRenamer.RenameOpenScene();
+            }
+
+            EditorGUILayout.HelpBox("Renames only grass objects (GrassRenderer / GrassRendererConsole / GrassDecal). Undoable.", MessageType.Info);
+
+            if (lastRename != null)
+            {
+                GUILayout.Space(4);
+                GUILayout.Label($"Renamed {lastRename.renamed}   Skipped {lastRename.skipped}", cellStyle);
+
+                if (lastRename.notes != null && lastRename.notes.Count > 0)
+                {
+                    GUILayout.Space(4);
+                    if (lastRename.notes.Count > 6)
+                    {
+                        scrollPos = EditorGUILayout.BeginScrollView(scrollPos, GUILayout.Height(140));
+                        for (int i = 0; i < lastRename.notes.Count; i++)
+                            GUILayout.Label(lastRename.notes[i], EditorStyles.miniLabel);
+                        EditorGUILayout.EndScrollView();
+                    }
+                    else
+                    {
+                        for (int i = 0; i < lastRename.notes.Count; i++)
+                            GUILayout.Label(lastRename.notes[i], EditorStyles.miniLabel);
+                    }
+                }
+            }
+
+            GUILayout.Space(10);
+
             if (lastMigration == null)
                 return;
 
@@ -281,7 +330,145 @@ namespace GrassSystem.Consoles.Editor
 
         private void DrawStandardizeTab()
         {
-            EditorGUILayout.HelpBox("Asset standardization (folders + naming) — coming. Pending architecture sign-off.", MessageType.Info);
+            if (standardizePlan == null)
+            {
+                DrawStandardizeEmptyState();
+                return;
+            }
+
+            int movableCount = standardizePlan == null ? 0 : standardizePlan.Count(e => e.status == GrassAssetStandardizer.StatusReady || e.status == GrassAssetStandardizer.StatusUnused);
+
+            using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+            {
+                if (GUILayout.Button(rebuildPlanLabel, EditorStyles.toolbarButton, GUILayout.Width(70)))
+                    BuildStandardizePlan();
+
+                GUILayout.Label(standardizeSummaryLabel, EditorStyles.toolbarButton);
+                GUILayout.FlexibleSpace();
+
+                using (new EditorGUI.DisabledScope(movableCount == 0))
+                {
+                    if (GUILayout.Button(applyStandardizeLabel, EditorStyles.toolbarButton, GUILayout.Width(150)))
+                    {
+                        if (EditorUtility.DisplayDialog("Standardize Assets", $"Move {movableCount} grass items? Used assets are standardized into Assets/Grass/<Scene>/, unused ones are quarantined into Assets/Grass/_Unused/. GUIDs are preserved. Do this on a clean branch and coordinate with the team.", "Apply", "Cancel"))
+                        {
+                            lastApply = GrassAssetStandardizer.Apply(standardizePlan);
+                            BuildStandardizePlan();
+                        }
+                    }
+                }
+            }
+
+            if (standardizePlan.Count == 0)
+            {
+                EditorGUILayout.HelpBox("No grass assets found in the scanned folders.", MessageType.Info);
+                return;
+            }
+
+            scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
+            for (int i = 0; i < standardizePlan.Count; i++)
+                DrawStandardizeRow(standardizePlan[i]);
+            EditorGUILayout.EndScrollView();
+
+            if (lastApply != null)
+            {
+                GUILayout.Space(4);
+                GUIStyle resultStyle = lastApply.failed == 0 ? statusMigratedStyle : statusPartialStyle;
+                GUILayout.Label($"Moved {lastApply.moved}   Skipped {lastApply.skipped}   Failed {lastApply.failed}", resultStyle);
+
+                if (lastApply.notes.Count > 0)
+                {
+                    if (lastApply.notes.Count > 6)
+                    {
+                        scrollPos = EditorGUILayout.BeginScrollView(scrollPos, GUILayout.Height(140));
+                        for (int i = 0; i < lastApply.notes.Count; i++)
+                            GUILayout.Label(lastApply.notes[i], EditorStyles.miniLabel);
+                        EditorGUILayout.EndScrollView();
+                    }
+                    else
+                    {
+                        for (int i = 0; i < lastApply.notes.Count; i++)
+                            GUILayout.Label(lastApply.notes[i], EditorStyles.miniLabel);
+                    }
+                }
+            }
+
+            EditorGUILayout.HelpBox("Apply moves assets in the project - GUIDs are preserved, but run it on a clean branch.", MessageType.Warning);
+        }
+
+        private void DrawStandardizeEmptyState()
+        {
+            GUILayout.FlexibleSpace();
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.FlexibleSpace();
+                using (new EditorGUILayout.VerticalScope(GUILayout.Width(220)))
+                {
+                    if (GUILayout.Button(buildPlanLabel, GUILayout.Height(40)))
+                        BuildStandardizePlan();
+                    GUILayout.Space(6);
+                    GUILayout.Label(standardizeHintLabel, EditorStyles.centeredGreyMiniLabel);
+                }
+                GUILayout.FlexibleSpace();
+            }
+            GUILayout.FlexibleSpace();
+        }
+
+        private void BuildStandardizePlan()
+        {
+            standardizePlan = GrassAssetStandardizer.BuildPlan();
+            RecomputeStandardizeSummary();
+            Repaint();
+        }
+
+        private void RecomputeStandardizeSummary()
+        {
+            int ready = 0, ambiguous = 0, already = 0, deferred = 0, unused = 0;
+            for (int i = 0; i < standardizePlan.Count; i++)
+            {
+                switch (standardizePlan[i].status)
+                {
+                    case GrassAssetStandardizer.StatusReady: ready++; break;
+                    case GrassAssetStandardizer.StatusAmbiguous: ambiguous++; break;
+                    case GrassAssetStandardizer.StatusAlreadyStandard: already++; break;
+                    case GrassAssetStandardizer.StatusDeferred: deferred++; break;
+                    case GrassAssetStandardizer.StatusUnused: unused++; break;
+                }
+            }
+            standardizeSummaryLabel = new GUIContent($"Ready {ready} | Ambiguous {ambiguous} | Unused {unused} | AlreadyStandard {already} | Deferred {deferred}");
+        }
+
+        private void DrawStandardizeRow(StandardizePlanEntry entry)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label(entry.category, cellStyle, GUILayout.Width(70));
+
+                string currentLabel = string.IsNullOrEmpty(entry.assetPath) ? "-" : Path.GetFileName(entry.assetPath);
+                if (GUILayout.Button(currentLabel, linkStyle, GUILayout.Width(260)))
+                    PingStandardizeEntry(entry);
+
+                GUILayout.Label("→", cellStyle, GUILayout.Width(16));
+
+                string targetLabel = !string.IsNullOrEmpty(entry.targetPath) ? entry.targetPath : entry.note;
+                GUILayout.Label(targetLabel, cellStyle, GUILayout.ExpandWidth(true));
+
+                GUIStyle statusStyle = entry.status == GrassAssetStandardizer.StatusReady ? statusMigratedStyle
+                    : entry.status == GrassAssetStandardizer.StatusAmbiguous ? statusPartialStyle
+                    : statusNotStartedStyle;
+                GUILayout.Label(entry.status, statusStyle, GUILayout.Width(110));
+            }
+
+            bool showSecondaryNote = !string.IsNullOrEmpty(entry.note) &&
+                (entry.status == GrassAssetStandardizer.StatusReady || entry.status == GrassAssetStandardizer.StatusAlreadyStandard);
+            if (showSecondaryNote)
+                GUILayout.Label("    " + entry.note, EditorStyles.miniLabel);
+        }
+
+        private static void PingStandardizeEntry(StandardizePlanEntry entry)
+        {
+            if (entry.pingTarget != null)
+                EditorGUIUtility.PingObject(entry.pingTarget);
         }
 
         private void DrawHeader()

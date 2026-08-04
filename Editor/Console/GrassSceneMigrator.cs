@@ -52,7 +52,7 @@ namespace GrassSystem.Consoles.Editor
 
             string sceneName = scene.name;
 
-            List<GrassRenderer> renderers = Object.FindObjectsByType<GrassRenderer>(FindObjectsSortMode.None)
+            List<GrassRenderer> renderers = Object.FindObjectsByType<GrassRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None)
                 .Where(r => r != null && r.gameObject.scene == scene)
                 .ToList();
 
@@ -124,15 +124,50 @@ namespace GrassSystem.Consoles.Editor
                 if (console == null || console.gameObject.scene != scene)
                     continue;
 
-                GrassRenderer original = console.GetComponent<GrassRenderer>();
-                if (original != null)
+                GrassRenderer sameObjectRenderer = console.GetComponent<GrassRenderer>();
+                if (sameObjectRenderer != null)
                 {
-                    Undo.RecordObject(original, "Revert Grass Console Migration");
-                    original.enabled = true;
-                    EditorUtility.SetDirty(original);
+                    Undo.RecordObject(sameObjectRenderer.gameObject, "Revert Grass Console Migration");
+                    sameObjectRenderer.gameObject.SetActive(true);
+                    Undo.RecordObject(sameObjectRenderer, "Revert Grass Console Migration");
+                    sameObjectRenderer.enabled = true;
+                    EditorUtility.SetDirty(sameObjectRenderer);
+                    Undo.DestroyObjectImmediate(console);
+                    continue;
                 }
 
-                Undo.DestroyObjectImmediate(console);
+                string consoleName = console.gameObject.name;
+                string originalName = consoleName.EndsWith("_Console")
+                    ? consoleName.Substring(0, consoleName.Length - "_Console".Length)
+                    : consoleName;
+
+                GameObject originalGO = FindSiblingWithComponent<GrassRenderer>(console.transform.parent, scene, originalName);
+                if (originalGO != null)
+                {
+                    Undo.RecordObject(originalGO, "Revert Grass Console Migration");
+                    originalGO.SetActive(true);
+
+                    GrassRenderer originalRenderer = originalGO.GetComponent<GrassRenderer>();
+                    if (originalRenderer != null)
+                    {
+                        Undo.RecordObject(originalRenderer, "Revert Grass Console Migration");
+                        originalRenderer.enabled = true;
+                        EditorUtility.SetDirty(originalRenderer);
+                    }
+                }
+
+                Undo.DestroyObjectImmediate(console.gameObject);
+            }
+
+            GrassRenderer[] allRenderers = Object.FindObjectsByType<GrassRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < allRenderers.Length; i++)
+            {
+                GrassRenderer renderer = allRenderers[i];
+                if (renderer == null || renderer.gameObject.scene != scene || renderer.gameObject.activeSelf)
+                    continue;
+
+                Undo.RecordObject(renderer.gameObject, "Revert Grass Console Migration - Safety Net");
+                renderer.gameObject.SetActive(true);
             }
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -178,9 +213,25 @@ namespace GrassSystem.Consoles.Editor
             }
             GrassConsoleDataBakeService.Bake(source, sceneName, originAssetPath, slimData);
 
-            GrassRendererConsole console = renderer.GetComponent<GrassRendererConsole>();
-            if (console == null)
-                console = Undo.AddComponent<GrassRendererConsole>(renderer.gameObject);
+            string consoleObjectName = $"{renderer.gameObject.name}_Console";
+            Transform originalParent = renderer.transform.parent;
+            GameObject consoleGO = FindSiblingWithComponent<GrassRendererConsole>(originalParent, renderer.gameObject.scene, consoleObjectName);
+
+            if (consoleGO == null)
+            {
+                consoleGO = new GameObject(consoleObjectName);
+                Undo.RegisterCreatedObjectUndo(consoleGO, "Create Grass Console Object");
+                consoleGO.transform.SetParent(originalParent, false);
+                consoleGO.transform.localPosition = renderer.transform.localPosition;
+                consoleGO.transform.localRotation = renderer.transform.localRotation;
+                consoleGO.transform.localScale = renderer.transform.localScale;
+            }
+
+            GrassRendererConsole console = consoleGO.GetComponent<GrassRendererConsole>() ?? Undo.AddComponent<GrassRendererConsole>(consoleGO);
+
+            GrassRendererConsole staleConsole = renderer.GetComponent<GrassRendererConsole>();
+            if (staleConsole != null && staleConsole != console)
+                Undo.DestroyObjectImmediate(staleConsole);
 
             GrassDecalBakeAsset decalForConsole = renderer.BakedDecalAsset != null ? renderer.BakedDecalAsset : fallbackDecal;
 
@@ -189,24 +240,15 @@ namespace GrassSystem.Consoles.Editor
             console.dataAsset = slimData;
             if (decalForConsole != null)
                 console.SetBakedDecalAsset(decalForConsole);
-            EditorUtility.SetDirty(console);
-
-            ApplyDefaultPlatformSplit(renderer, console);
-
-            result.renderersMigrated++;
-            string decalNote = decalForConsole != null ? "" : " (no decal - bake one and re-run)";
-            result.notes.Add($"{renderer.name}: migrated ({source.Count:N0} instances){decalNote}.");
-        }
-
-        private static void ApplyDefaultPlatformSplit(GrassRenderer original, GrassRendererConsole console)
-        {
-            Undo.RecordObject(console, "Grass Migration - Enable Console Renderer");
             console.enabled = true;
             EditorUtility.SetDirty(console);
 
-            Undo.RecordObject(original, "Grass Migration - Disable Original Renderer");
-            original.enabled = false;
-            EditorUtility.SetDirty(original);
+            Undo.RecordObject(renderer.gameObject, "Disable Original Grass Object");
+            renderer.gameObject.SetActive(false);
+
+            result.renderersMigrated++;
+            string decalNote = decalForConsole != null ? "" : " (no decal - bake one and re-run)";
+            result.notes.Add($"{renderer.name}: migrated to '{consoleObjectName}' ({source.Count:N0} instances){decalNote}.");
         }
 
         private static SO_GrassSettings ResolveConsoleSettings(string originalSettingsPath, ComputeShader slimCullingShader, Material slimGrassMaterial)
@@ -294,6 +336,28 @@ namespace GrassSystem.Consoles.Editor
                 .ToList();
         }
 
+        private static GameObject FindSiblingWithComponent<T>(Transform parent, Scene scene, string objectName) where T : Component
+        {
+            if (parent != null)
+            {
+                for (int i = 0; i < parent.childCount; i++)
+                {
+                    Transform child = parent.GetChild(i);
+                    if (child.name == objectName && child.GetComponent<T>() != null)
+                        return child.gameObject;
+                }
+                return null;
+            }
+
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (roots[i].name == objectName && roots[i].GetComponent<T>() != null)
+                    return roots[i];
+            }
+            return null;
+        }
+
         private static ComputeShader ResolveSlimCullingShader()
         {
             ComputeShader shader = LoadByGuid<ComputeShader>(SlimCullingShaderGuid);
@@ -317,7 +381,7 @@ namespace GrassSystem.Consoles.Editor
             if (byMaterialName.Length > 0)
                 return AssetDatabase.LoadAssetAtPath<Material>(AssetDatabase.GUIDToAssetPath(byMaterialName[0]));
 
-            string[] bySharedName = AssetDatabase.FindAssets("GrassMat_Shared_Console t:Material");
+            string[] bySharedName = AssetDatabase.FindAssets("GrassMat_Shared_Main_Console t:Material");
             if (bySharedName.Length > 0)
                 return AssetDatabase.LoadAssetAtPath<Material>(AssetDatabase.GUIDToAssetPath(bySharedName[0]));
 
@@ -336,8 +400,8 @@ namespace GrassSystem.Consoles.Editor
             if (!AssetDatabase.IsValidFolder("Assets/Grass/_Shared"))
                 AssetDatabase.CreateFolder("Assets/Grass", "_Shared");
 
-            string path = "Assets/Grass/_Shared/GrassMat_Shared_Console.mat";
-            Material created = new Material(shader) { name = "GrassMat_Shared_Console" };
+            string path = "Assets/Grass/_Shared/GrassMat_Shared_Main_Console.mat";
+            Material created = new Material(shader) { name = "GrassMat_Shared_Main_Console" };
             AssetDatabase.CreateAsset(created, path);
             result.notes.Add($"Created shared console material at {path}.");
             return created;
