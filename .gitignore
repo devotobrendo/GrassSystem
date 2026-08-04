@@ -62,3 +62,6 @@ crashlytics-build.properties
 
 # TextMesh Pro
 [Aa]ssets/TextMesh Pro/
+
+# Claude Code
+.claude/
