@@ -35,6 +35,9 @@ namespace GrassSystem.Consoles
         [Range(0f, 1f)]
         [Tooltip("How much thinned-away blades widen the survivors to keep ground coverage. 1 = full (far grass widens as you thin). 0 = off (grass just gets sparser, no widening).")]
         public float coverageCompensation = 1f;
+        [Range(0.01f, 1f)]
+        [Tooltip("Fraction of the baked instances actually uploaded to the GPU. Unlike Far Keep Fraction, which drops blades inside the compute shader, this shrinks the source buffer and the dispatch itself — use it to preview what a decimated bake would cost in memory and culling. Rebuilds buffers when changed.")]
+        public float instanceDensity = 1f;
 
         [System.NonSerialized]
         private GrassDataConsole[] grassData = System.Array.Empty<GrassDataConsole>();
@@ -53,6 +56,11 @@ namespace GrassSystem.Consoles
         private Material materialInstance;
         private Mesh cachedMesh;
         private RenderTexture runtimeDecalMap;
+        private int activeInstanceCount;
+        private float lastAppliedDensity = 1f;
+        private float lastSeenDensity = 1f;
+        private float densityChangeTime = -1f;
+        private const float DENSITY_DEBOUNCE = 0.25f;
         private Texture pendingDecalOverlay;
         private Vector4 pendingDecalOverlayBounds;
 
@@ -100,7 +108,8 @@ namespace GrassSystem.Consoles
             }
         }
 
-        public int TotalGrassCount => grassData.Length;
+        public int TotalGrassCount => activeInstanceCount > 0 ? activeInstanceCount : grassData.Length;
+        public int BakedInstanceCount => grassData.Length;
         public int VisibleGrassCount => lastVisibleCount;
         public GrassDecalBakeAsset BakedDecalAsset => bakedDecalAsset;
         public Material MaterialInstance => materialInstance;
@@ -116,6 +125,28 @@ namespace GrassSystem.Consoles
                 if (p != null && p.overrideMesh) return p.meshMode;
                 return settings != null ? settings.grassMode : GrassMode.Default;
             }
+        }
+
+        private GrassDataConsole[] BuildUploadData()
+        {
+            float keep = Mathf.Clamp01(instanceDensity);
+            if (keep >= 1f || grassData.Length == 0)
+                return grassData;
+
+            var kept = new System.Collections.Generic.List<GrassDataConsole>(Mathf.Max(16, Mathf.CeilToInt(grassData.Length * keep)));
+            for (int i = 0; i < grassData.Length; i++)
+            {
+                uint h = (uint)i;
+                h = (h ^ 61u) ^ (h >> 16);
+                h *= 9u;
+                h ^= h >> 4;
+                h *= 0x27d4eb2du;
+                h ^= h >> 15;
+                if (h * (1f / 4294967295f) <= keep)
+                    kept.Add(grassData[i]);
+            }
+
+            return kept.Count > 0 ? kept.ToArray() : grassData;
         }
 
         private Mesh ResolveActiveMesh()
@@ -285,11 +316,36 @@ namespace GrassSystem.Consoles
             }
         }
 
+        private bool ConsumeDensityChange()
+        {
+            if (!Mathf.Approximately(instanceDensity, lastSeenDensity))
+            {
+                lastSeenDensity = instanceDensity;
+                densityChangeTime = Time.realtimeSinceStartup;
+                return false;
+            }
+
+            if (densityChangeTime < 0f || Mathf.Approximately(instanceDensity, lastAppliedDensity))
+                return false;
+
+            if (Time.realtimeSinceStartup - densityChangeTime < DENSITY_DEBOUNCE)
+                return false;
+
+            densityChangeTime = -1f;
+            return true;
+        }
+
         private void Update()
         {
             if (!isInitialized)
             {
                 TryAutoRecover();
+                return;
+            }
+
+            if (ConsumeDensityChange())
+            {
+                RebuildBuffers();
                 return;
             }
 
@@ -410,15 +466,21 @@ namespace GrassSystem.Consoles
 
             try
             {
-                sourceBuffer = new ComputeBuffer(grassData.Length, GrassDataConsole.Stride, ComputeBufferType.Structured);
+                GrassDataConsole[] uploadData = BuildUploadData();
+                activeInstanceCount = uploadData.Length;
+                lastAppliedDensity = instanceDensity;
+                lastSeenDensity = instanceDensity;
+                densityChangeTime = -1f;
+
+                sourceBuffer = new ComputeBuffer(activeInstanceCount, GrassDataConsole.Stride, ComputeBufferType.Structured);
                 if (sourceBuffer == null || !sourceBuffer.IsValid())
                 {
                     Debug.LogError("GrassRendererConsole: Failed to create sourceBuffer!", this);
                     return;
                 }
-                sourceBuffer.SetData(grassData);
+                sourceBuffer.SetData(uploadData);
 
-                visibleBuffer = new ComputeBuffer(grassData.Length, GrassDrawData.Stride, ComputeBufferType.Append);
+                visibleBuffer = new ComputeBuffer(activeInstanceCount, GrassDrawData.Stride, ComputeBufferType.Append);
                 if (visibleBuffer == null || !visibleBuffer.IsValid())
                 {
                     Debug.LogError("GrassRendererConsole: Failed to create visibleBuffer!", this);
@@ -450,7 +512,7 @@ namespace GrassSystem.Consoles
 
                 cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
                 cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
-                cullingShaderInstance.SetInt(PropInstanceCount, grassData.Length);
+                cullingShaderInstance.SetInt(PropInstanceCount, activeInstanceCount);
 
                 materialInstance = new Material(settings.grassMaterial);
                 materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
@@ -664,6 +726,7 @@ namespace GrassSystem.Consoles
 
             GrassRuntimeDecalCompositor.Release(ref runtimeDecalMap);
 
+            activeInstanceCount = 0;
             isInitialized = false;
         }
 
@@ -731,7 +794,7 @@ namespace GrassSystem.Consoles
             cullingShaderInstance.SetFloat(PropMinFade, pd ? p.minFadeDistance : settings.minFadeDistance);
             cullingShaderInstance.SetFloat(PropMaxDraw, pd ? p.maxDrawDistance : settings.maxDrawDistance);
 
-            int threadGroups = Mathf.CeilToInt((float)grassData.Length / THREAD_GROUP_SIZE);
+            int threadGroups = Mathf.CeilToInt((float)activeInstanceCount / THREAD_GROUP_SIZE);
             cullingShaderInstance.Dispatch(cullingKernel, threadGroups, 1, 1);
 
             GraphicsBuffer.CopyCount(visibleBuffer, argsBuffer, sizeof(uint));

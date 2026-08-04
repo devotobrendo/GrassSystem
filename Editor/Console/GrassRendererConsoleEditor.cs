@@ -18,6 +18,7 @@ namespace GrassSystem.Consoles.Editor
         private SerializedProperty propFarKeepFraction;
         private SerializedProperty propThinStartDistance;
         private SerializedProperty propCoverageCompensation;
+        private SerializedProperty propInstanceDensity;
         private SerializedProperty propSizeScale;
         private SerializedProperty propVariantMode;
         private SerializedProperty propProfileSet;
@@ -57,6 +58,7 @@ namespace GrassSystem.Consoles.Editor
             propFarKeepFraction = serializedObject.FindProperty("farKeepFraction");
             propThinStartDistance = serializedObject.FindProperty("thinStartDistance");
             propCoverageCompensation = serializedObject.FindProperty("coverageCompensation");
+            propInstanceDensity = serializedObject.FindProperty("instanceDensity");
             propSizeScale = serializedObject.FindProperty("sizeScale");
             propVariantMode = serializedObject.FindProperty("variantMode");
             propProfileSet = serializedObject.FindProperty("profileSet");
@@ -204,6 +206,16 @@ namespace GrassSystem.Consoles.Editor
                 EditorGUILayout.PropertyField(propCoverageCompensation);
                 if (EditorGUI.EndChangeCheck())
                     SceneView.RepaintAll();
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.PropertyField(propInstanceDensity);
+            int baked = console.BakedInstanceCount;
+            int uploaded = console.TotalGrassCount;
+            if (baked > 0 && uploaded < baked)
+            {
+                float savedMb = (baked - uploaded) * 20f / (1024f * 1024f);
+                EditorGUILayout.HelpBox($"Uploading {uploaded:N0} of {baked:N0} baked instances ({(float)uploaded / baked:P0}). Source buffer and cull dispatch shrink with it — about {savedMb:F1} MB less on the GPU. Preview only; the data asset is untouched.", MessageType.Info);
             }
 
             EditorGUILayout.LabelField("Visible Grass Count", console.VisibleGrassCount.ToString("N0"));
