@@ -79,17 +79,20 @@ namespace GrassSystem.Consoles
         private float fineRepeatTimer;
         private float coarseRepeatTimer;
 
-        private float smoothFPS;
-        private int fpsFrameCount;
-        private float fpsUpdateTimer;
-        private float avgFrameTime;
-        private int frameTimeIndex;
-        private readonly float[] frameTimes = new float[60];
-        private const float FPS_UPDATE_INTERVAL = 0.5f;
+        private const int PERF_SAMPLES = 240;
+        private const float PERF_DISPLAY_INTERVAL = 0.5f;
+
+        private readonly float[] frameSamples = new float[PERF_SAMPLES];
+        private readonly float[] gpuSamples = new float[PERF_SAMPLES];
+        private readonly float[] cpuSamples = new float[PERF_SAMPLES];
+        private int perfIndex;
+        private int perfCount;
+        private float perfDisplayTimer;
+
+        private float frameAvg, frameMin, frameMax, fpsAvg;
+        private float gpuAvg, gpuMin, gpuMax, cpuAvg;
 
         private readonly FrameTiming[] frameTimings = new FrameTiming[1];
-        private float gpuFrameTime;
-        private float cpuFrameTime;
         private bool gpuTimingAvailable;
 
         private GUIStyle boxStyle;
@@ -122,49 +125,71 @@ namespace GrassSystem.Consoles
         {
             HandleInput();
             if (showOverlay)
-            {
-                UpdateFpsMetrics();
-                UpdateGpuTiming();
-            }
+                UpdatePerfMetrics();
         }
 
-        private void UpdateGpuTiming()
+        private void ResetPerfStats()
         {
+            perfIndex = 0;
+            perfCount = 0;
+            perfDisplayTimer = 0f;
+            frameAvg = frameMin = frameMax = fpsAvg = 0f;
+            gpuAvg = gpuMin = gpuMax = cpuAvg = 0f;
+        }
+
+        private void UpdatePerfMetrics()
+        {
+            frameSamples[perfIndex] = Time.unscaledDeltaTime * 1000f;
+
             FrameTimingManager.CaptureFrameTimings();
-            uint received = FrameTimingManager.GetLatestTimings(1, frameTimings);
-            if (received == 0)
+            if (FrameTimingManager.GetLatestTimings(1, frameTimings) > 0)
+            {
+                gpuTimingAvailable = true;
+                gpuSamples[perfIndex] = (float)frameTimings[0].gpuFrameTime;
+                cpuSamples[perfIndex] = (float)frameTimings[0].cpuFrameTime;
+            }
+            else
             {
                 gpuTimingAvailable = false;
+                gpuSamples[perfIndex] = 0f;
+                cpuSamples[perfIndex] = 0f;
+            }
+
+            perfIndex = (perfIndex + 1) % PERF_SAMPLES;
+            if (perfCount < PERF_SAMPLES) perfCount++;
+
+            perfDisplayTimer += Time.unscaledDeltaTime;
+            if (perfDisplayTimer < PERF_DISPLAY_INTERVAL) return;
+            perfDisplayTimer = 0f;
+
+            Accumulate(frameSamples, out frameAvg, out frameMin, out frameMax);
+            Accumulate(gpuSamples, out gpuAvg, out gpuMin, out gpuMax);
+            Accumulate(cpuSamples, out cpuAvg, out _, out _);
+            fpsAvg = frameAvg > 0.0001f ? 1000f / frameAvg : 0f;
+        }
+
+        private void Accumulate(float[] samples, out float avg, out float min, out float max)
+        {
+            avg = 0f;
+            min = float.MaxValue;
+            max = 0f;
+
+            for (int i = 0; i < perfCount; i++)
+            {
+                float s = samples[i];
+                avg += s;
+                if (s < min) min = s;
+                if (s > max) max = s;
+            }
+
+            if (perfCount == 0)
+            {
+                avg = 0f;
+                min = 0f;
                 return;
             }
 
-            gpuTimingAvailable = true;
-            gpuFrameTime = Mathf.Lerp(gpuFrameTime, (float)frameTimings[0].gpuFrameTime, 0.25f);
-            cpuFrameTime = Mathf.Lerp(cpuFrameTime, (float)frameTimings[0].cpuFrameTime, 0.25f);
-        }
-
-        private void UpdateFpsMetrics()
-        {
-            float deltaTime = Time.unscaledDeltaTime;
-            frameTimes[frameTimeIndex] = deltaTime * 1000f;
-            frameTimeIndex = (frameTimeIndex + 1) % frameTimes.Length;
-
-            fpsFrameCount++;
-            fpsUpdateTimer += deltaTime;
-
-            if (fpsUpdateTimer >= FPS_UPDATE_INTERVAL)
-            {
-                float fps = fpsFrameCount / fpsUpdateTimer;
-                smoothFPS = Mathf.Lerp(smoothFPS, fps, 0.5f);
-
-                float sum = 0f;
-                for (int i = 0; i < frameTimes.Length; i++)
-                    sum += frameTimes[i];
-                avgFrameTime = sum / frameTimes.Length;
-
-                fpsFrameCount = 0;
-                fpsUpdateTimer = 0f;
-            }
+            avg /= perfCount;
         }
 
         private void HandleInput()
@@ -180,6 +205,7 @@ namespace GrassSystem.Consoles
                 {
                     SeedFromActiveRenderer();
                     DetectSystemState();
+                    ResetPerfStats();
                 }
                 else
                 {
@@ -258,6 +284,7 @@ namespace GrassSystem.Consoles
                     GrassConsoleDebug.OverrideEnabled = turningOn;
                     if (turningOn)
                         SeedFromActiveRenderer();
+                    ResetPerfStats();
                 }
                 fineRepeatTimer = 0f;
                 coarseRepeatTimer = 0f;
@@ -281,6 +308,7 @@ namespace GrassSystem.Consoles
                     {
                         GrassConsoleDebug.ModeOverrideEnabled = false;
                     }
+                    ResetPerfStats();
                 }
                 fineRepeatTimer = 0f;
                 coarseRepeatTimer = 0f;
@@ -290,7 +318,10 @@ namespace GrassSystem.Consoles
             if (selectedRow == RowBladeType)
             {
                 if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
+                {
                     CycleBladeType();
+                    ResetPerfStats();
+                }
                 fineRepeatTimer = 0f;
                 coarseRepeatTimer = 0f;
                 return;
@@ -302,6 +333,7 @@ namespace GrassSystem.Consoles
                 {
                     systemState = (GrassSystemState)(((int)systemState + 1) % 3);
                     ApplySystemState(systemState);
+                    ResetPerfStats();
                 }
                 fineRepeatTimer = 0f;
                 coarseRepeatTimer = 0f;
@@ -331,6 +363,7 @@ namespace GrassSystem.Consoles
             float step = coarseDir != 0 ? CoarseStep[selectedRow] * coarseDir : FineStep[selectedRow] * fineDir;
             float next = Mathf.Clamp(GetRowValue(selectedRow) + step, range.min, range.max);
             SetRowValue(selectedRow, next);
+            ResetPerfStats();
         }
 
         private static void CycleBladeType()
@@ -562,13 +595,19 @@ namespace GrassSystem.Consoles
             sb.AppendLine("<b>GRASS CONSOLE DEBUG</b>");
             sb.AppendLine("─────────────────────────────");
 
-            string fpsColor = smoothFPS >= 30f ? "#00FF00" : (smoothFPS >= 24f ? "#FFFF00" : "#FF4444");
-            sb.AppendLine($"<color={fpsColor}>FPS: <b>{smoothFPS:F1}</b>  ({avgFrameTime:F2}ms)</color>");
+            string fpsColor = fpsAvg >= 30f ? "#00FF00" : (fpsAvg >= 24f ? "#FFFF00" : "#FF4444");
+            sb.AppendLine($"<color={fpsColor}>FPS <b>{fpsAvg:F1}</b></color>   frame <b>{frameAvg:F2}</b> <size=11>min {frameMin:F2} max {frameMax:F2}</size>");
 
             if (gpuTimingAvailable)
-                sb.AppendLine($"GPU: <b>{gpuFrameTime:F2}ms</b>   CPU: {cpuFrameTime:F2}ms");
+                sb.AppendLine($"GPU <b>{gpuAvg:F2}ms</b> <size=11>min {gpuMin:F2} max {gpuMax:F2}</size>   CPU <b>{cpuAvg:F2}ms</b>");
             else
-                sb.AppendLine("<size=11><color=#888888>GPU: n/a — enable Frame Timing Stats</color></size>");
+                sb.AppendLine("<size=11><color=#888888>GPU n/a - enable Frame Timing Stats in Player Settings</color></size>");
+
+            bool capped = QualitySettings.vSyncCount > 0 || Application.targetFrameRate > 0;
+            string cappedText = capped
+                ? $"<color=#FF9933>capped (vsync {QualitySettings.vSyncCount}, target {Application.targetFrameRate}) - compare GPU ms, not FPS</color>"
+                : "uncapped";
+            sb.AppendLine($"<size=11><color=#888888>avg over {perfCount} frames | {cappedText}</color></size>");
 
             int total = GrassConsoleDebug.TotalInstances;
             int visible = GrassConsoleDebug.VisibleInstances;
