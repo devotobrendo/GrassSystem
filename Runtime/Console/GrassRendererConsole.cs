@@ -88,6 +88,7 @@ namespace GrassSystem.Consoles
         private Plane[] cameraPlanes = new Plane[6];
         private bool isInitialized;
         private GrassMode lastAppliedMode;
+        private bool lastAppliedFlatAlbedo;
 
         private int lastVisibleCount;
         private bool materialDirty;
@@ -393,7 +394,8 @@ namespace GrassSystem.Consoles
             Mesh newMesh = ResolveActiveMesh();
             bool modeChanged = mode != lastAppliedMode;
             bool meshChanged = newMesh != null && newMesh != cachedMesh;
-            if (!modeChanged && !meshChanged) return;
+            bool albedoChanged = GrassConsoleDebug.FlatAlbedoEnabled != lastAppliedFlatAlbedo;
+            if (!modeChanged && !meshChanged && !albedoChanged) return;
 
             if (meshChanged && argsBuffer != null && argsBuffer.IsValid())
             {
@@ -404,6 +406,7 @@ namespace GrassSystem.Consoles
             }
             ApplySettingsToMaterial();
             lastAppliedMode = mode;
+            lastAppliedFlatAlbedo = GrassConsoleDebug.FlatAlbedoEnabled;
         }
 
         private void TryAutoRecover()
@@ -541,7 +544,9 @@ namespace GrassSystem.Consoles
         {
             if (materialInstance == null) return;
 
-            if (EffectiveGrassMode == GrassMode.Default)
+            if (GrassConsoleDebug.FlatAlbedoEnabled)
+                materialInstance.SetTexture("_MainTex", Texture2D.linearGrayTexture);
+            else if (EffectiveGrassMode == GrassMode.Default)
                 materialInstance.SetTexture("_MainTex", settings.defaultModeAlbedo != null ? settings.defaultModeAlbedo : Texture2D.linearGrayTexture);
             else if (settings.albedoTexture != null)
                 materialInstance.SetTexture("_MainTex", settings.albedoTexture);

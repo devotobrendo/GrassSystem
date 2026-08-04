@@ -30,7 +30,8 @@ namespace GrassSystem.Consoles
         private const int RowSizeY = 6;
         private const int RowGrassMode = 7;
         private const int RowBladeType = 8;
-        private const int RowSystem = 9;
+        private const int RowAlbedo = 9;
+        private const int RowSystem = 10;
 
         private static readonly string[] RowLabels =
         {
@@ -43,11 +44,12 @@ namespace GrassSystem.Consoles
             "Size Y (height)",
             "Grass Mode",
             "Blade Type",
+            "Albedo",
             "System"
         };
 
-        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f, 0f };
-        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f, 0f };
+        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f, 0f, 0f };
+        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f, 0f, 0f };
 
         private static readonly GrassProceduralType[] BladeTypeCycle =
         {
@@ -326,6 +328,18 @@ namespace GrassSystem.Consoles
                 return;
             }
 
+            if (selectedRow == RowAlbedo)
+            {
+                if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
+                {
+                    GrassConsoleDebug.FlatAlbedoEnabled = !GrassConsoleDebug.FlatAlbedoEnabled;
+                    ResetPerfStats();
+                }
+                fineRepeatTimer = 0f;
+                coarseRepeatTimer = 0f;
+                return;
+            }
+
             if (selectedRow == RowSystem)
             {
                 if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
@@ -553,6 +567,9 @@ namespace GrassSystem.Consoles
                 if (!GrassConsoleDebug.BladeTypeOverrideEnabled) return "Scene";
                 return GrassConsoleDebug.BladeTypeOverride.ToString();
             }
+
+            if (row == RowAlbedo)
+                return GrassConsoleDebug.FlatAlbedoEnabled ? "Flat 1x1" : "Texture";
 
             if (row == RowSystem)
             {
