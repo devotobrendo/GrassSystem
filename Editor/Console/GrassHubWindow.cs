@@ -88,15 +88,15 @@ namespace GrassSystem.Consoles.Editor
             window.minSize = new Vector2(820, 620);
         }
 
+        private const string SceneFolderPrefKey = "GrassHub.SceneSearchFolder";
+        private const string DefaultSceneFolder = "Assets/Scenes";
+        private string sceneSearchFolder = DefaultSceneFolder;
+
         private void OnEnable()
         {
             minSize = new Vector2(820, 620);
-            Rescan();
-        }
-
-        private void OnFocus()
-        {
-            Rescan();
+            sceneSearchFolder = EditorPrefs.GetString(SceneFolderPrefKey, DefaultSceneFolder);
+            ResolveProfileSets();
         }
 
         private void InitStyles()
@@ -147,9 +147,17 @@ namespace GrassSystem.Consoles.Editor
             {
                 EditorGUILayout.LabelField("Grass Hub", titleStyle);
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Rescan", GUILayout.Width(80)))
+                EditorGUILayout.LabelField("Scenes in", GUILayout.Width(58));
+                EditorGUI.BeginChangeCheck();
+                sceneSearchFolder = EditorGUILayout.TextField(sceneSearchFolder, GUILayout.Width(190));
+                if (EditorGUI.EndChangeCheck())
+                    EditorPrefs.SetString(SceneFolderPrefKey, sceneSearchFolder);
+                if (GUILayout.Button(scanned ? "Rescan" : "Scan", GUILayout.Width(80)))
                     Rescan();
             }
+
+            if (!scanned)
+                EditorGUILayout.HelpBox($"Not scanned yet. Press Scan to walk the scenes under '{sceneSearchFolder}'. Each scene's full dependency graph is resolved, so narrowing this folder is the main way to keep the scan fast.", MessageType.Info);
 
             EditorGUILayout.Space(2);
 
@@ -415,7 +423,9 @@ namespace GrassSystem.Consoles.Editor
             AssetDatabase.Refresh();
 
             EditorGUIUtility.PingObject(asset);
-            Rescan();
+            ResolveProfileSets();
+            RecomputeRows();
+            Repaint();
         }
 
         private static void EnsureFolder(string assetFolderPath)
@@ -470,7 +480,7 @@ namespace GrassSystem.Consoles.Editor
                 HashSet<string> decalPaths = CollectPaths("t:GrassDecalBakeAsset");
                 HashSet<string> settingsPaths = CollectPaths("t:SO_GrassSettings");
 
-                string[] sceneGuids = AssetDatabase.FindAssets("t:Scene");
+                string[] sceneGuids = FindSceneGuids();
                 scanInfos.Clear();
                 bool cancelled = false;
 
@@ -662,6 +672,14 @@ namespace GrassSystem.Consoles.Editor
                 case SceneGrassState.Ready: return "Open Scene";
                 default: return "-";
             }
+        }
+
+        private string[] FindSceneGuids()
+        {
+            if (!string.IsNullOrEmpty(sceneSearchFolder) && AssetDatabase.IsValidFolder(sceneSearchFolder))
+                return AssetDatabase.FindAssets("t:Scene", new[] { sceneSearchFolder });
+
+            return AssetDatabase.FindAssets("t:Scene");
         }
 
         private static HashSet<string> CollectPaths(string filter)
