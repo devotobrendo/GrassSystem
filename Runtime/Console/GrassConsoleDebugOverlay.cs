@@ -31,7 +31,11 @@ namespace GrassSystem.Consoles
         private const int RowGrassMode = 7;
         private const int RowBladeType = 8;
         private const int RowAlbedo = 9;
-        private const int RowSystem = 10;
+        private const int RowGroundBlend = 10;
+        private const int RowSystem = 11;
+
+        private static readonly int PropGroundBlendEnabled = Shader.PropertyToID("_GrassBlendDebugEnabled");
+        private static readonly int PropGroundBlendValue = Shader.PropertyToID("_GrassBlendDebugValue");
 
         private static readonly string[] RowLabels =
         {
@@ -45,11 +49,12 @@ namespace GrassSystem.Consoles
             "Grass Mode",
             "Blade Type",
             "Albedo",
+            "Ground Blend",
             "System"
         };
 
-        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f, 0f, 0f };
-        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f, 0f, 0f };
+        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f, 0f, 0.05f, 0f };
+        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f, 0f, 0.2f, 0f };
 
         private static readonly GrassProceduralType[] BladeTypeCycle =
         {
@@ -109,6 +114,7 @@ namespace GrassSystem.Consoles
         private void OnDisable()
         {
             GrassConsoleDebug.ReadoutEnabled = false;
+            Shader.SetGlobalFloat(PropGroundBlendEnabled, 0f);
 
             if (bgTexture != null)
             {
@@ -125,8 +131,15 @@ namespace GrassSystem.Consoles
         private void Update()
         {
             HandleInput();
+            PushGroundBlendGlobals();
             if (showOverlay)
                 UpdatePerfMetrics();
+        }
+
+        private static void PushGroundBlendGlobals()
+        {
+            Shader.SetGlobalFloat(PropGroundBlendEnabled, GrassConsoleDebug.GroundBlendOverrideEnabled ? 1f : 0f);
+            Shader.SetGlobalFloat(PropGroundBlendValue, GrassConsoleDebug.GroundBlend);
         }
 
         private void ResetPerfStats()
@@ -504,6 +517,7 @@ namespace GrassSystem.Consoles
             switch (row)
             {
                 case RowInstanceDensity: return GrassConsoleDebug.InstanceDensity;
+                case RowGroundBlend: return GrassConsoleDebug.GroundBlend;
                 case RowFarKeep: return GrassConsoleDebug.FarKeepFraction;
                 case RowThinStart: return GrassConsoleDebug.ThinStartDistance;
                 case RowCoverage: return GrassConsoleDebug.CoverageCompensation;
@@ -520,6 +534,10 @@ namespace GrassSystem.Consoles
                 case RowInstanceDensity:
                     GrassConsoleDebug.InstanceDensityOverrideEnabled = true;
                     GrassConsoleDebug.InstanceDensity = Mathf.Clamp(value, 0.01f, 1f);
+                    break;
+                case RowGroundBlend:
+                    GrassConsoleDebug.GroundBlendOverrideEnabled = true;
+                    GrassConsoleDebug.GroundBlend = Mathf.Clamp01(value);
                     break;
                 case RowFarKeep:
                     GrassConsoleDebug.FarKeepFraction = Mathf.Clamp01(value);
@@ -544,6 +562,7 @@ namespace GrassSystem.Consoles
             switch (row)
             {
                 case RowInstanceDensity: return (0.01f, 1f);
+                case RowGroundBlend: return (0f, 1f);
                 case RowThinStart: return (0f, 50f);
                 case RowSizeX: return (0.01f, 3f);
                 case RowSizeY: return (0.01f, 3f);

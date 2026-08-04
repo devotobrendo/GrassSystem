@@ -7,8 +7,13 @@ TEXTURE2D(_GrassOverrideMap);
 SAMPLER(sampler_GrassOverrideMap);
 TEXTURE2D(_GrassMultiplyMap);
 
+float _GrassBlendDebugEnabled;
+float _GrassBlendDebugValue;
+
 half3 GrassGroundBlend(half3 albedo, float3 positionWS, float4 decalBounds, half blend)
 {
+    blend = _GrassBlendDebugEnabled > 0.5 ? half(_GrassBlendDebugValue) : blend;
+
     if (blend <= 0.0h)
         return albedo;
 

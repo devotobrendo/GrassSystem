@@ -10,6 +10,8 @@ namespace GrassSystem.Consoles
     {
         public static bool OverrideEnabled;
         public static bool FlatAlbedoEnabled;
+        public static bool GroundBlendOverrideEnabled;
+        public static float GroundBlend = 0.6f;
         public static bool InstanceDensityOverrideEnabled;
         public static float InstanceDensity = 1f;
         public static bool ReadoutEnabled;
