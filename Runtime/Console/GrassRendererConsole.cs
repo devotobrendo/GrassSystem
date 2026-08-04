@@ -126,7 +126,14 @@ namespace GrassSystem.Consoles
                 int idx = Mathf.Abs(GetInstanceID()) % p.meshes.Length;
                 if (p.meshes[idx] != null) return p.meshes[idx];
             }
-            if (mode == GrassMode.Default) return GrassMeshUtility.GetZeldaStyleBlade();
+            if (mode == GrassMode.Default)
+            {
+                GrassProceduralType type;
+                if (GrassConsoleDebug.BladeTypeOverrideEnabled) type = GrassConsoleDebug.BladeTypeOverride;
+                else if (p != null && p.overrideMesh) type = p.proceduralType;
+                else type = settings.proceduralType;
+                return GrassMeshUtility.GetProceduralMesh(type);
+            }
             return settings.GetActiveMesh(GetInstanceID(), mode);
         }
 

@@ -16,6 +16,7 @@ namespace GrassSystem.Consoles
         [Header("Mesh")]
         public bool overrideMesh;
         public GrassMode meshMode = GrassMode.CustomMesh;
+        public GrassProceduralType proceduralType = GrassProceduralType.Blade;
         public Mesh[] meshes;
 
         [Header("Thinning")]

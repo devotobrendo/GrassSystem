@@ -1,98 +1,255 @@
 // Copyright (c) 2026 Brendo Otavio Carvalho de Matos. All rights reserved.
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GrassSystem
 {
-    /// <summary>
-    /// Utility class to generate procedural grass blade meshes at runtime.
-    /// </summary>
+    public enum GrassProceduralType { Blade, Tapered, Quad, Cross, Tuft }
+
     public static class GrassMeshUtility
     {
-        private static Mesh cachedZeldaBlade;
-        
-        /// <summary>
-        /// Gets or creates a Zelda-style triangular grass blade mesh.
-        /// This mesh is cached for performance. The cache is validated for
-        /// Unity object destruction (which can happen during domain reload).
-        /// </summary>
+        private static readonly Dictionary<GrassProceduralType, Mesh> cachedMeshes = new Dictionary<GrassProceduralType, Mesh>();
+
         public static Mesh GetZeldaStyleBlade()
         {
-            // Check for null OR destroyed (Unity destroys objects on domain reload
-            // but the C# reference may still be non-null)
-            if (cachedZeldaBlade == null || !cachedZeldaBlade)
-            {
-                cachedZeldaBlade = GenerateZeldaStyleBlade();
-            }
-            return cachedZeldaBlade;
+            return GetProceduralMesh(GrassProceduralType.Blade);
         }
-        
-        /// <summary>
-        /// Generates a simple triangular grass blade mesh similar to Zelda: Breath of the Wild.
-        /// This is a single triangle blade that's very efficient for GPU instancing.
-        /// </summary>
+
+        public static Mesh GetProceduralMesh(GrassProceduralType type)
+        {
+            cachedMeshes.TryGetValue(type, out Mesh cached);
+            if (cached == null || !cached)
+            {
+                cached = GenerateProceduralMesh(type);
+                cachedMeshes[type] = cached;
+            }
+            return cached;
+        }
+
+        private static Mesh GenerateProceduralMesh(GrassProceduralType type)
+        {
+            switch (type)
+            {
+                case GrassProceduralType.Blade: return GenerateZeldaStyleBlade();
+                case GrassProceduralType.Tapered: return GenerateTaperedBlade();
+                case GrassProceduralType.Quad: return GenerateQuadBlade();
+                case GrassProceduralType.Cross: return GenerateCrossBlade();
+                case GrassProceduralType.Tuft: return GenerateTuftBlade();
+                default: return GenerateZeldaStyleBlade();
+            }
+        }
+
         public static Mesh GenerateZeldaStyleBlade()
         {
-            Mesh mesh = new Mesh();
-            mesh.name = "ZeldaStyleGrassBlade";
-            
-            // Simple triangular blade - 3 vertices forming a pointed grass blade
-            // Base is at bottom, point at top - classic Zelda BOTW style
-            Vector3[] vertices = new Vector3[]
+            Vector3[] vertices =
             {
-                new Vector3(-0.5f, 0f, 0f),   // Bottom left
-                new Vector3(0.5f, 0f, 0f),    // Bottom right
-                new Vector3(0f, 1f, 0f)       // Top center (pointed tip)
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3(0.5f, 0f, 0f),
+                new Vector3(0f, 1f, 0f)
             };
-            
-            Vector2[] uvs = new Vector2[]
+
+            Vector2[] uvs =
             {
                 new Vector2(0f, 0f),
                 new Vector2(1f, 0f),
                 new Vector2(0.5f, 1f)
             };
-            
-            Vector3[] normals = new Vector3[]
+
+            Vector3[] normals =
             {
                 Vector3.back,
                 Vector3.back,
                 Vector3.back
             };
-            
-            Vector4[] tangents = new Vector4[]
+
+            int[] triangles = { 0, 2, 1 };
+
+            return BuildMesh("ZeldaStyleGrassBlade", vertices, uvs, normals, triangles);
+        }
+
+        private static Mesh GenerateTaperedBlade()
+        {
+            Vector3[] vertices =
             {
-                new Vector4(1f, 0f, 0f, 1f),
-                new Vector4(1f, 0f, 0f, 1f),
-                new Vector4(1f, 0f, 0f, 1f)
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3(0.5f, 0f, 0f),
+                new Vector3(-0.28f, 0.55f, 0f),
+                new Vector3(0.28f, 0.55f, 0f),
+                new Vector3(0f, 1f, 0f)
             };
-            
-            // Single triangle
-            int[] triangles = new int[] { 0, 2, 1 };
-            
+
+            Vector2[] uvs =
+            {
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.22f, 0.55f),
+                new Vector2(0.78f, 0.55f),
+                new Vector2(0.5f, 1f)
+            };
+
+            Vector3[] normals =
+            {
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back
+            };
+
+            int[] triangles = { 0, 2, 1, 1, 2, 3, 2, 4, 3 };
+
+            return BuildMesh("TaperedGrassBlade", vertices, uvs, normals, triangles);
+        }
+
+        private static Mesh GenerateQuadBlade()
+        {
+            Vector3[] vertices =
+            {
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3(0.5f, 0f, 0f),
+                new Vector3(-0.5f, 1f, 0f),
+                new Vector3(0.5f, 1f, 0f)
+            };
+
+            Vector2[] uvs =
+            {
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f)
+            };
+
+            Vector3[] normals =
+            {
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back
+            };
+
+            int[] triangles = { 0, 2, 1, 1, 2, 3 };
+
+            return BuildMesh("QuadGrassBlade", vertices, uvs, normals, triangles);
+        }
+
+        private static Mesh GenerateCrossBlade()
+        {
+            Vector3[] vertices =
+            {
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3(0.5f, 0f, 0f),
+                new Vector3(-0.5f, 1f, 0f),
+                new Vector3(0.5f, 1f, 0f),
+                new Vector3(0f, 0f, -0.5f),
+                new Vector3(0f, 0f, 0.5f),
+                new Vector3(0f, 1f, -0.5f),
+                new Vector3(0f, 1f, 0.5f)
+            };
+
+            Vector2[] uvs =
+            {
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f)
+            };
+
+            Vector3[] normals =
+            {
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.left,
+                Vector3.left,
+                Vector3.left,
+                Vector3.left
+            };
+
+            int[] triangles = { 0, 2, 1, 1, 2, 3, 4, 6, 5, 5, 6, 7 };
+
+            return BuildMesh("CrossGrassBlade", vertices, uvs, normals, triangles);
+        }
+
+        private static Mesh GenerateTuftBlade()
+        {
+            Vector3[] vertices =
+            {
+                new Vector3(-0.22f, 0f, 0f),
+                new Vector3(0.22f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(-0.50f, 0f, 0.06f),
+                new Vector3(-0.12f, 0f, 0.06f),
+                new Vector3(-0.30f, 0.80f, 0.06f),
+                new Vector3(0.14f, 0f, -0.05f),
+                new Vector3(0.50f, 0f, -0.05f),
+                new Vector3(0.32f, 0.72f, -0.05f)
+            };
+
+            Vector2[] uvs =
+            {
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 1f)
+            };
+
+            Vector3[] normals =
+            {
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back,
+                Vector3.back
+            };
+
+            int[] triangles = { 0, 2, 1, 3, 5, 4, 6, 8, 7 };
+
+            return BuildMesh("TuftGrassBlade", vertices, uvs, normals, triangles);
+        }
+
+        private static Mesh BuildMesh(string name, Vector3[] vertices, Vector2[] uvs, Vector3[] normals, int[] triangles)
+        {
+            Mesh mesh = new Mesh();
+            mesh.name = name;
+
+            Vector4[] tangents = new Vector4[vertices.Length];
+            for (int i = 0; i < tangents.Length; i++)
+                tangents[i] = new Vector4(1f, 0f, 0f, 1f);
+
             mesh.vertices = vertices;
             mesh.uv = uvs;
             mesh.normals = normals;
             mesh.tangents = tangents;
             mesh.triangles = triangles;
             mesh.RecalculateBounds();
-            
-            // Keep mesh readable and prevent Unity from auto-destroying it
-            // This avoids issues with static cache being invalidated during domain reloads
             mesh.hideFlags = HideFlags.HideAndDontSave;
-            
+
             return mesh;
         }
-        
-        /// <summary>
-        /// Clears the cached mesh. Call this if you need to regenerate.
-        /// </summary>
+
         public static void ClearCache()
         {
-            if (cachedZeldaBlade != null)
+            foreach (KeyValuePair<GrassProceduralType, Mesh> kvp in cachedMeshes)
             {
-                Object.DestroyImmediate(cachedZeldaBlade);
-                cachedZeldaBlade = null;
+                if (kvp.Value != null)
+                    Object.DestroyImmediate(kvp.Value);
             }
+            cachedMeshes.Clear();
         }
     }
 }

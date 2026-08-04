@@ -10,6 +10,7 @@ namespace GrassSystem
     {
         // Serialized properties
         private SerializedProperty grassMode;
+        private SerializedProperty proceduralType;
         
         // References
         private SerializedProperty cullingShader;
@@ -139,6 +140,7 @@ namespace GrassSystem
         private void OnEnable()
         {
             grassMode = serializedObject.FindProperty("grassMode");
+            proceduralType = serializedObject.FindProperty("proceduralType");
             
             cullingShader = serializedObject.FindProperty("cullingShader");
             grassMaterial = serializedObject.FindProperty("grassMaterial");
@@ -276,11 +278,14 @@ namespace GrassSystem
             EditorGUILayout.Space(5);
             EditorGUILayout.LabelField("Grass Mode", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(grassMode);
-            
+
+            if (!isCustomMeshMode)
+                EditorGUILayout.PropertyField(proceduralType);
+
             EditorGUILayout.HelpBox(
-                isCustomMeshMode 
+                isCustomMeshMode
                     ? "Custom Mesh Mode: Use imported meshes with uniform scale."
-                    : "Default Mode: Use procedural mesh with width/height control.",
+                    : "Default Mode: Use procedural mesh with width/height control. All procedural types share the same UV convention, so one albedo fits them all.",
                 MessageType.Info);
             
             EditorGUILayout.Space(10);

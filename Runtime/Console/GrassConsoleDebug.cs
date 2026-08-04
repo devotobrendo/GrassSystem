@@ -16,6 +16,8 @@ namespace GrassSystem.Consoles
         public static Vector2 SizeScale = Vector2.one;
         public static bool ModeOverrideEnabled;
         public static GrassMode ModeOverride = GrassMode.CustomMesh;
+        public static bool BladeTypeOverrideEnabled;
+        public static GrassProceduralType BladeTypeOverride = GrassProceduralType.Blade;
         public static readonly List<GrassRendererConsole> ActiveRenderers = new();
 
         public static int TotalInstances

@@ -32,7 +32,7 @@ namespace GrassSystem.Consoles.Editor
         private bool showLook;
         private bool showAdvanced;
 
-        private static readonly string[] ReferencesProps = { "grassMode", "cullingShader", "grassMaterial", "grassMesh" };
+        private static readonly string[] ReferencesProps = { "grassMode", "proceduralType", "cullingShader", "grassMaterial", "grassMesh" };
         private static readonly string[] WindProps = { "windSpeed", "windStrength", "windFrequency" };
         private static readonly string[] TiltProps = { "maxTiltAngle", "tiltVariation" };
         private static readonly string[] ShadowsLightProps = { "castShadows", "useReceiveShadows", "shadowIntensity", "useLightProbes", "lightProbeInfluence", "ambientBoost" };

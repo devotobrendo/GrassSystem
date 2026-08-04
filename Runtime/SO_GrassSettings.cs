@@ -39,6 +39,8 @@ namespace GrassSystem
     {
         [Header("Grass Mode")]
         public GrassMode grassMode = GrassMode.Default;
+        [Tooltip("Which procedural blade to build when Grass Mode is Default. All types share the same UV convention, so one albedo fits them all.")]
+        public GrassProceduralType proceduralType = GrassProceduralType.Blade;
         
         [Header("References")]
         public ComputeShader cullingShader;
@@ -304,7 +306,7 @@ namespace GrassSystem
                 int index = Mathf.Abs(seed) % customMeshes.Count;
                 return customMeshes[index];
             }
-            return GrassMeshUtility.GetZeldaStyleBlade();
+            return GrassMeshUtility.GetProceduralMesh(proceduralType);
         }
         
         // ========================================

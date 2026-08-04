@@ -29,7 +29,8 @@ namespace GrassSystem.Consoles
         private const int RowSizeX = 5;
         private const int RowSizeY = 6;
         private const int RowGrassMode = 7;
-        private const int RowSystem = 8;
+        private const int RowBladeType = 8;
+        private const int RowSystem = 9;
 
         private static readonly string[] RowLabels =
         {
@@ -41,11 +42,12 @@ namespace GrassSystem.Consoles
             "Size X (width)",
             "Size Y (height)",
             "Grass Mode",
+            "Blade Type",
             "System"
         };
 
-        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f };
-        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f };
+        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f, 0f };
+        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f, 0f };
 
         private enum GrassSystemState
         {
@@ -274,6 +276,41 @@ namespace GrassSystem.Consoles
                 return;
             }
 
+            if (selectedRow == RowBladeType)
+            {
+                if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
+                {
+                    if (!GrassConsoleDebug.BladeTypeOverrideEnabled)
+                    {
+                        GrassConsoleDebug.BladeTypeOverrideEnabled = true;
+                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Blade;
+                    }
+                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Blade)
+                    {
+                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Tapered;
+                    }
+                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Tapered)
+                    {
+                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Quad;
+                    }
+                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Quad)
+                    {
+                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Cross;
+                    }
+                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Cross)
+                    {
+                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Tuft;
+                    }
+                    else
+                    {
+                        GrassConsoleDebug.BladeTypeOverrideEnabled = false;
+                    }
+                }
+                fineRepeatTimer = 0f;
+                coarseRepeatTimer = 0f;
+                return;
+            }
+
             if (selectedRow == RowSystem)
             {
                 if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
@@ -473,6 +510,12 @@ namespace GrassSystem.Consoles
             {
                 if (!GrassConsoleDebug.ModeOverrideEnabled) return "Scene";
                 return GrassConsoleDebug.ModeOverride == GrassMode.Default ? "Default" : "CustomMesh";
+            }
+
+            if (row == RowBladeType)
+            {
+                if (!GrassConsoleDebug.BladeTypeOverrideEnabled) return "Scene";
+                return GrassConsoleDebug.BladeTypeOverride.ToString();
             }
 
             if (row == RowSystem)
