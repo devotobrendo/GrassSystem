@@ -179,6 +179,8 @@ namespace GrassSystem
         
         [Header("Textures")]
         public Texture2D albedoTexture;
+        [Tooltip("Optional albedo used only when rendering the procedural blade (Default mode). The main Albedo is authored for the custom mesh UVs and does not map onto the procedural blade. Leave empty to render flat white in Default mode.")]
+        public Texture2D defaultModeAlbedo;
         public Texture2D normalMap;
         
         [Header("Lighting")]
@@ -290,20 +292,18 @@ namespace GrassSystem
             return true;
         }
         
-        /// <summary>
-        /// Gets the active mesh based on the current mode.
-        /// Default mode uses a procedural Zelda-style triangular blade.
-        /// CustomMesh mode uses meshes from the customMeshes list.
-        /// </summary>
         public Mesh GetActiveMesh(int seed = 0)
         {
-            if (grassMode == GrassMode.CustomMesh && customMeshes != null && customMeshes.Count > 0)
+            return GetActiveMesh(seed, grassMode);
+        }
+
+        public Mesh GetActiveMesh(int seed, GrassMode mode)
+        {
+            if (mode == GrassMode.CustomMesh && customMeshes != null && customMeshes.Count > 0)
             {
                 int index = Mathf.Abs(seed) % customMeshes.Count;
                 return customMeshes[index];
             }
-            
-            // Default mode: always use procedural Zelda-style blade
             return GrassMeshUtility.GetZeldaStyleBlade();
         }
         

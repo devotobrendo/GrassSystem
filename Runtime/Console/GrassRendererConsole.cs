@@ -12,6 +12,10 @@ namespace GrassSystem.Consoles
         [Header("Settings")]
         public SO_GrassSettings settings;
 
+        [Header("Platform Variant")]
+        public PlatformVariant variantMode = PlatformVariant.Auto;
+        public GrassPlatformProfileSet profileSet;
+
         [Header("Slim Data Source")]
         [Tooltip("Baked slim grass data asset (position + widthHeight only). Generate via Tools/Grass System/Convert to Console (Slim).")]
         public GrassDataConsoleAsset dataAsset;
@@ -31,8 +35,6 @@ namespace GrassSystem.Consoles
         [Range(0f, 1f)]
         [Tooltip("How much thinned-away blades widen the survivors to keep ground coverage. 1 = full (far grass widens as you thin). 0 = off (grass just gets sparser, no widening).")]
         public float coverageCompensation = 1f;
-
-        public static float DebugFarKeepOverride = -1f;
 
         [System.NonSerialized]
         private GrassDataConsole[] grassData = System.Array.Empty<GrassDataConsole>();
@@ -63,6 +65,7 @@ namespace GrassSystem.Consoles
         private static readonly int PropThinStart = Shader.PropertyToID("_ThinStartDistance");
         private static readonly int PropSizeScale = Shader.PropertyToID("_SizeScale");
         private static readonly int PropCoverageComp = Shader.PropertyToID("_CoverageCompensation");
+        private static readonly int PropUseUniformScale = Shader.PropertyToID("_UseUniformScale");
         private static readonly int PropInstanceCount = Shader.PropertyToID("_InstanceCount");
         private static readonly int PropInteractors = Shader.PropertyToID("_Interactors");
         private static readonly int PropInteractorCount = Shader.PropertyToID("_InteractorCount");
@@ -71,6 +74,7 @@ namespace GrassSystem.Consoles
         private Vector4[] frustumPlanes = new Vector4[6];
         private Plane[] cameraPlanes = new Plane[6];
         private bool isInitialized;
+        private GrassMode lastAppliedMode;
 
         private int lastVisibleCount;
         private bool materialDirty;
@@ -93,10 +97,38 @@ namespace GrassSystem.Consoles
             }
         }
 
+        public int TotalGrassCount => grassData.Length;
         public int VisibleGrassCount => lastVisibleCount;
         public GrassDecalBakeAsset BakedDecalAsset => bakedDecalAsset;
         public Material MaterialInstance => materialInstance;
         public bool IsInitialized => isInitialized;
+        private GrassPlatformProfile ActiveProfile => profileSet != null ? profileSet.Resolve(variantMode) : null;
+
+        private GrassMode EffectiveGrassMode
+        {
+            get
+            {
+                if (GrassConsoleDebug.ModeOverrideEnabled) return GrassConsoleDebug.ModeOverride;
+                var p = ActiveProfile;
+                if (p != null && p.overrideMesh) return p.meshMode;
+                return settings != null ? settings.grassMode : GrassMode.Default;
+            }
+        }
+
+        private Mesh ResolveActiveMesh()
+        {
+            if (settings == null) return null;
+            GrassMode mode = EffectiveGrassMode;
+            var p = ActiveProfile;
+            if (!GrassConsoleDebug.ModeOverrideEnabled && p != null && p.overrideMesh &&
+                mode == GrassMode.CustomMesh && p.meshes != null && p.meshes.Length > 0)
+            {
+                int idx = Mathf.Abs(GetInstanceID()) % p.meshes.Length;
+                if (p.meshes[idx] != null) return p.meshes[idx];
+            }
+            if (mode == GrassMode.Default) return GrassMeshUtility.GetZeldaStyleBlade();
+            return settings.GetActiveMesh(GetInstanceID(), mode);
+        }
 
         [ContextMenu("Force Reinitialize")]
         public void ForceReinitialize()
@@ -173,6 +205,9 @@ namespace GrassSystem.Consoles
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
 #endif
 
+            if (!GrassConsoleDebug.ActiveRenderers.Contains(this))
+                GrassConsoleDebug.ActiveRenderers.Add(this);
+
             if (dataAsset != null && dataAsset.InstanceCount > 0)
             {
                 grassData = dataAsset.LoadData();
@@ -199,6 +234,7 @@ namespace GrassSystem.Consoles
 #if UNITY_EDITOR
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
 #endif
+            GrassConsoleDebug.ActiveRenderers.Remove(this);
             Cleanup();
         }
 
@@ -267,12 +303,34 @@ namespace GrassSystem.Consoles
             }
 #endif
 
+            SyncEffectiveMode();
+
             Camera cam = GetCurrentCamera();
             if (cam == null)
                 return;
 
             UpdateCulling(cam);
             Render();
+        }
+
+        private void SyncEffectiveMode()
+        {
+            if (!isInitialized || settings == null) return;
+            GrassMode mode = EffectiveGrassMode;
+            Mesh newMesh = ResolveActiveMesh();
+            bool modeChanged = mode != lastAppliedMode;
+            bool meshChanged = newMesh != null && newMesh != cachedMesh;
+            if (!modeChanged && !meshChanged) return;
+
+            if (meshChanged && argsBuffer != null && argsBuffer.IsValid())
+            {
+                cachedMesh = newMesh;
+                argsReset[0] = cachedMesh.GetIndexCount(0);
+                argsReset[1] = 0;
+                argsBuffer.SetData(argsReset);
+            }
+            ApplySettingsToMaterial();
+            lastAppliedMode = mode;
         }
 
         private void TryAutoRecover()
@@ -358,7 +416,7 @@ namespace GrassSystem.Consoles
                     return;
                 }
 
-                cachedMesh = settings.GetActiveMesh(GetInstanceID());
+                cachedMesh = ResolveActiveMesh();
                 if (cachedMesh == null)
                 {
                     Debug.LogError("GrassRendererConsole: No valid mesh available!", this);
@@ -383,8 +441,6 @@ namespace GrassSystem.Consoles
                 cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
                 cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
                 cullingShaderInstance.SetInt(PropInstanceCount, grassData.Length);
-                cullingShaderInstance.SetFloat(PropMinFade, settings.minFadeDistance);
-                cullingShaderInstance.SetFloat(PropMaxDraw, settings.maxDrawDistance);
 
                 materialInstance = new Material(settings.grassMaterial);
                 materialInstance.SetBuffer(PropGrassBuffer, visibleBuffer);
@@ -392,6 +448,7 @@ namespace GrassSystem.Consoles
                 ApplySettingsToMaterial();
                 UpdateBounds();
 
+                lastAppliedMode = EffectiveGrassMode;
                 isInitialized = true;
             }
             catch (System.Exception ex)
@@ -405,7 +462,9 @@ namespace GrassSystem.Consoles
         {
             if (materialInstance == null) return;
 
-            if (settings.albedoTexture != null)
+            if (EffectiveGrassMode == GrassMode.Default)
+                materialInstance.SetTexture("_MainTex", settings.defaultModeAlbedo != null ? settings.defaultModeAlbedo : Texture2D.linearGrayTexture);
+            else if (settings.albedoTexture != null)
                 materialInstance.SetTexture("_MainTex", settings.albedoTexture);
             if (settings.tipMaskTexture != null)
                 materialInstance.SetTexture("_TipMask", settings.tipMaskTexture);
@@ -423,7 +482,9 @@ namespace GrassSystem.Consoles
             materialInstance.SetFloat(PropInteractorStrength, settings.interactorStrength);
             materialInstance.SetFloat("_MaxBendAngle", settings.maxBendAngle * Mathf.Deg2Rad);
 
-            if (settings.useReceiveShadows)
+            var p = ActiveProfile;
+            bool effReceiveShadows = (p != null && p.overrideReceiveShadows) ? p.receiveShadows : settings.useReceiveShadows;
+            if (effReceiveShadows)
             {
                 materialInstance.SetFloat("_ShadowIntensity", settings.shadowIntensity);
                 materialInstance.EnableKeyword("_RECEIVE_SHADOWS_ON");
@@ -447,7 +508,7 @@ namespace GrassSystem.Consoles
                 materialInstance.SetFloat("_BackfaceDarkening", 0f);
             }
 
-            bool isCustomMeshMode = settings.grassMode == GrassMode.CustomMesh;
+            bool isCustomMeshMode = EffectiveGrassMode == GrassMode.CustomMesh;
             materialInstance.SetFloat("_UseUniformScale", isCustomMeshMode ? 1 : 0);
 
             if (isCustomMeshMode)
@@ -606,32 +667,44 @@ namespace GrassSystem.Consoles
 
             cullingShaderInstance.SetBuffer(cullingKernel, PropSourceBuffer, sourceBuffer);
             cullingShaderInstance.SetBuffer(cullingKernel, PropVisibleBuffer, visibleBuffer);
-            float effFarKeep = DebugFarKeepOverride >= 0f ? DebugFarKeepOverride : farKeepFraction;
+            bool ov = GrassConsoleDebug.OverrideEnabled;
+            var p = ActiveProfile;
+            bool pt = p != null && p.overrideThinning;
+            float effFarKeep = ov ? GrassConsoleDebug.FarKeepFraction : (pt ? p.farKeepFraction : farKeepFraction);
+            float effThinStart = ov ? GrassConsoleDebug.ThinStartDistance : (pt ? p.thinStartDistance : thinStartDistance);
+            float effCoverage = ov ? GrassConsoleDebug.CoverageCompensation : (pt ? p.coverageCompensation : coverageCompensation);
+            Vector2 effSize = ov ? GrassConsoleDebug.SizeScale : (pt ? p.sizeScale : sizeScale);
             cullingShaderInstance.SetFloat(PropFarKeep, Mathf.Clamp01(effFarKeep));
-            cullingShaderInstance.SetFloat(PropThinStart, thinStartDistance);
-            cullingShaderInstance.SetVector(PropSizeScale, sizeScale);
-            cullingShaderInstance.SetFloat(PropCoverageComp, Mathf.Clamp01(coverageCompensation));
+            cullingShaderInstance.SetFloat(PropThinStart, effThinStart);
+            cullingShaderInstance.SetVector(PropSizeScale, effSize);
+            cullingShaderInstance.SetFloat(PropCoverageComp, Mathf.Clamp01(effCoverage));
+            cullingShaderInstance.SetFloat(PropUseUniformScale, (EffectiveGrassMode == GrassMode.CustomMesh) ? 1f : 0f);
+
+            bool pd = p != null && p.overrideDrawDistance;
+            cullingShaderInstance.SetFloat(PropMinFade, pd ? p.minFadeDistance : settings.minFadeDistance);
+            cullingShaderInstance.SetFloat(PropMaxDraw, pd ? p.maxDrawDistance : settings.maxDrawDistance);
 
             int threadGroups = Mathf.CeilToInt((float)grassData.Length / THREAD_GROUP_SIZE);
             cullingShaderInstance.Dispatch(cullingKernel, threadGroups, 1, 1);
 
             GraphicsBuffer.CopyCount(visibleBuffer, argsBuffer, sizeof(uint));
 
-#if UNITY_EDITOR
-            var cachedArgsBuffer = argsBuffer;
-            if (cachedArgsBuffer != null && cachedArgsBuffer.IsValid())
+            if (Application.isEditor || GrassConsoleDebug.ReadoutEnabled)
             {
-                AsyncGPUReadback.Request(cachedArgsBuffer, (request) =>
+                var cachedArgsBuffer = argsBuffer;
+                if (cachedArgsBuffer != null && cachedArgsBuffer.IsValid())
                 {
-                    if (!request.hasError && request.done && cachedArgsBuffer != null && cachedArgsBuffer.IsValid())
+                    AsyncGPUReadback.Request(cachedArgsBuffer, (request) =>
                     {
-                        var data = request.GetData<uint>();
-                        if (data.Length > 1)
-                            lastVisibleCount = (int)data[1];
-                    }
-                });
+                        if (!request.hasError && request.done && cachedArgsBuffer != null && cachedArgsBuffer.IsValid())
+                        {
+                            var data = request.GetData<uint>();
+                            if (data.Length > 1)
+                                lastVisibleCount = (int)data[1];
+                        }
+                    });
+                }
             }
-#endif
         }
 
         private void UpdateInteractors()
@@ -652,10 +725,11 @@ namespace GrassSystem.Consoles
         {
             if (cachedMesh == null) return;
 
+            var p = ActiveProfile;
             var rp = new RenderParams(materialInstance)
             {
                 worldBounds = renderBounds,
-                shadowCastingMode = settings.castShadows,
+                shadowCastingMode = (p != null && p.overrideShadows) ? p.castShadows : settings.castShadows,
                 receiveShadows = true,
                 layer = gameObject.layer,
                 renderingLayerMask = settings.renderingLayerMask
@@ -676,7 +750,7 @@ namespace GrassSystem.Consoles
                 return;
             }
 
-            Mesh currentActiveMesh = settings.GetActiveMesh(GetInstanceID());
+            Mesh currentActiveMesh = ResolveActiveMesh();
             if (currentActiveMesh != null && currentActiveMesh != cachedMesh)
             {
                 RebuildBuffers();

@@ -19,11 +19,14 @@ namespace GrassSystem.Consoles.Editor
         private SerializedProperty propThinStartDistance;
         private SerializedProperty propCoverageCompensation;
         private SerializedProperty propSizeScale;
+        private SerializedProperty propVariantMode;
+        private SerializedProperty propProfileSet;
 
         private SO_GrassSettings cachedSettings;
         private SerializedObject serializedSettings;
 
         private bool showData = true;
+        private bool showVariant = true;
         private bool showPerformance = true;
         private bool showSize = true;
         private bool showLook;
@@ -34,7 +37,7 @@ namespace GrassSystem.Consoles.Editor
         private static readonly string[] TiltProps = { "maxTiltAngle", "tiltVariation" };
         private static readonly string[] ShadowsLightProps = { "castShadows", "useReceiveShadows", "shadowIntensity", "useLightProbes", "lightProbeInfluence", "ambientBoost" };
         private static readonly string[] DepthProps = { "useDepthPerception", "instanceColorVariation", "heightDarkening", "backfaceDarkening" };
-        private static readonly string[] TipProps = { "useTipCutout", "tipMaskTexture", "tipCutoffHeight", "albedoTexture" };
+        private static readonly string[] TipProps = { "useTipCutout", "tipMaskTexture", "tipCutoffHeight", "albedoTexture", "defaultModeAlbedo" };
         private static readonly string[] InteractionProps = { "interactorStrength", "maxInteractors", "maxBendAngle" };
         private static readonly string[] DistanceProps = { "minFadeDistance", "maxDrawDistance" };
         private static readonly string[] BakeDefaultProps = { "minWidth", "maxWidth", "minHeight", "maxHeight" };
@@ -55,6 +58,8 @@ namespace GrassSystem.Consoles.Editor
             propThinStartDistance = serializedObject.FindProperty("thinStartDistance");
             propCoverageCompensation = serializedObject.FindProperty("coverageCompensation");
             propSizeScale = serializedObject.FindProperty("sizeScale");
+            propVariantMode = serializedObject.FindProperty("variantMode");
+            propProfileSet = serializedObject.FindProperty("profileSet");
             RefreshSettingsSerializedObject();
         }
 
@@ -84,6 +89,8 @@ namespace GrassSystem.Consoles.Editor
             DrawStatus();
             EditorGUILayout.Space();
             DrawData();
+            EditorGUILayout.Space();
+            DrawVariant();
             EditorGUILayout.Space();
             DrawPerformance();
             EditorGUILayout.Space();
@@ -130,18 +137,74 @@ namespace GrassSystem.Consoles.Editor
             EditorGUI.indentLevel--;
         }
 
+        private void DrawVariant()
+        {
+            showVariant = EditorGUILayout.Foldout(showVariant, "Platform Variant", true);
+            if (!showVariant) return;
+
+            EditorGUI.indentLevel++;
+            EditorGUILayout.PropertyField(propVariantMode);
+            EditorGUILayout.PropertyField(propProfileSet);
+
+            GrassPlatformProfileSet set = propProfileSet.objectReferenceValue as GrassPlatformProfileSet;
+            if (set == null)
+            {
+                EditorGUILayout.HelpBox("No profile set. Using the scene knobs below (current behaviour).", MessageType.None);
+                EditorGUI.indentLevel--;
+                return;
+            }
+
+            PlatformVariant mode = (PlatformVariant)propVariantMode.enumValueIndex;
+            GrassPlatformProfile resolved = set.Resolve(mode);
+
+            if (resolved == null)
+            {
+                EditorGUILayout.HelpBox($"'{mode}' resolves to an empty slot in {set.name}. Falling back to the scene knobs.", MessageType.Warning);
+                EditorGUI.indentLevel--;
+                return;
+            }
+
+            string overrides = DescribeOverrides(resolved);
+            EditorGUILayout.LabelField("Resolved", resolved.name);
+            EditorGUILayout.HelpBox(overrides.Length == 0
+                ? $"{resolved.name} has no overrides enabled — the scene knobs below are in charge."
+                : $"{resolved.name} overrides: {overrides}", MessageType.None);
+            EditorGUI.indentLevel--;
+        }
+
+        private static string DescribeOverrides(GrassPlatformProfile profile)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (profile.overrideMesh) parts.Add("Mesh");
+            if (profile.overrideThinning) parts.Add("Thinning");
+            if (profile.overrideDrawDistance) parts.Add("Draw Distance");
+            if (profile.overrideShadows) parts.Add("Cast Shadows");
+            if (profile.overrideReceiveShadows) parts.Add("Receive Shadows");
+            return string.Join(", ", parts);
+        }
+
         private void DrawPerformance()
         {
             showPerformance = EditorGUILayout.Foldout(showPerformance, "Performance", true);
             if (!showPerformance) return;
 
             EditorGUI.indentLevel++;
-            EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(propFarKeepFraction);
-            EditorGUILayout.PropertyField(propThinStartDistance);
-            EditorGUILayout.PropertyField(propCoverageCompensation);
-            if (EditorGUI.EndChangeCheck())
-                SceneView.RepaintAll();
+
+            GrassPlatformProfileSet set = propProfileSet.objectReferenceValue as GrassPlatformProfileSet;
+            GrassPlatformProfile resolved = set != null ? set.Resolve((PlatformVariant)propVariantMode.enumValueIndex) : null;
+            bool thinningOverridden = resolved != null && resolved.overrideThinning;
+            if (thinningOverridden)
+                EditorGUILayout.HelpBox($"Overridden by {resolved.name} — these values are ignored while that profile is active.", MessageType.Warning);
+
+            using (new EditorGUI.DisabledScope(thinningOverridden))
+            {
+                EditorGUI.BeginChangeCheck();
+                EditorGUILayout.PropertyField(propFarKeepFraction);
+                EditorGUILayout.PropertyField(propThinStartDistance);
+                EditorGUILayout.PropertyField(propCoverageCompensation);
+                if (EditorGUI.EndChangeCheck())
+                    SceneView.RepaintAll();
+            }
 
             EditorGUILayout.LabelField("Visible Grass Count", console.VisibleGrassCount.ToString("N0"));
             EditorGUI.indentLevel--;
