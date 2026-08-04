@@ -57,6 +57,8 @@ namespace GrassSystem.Consoles
         private Mesh cachedMesh;
         private RenderTexture runtimeDecalMap;
         private int activeInstanceCount;
+        private int readbackCounter;
+        private const int READBACK_INTERVAL = 8;
         private float lastAppliedDensity = 1f;
         private float lastSeenDensity = 1f;
         private float densityChangeTime = -1f;
@@ -799,7 +801,8 @@ namespace GrassSystem.Consoles
 
             GraphicsBuffer.CopyCount(visibleBuffer, argsBuffer, sizeof(uint));
 
-            if (Application.isEditor || GrassConsoleDebug.ReadoutEnabled)
+            readbackCounter++;
+            if ((Application.isEditor || GrassConsoleDebug.ReadoutEnabled) && readbackCounter % READBACK_INTERVAL == 0)
             {
                 var cachedArgsBuffer = argsBuffer;
                 if (cachedArgsBuffer != null && cachedArgsBuffer.IsValid())
