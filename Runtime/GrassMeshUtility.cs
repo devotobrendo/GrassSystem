@@ -10,8 +10,10 @@ namespace GrassSystem
         Blade = 0,
         Tapered = 1,
         Soft = 5,
-        Tuft = 4,
-        Clump = 6
+        SoftMid = 7,
+        SoftRound = 8,
+        SoftDome = 9,
+        Tuft = 4
     }
 
     public static class GrassMeshUtility
@@ -40,9 +42,11 @@ namespace GrassSystem
             {
                 case GrassProceduralType.Blade: return GenerateZeldaStyleBlade();
                 case GrassProceduralType.Tapered: return GenerateTaperedBlade();
-                case GrassProceduralType.Soft: return GenerateSoftBlade();
+                case GrassProceduralType.Soft: return GenerateProfileBlade("SoftGrassBlade", SoftProfile);
+                case GrassProceduralType.SoftMid: return GenerateProfileBlade("SoftMidGrassBlade", SoftMidProfile);
+                case GrassProceduralType.SoftRound: return GenerateProfileBlade("SoftRoundGrassBlade", SoftRoundProfile);
+                case GrassProceduralType.SoftDome: return GenerateProfileBlade("SoftDomeGrassBlade", SoftDomeProfile);
                 case GrassProceduralType.Tuft: return GenerateTuftBlade();
-                case GrassProceduralType.Clump: return GenerateClumpBlade();
                 default: return GenerateZeldaStyleBlade();
             }
         }
@@ -109,44 +113,70 @@ namespace GrassSystem
             return BuildMesh("TaperedGrassBlade", vertices, uvs, normals, triangles);
         }
 
-        private static Mesh GenerateSoftBlade()
+        private static readonly (float height, float halfWidth)[] SoftProfile =
         {
-            Vector3[] vertices =
+            (0.00f, 0.500f), (0.45f, 0.330f), (0.78f, 0.190f), (0.94f, 0.105f)
+        };
+
+        private static readonly (float height, float halfWidth)[] SoftMidProfile =
+        {
+            (0.00f, 0.500f), (0.42f, 0.360f), (0.72f, 0.245f), (0.89f, 0.155f), (0.97f, 0.080f)
+        };
+
+        private static readonly (float height, float halfWidth)[] SoftRoundProfile =
+        {
+            (0.00f, 0.500f), (0.38f, 0.430f), (0.70f, 0.330f), (0.88f, 0.225f), (0.965f, 0.120f)
+        };
+
+        private static readonly (float height, float halfWidth)[] SoftDomeProfile =
+        {
+            (0.00f, 0.500f), (0.70f, 0.380f), (0.88f, 0.304f), (0.97f, 0.166f)
+        };
+
+        private static Mesh GenerateProfileBlade(string name, (float height, float halfWidth)[] profile)
+        {
+            int levels = profile.Length;
+            int vertexCount = levels * 2 + 1;
+            int apex = vertexCount - 1;
+
+            Vector3[] vertices = new Vector3[vertexCount];
+            Vector2[] uvs = new Vector2[vertexCount];
+            Vector3[] normals = new Vector3[vertexCount];
+
+            for (int i = 0; i < levels; i++)
             {
-                new Vector3(-0.5f, 0f, 0f),
-                new Vector3(0.5f, 0f, 0f),
-                new Vector3(-0.34f, 0.5f, 0f),
-                new Vector3(0.34f, 0.5f, 0f),
-                new Vector3(-0.15f, 0.85f, 0f),
-                new Vector3(0.15f, 0.85f, 0f),
-                new Vector3(0f, 1f, 0f)
-            };
+                float h = profile[i].height;
+                float hw = profile[i].halfWidth;
 
-            Vector2[] uvs =
+                vertices[i * 2] = new Vector3(-hw, h, 0f);
+                vertices[i * 2 + 1] = new Vector3(hw, h, 0f);
+                uvs[i * 2] = new Vector2(0.5f - hw, h);
+                uvs[i * 2 + 1] = new Vector2(0.5f + hw, h);
+            }
+
+            vertices[apex] = new Vector3(0f, 1f, 0f);
+            uvs[apex] = new Vector2(0.5f, 1f);
+
+            for (int i = 0; i < vertexCount; i++)
+                normals[i] = Vector3.back;
+
+            int[] triangles = new int[((levels - 1) * 2 + 1) * 3];
+            int t = 0;
+            for (int i = 0; i < levels - 1; i++)
             {
-                new Vector2(0f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(0.16f, 0.5f),
-                new Vector2(0.84f, 0.5f),
-                new Vector2(0.35f, 0.85f),
-                new Vector2(0.65f, 0.85f),
-                new Vector2(0.5f, 1f)
-            };
+                int l0 = i * 2;
+                int r0 = l0 + 1;
+                int l1 = l0 + 2;
+                int r1 = l0 + 3;
 
-            Vector3[] normals =
-            {
-                Vector3.back,
-                Vector3.back,
-                Vector3.back,
-                Vector3.back,
-                Vector3.back,
-                Vector3.back,
-                Vector3.back
-            };
+                triangles[t++] = l0; triangles[t++] = l1; triangles[t++] = r0;
+                triangles[t++] = r0; triangles[t++] = l1; triangles[t++] = r1;
+            }
 
-            int[] triangles = { 0, 2, 1, 1, 2, 3, 2, 4, 3, 3, 4, 5, 4, 6, 5 };
+            int lastL = (levels - 1) * 2;
+            triangles[t++] = lastL; triangles[t++] = apex; triangles[t] = lastL + 1;
 
-            return BuildMesh("SoftGrassBlade", vertices, uvs, normals, triangles);
+            return BuildMesh(name, vertices, uvs, normals, triangles);
         }
 
         private static Mesh GenerateTuftBlade()
@@ -193,52 +223,6 @@ namespace GrassSystem
             int[] triangles = { 0, 2, 1, 3, 5, 4, 6, 8, 7 };
 
             return BuildMesh("TuftGrassBlade", vertices, uvs, normals, triangles);
-        }
-
-        private static readonly (float cx, float cz, float halfWidth, float height, float yawDeg)[] ClumpBladeLayout =
-        {
-            ( 0.00f,  0.00f, 0.20f, 1.00f,   0f),
-            (-0.38f,  0.10f, 0.17f, 0.82f,  35f),
-            ( 0.36f, -0.08f, 0.18f, 0.88f, -30f),
-            (-0.12f, -0.34f, 0.16f, 0.74f,  70f),
-            ( 0.16f,  0.34f, 0.15f, 0.70f, -65f)
-        };
-
-        private static Mesh GenerateClumpBlade()
-        {
-            int bladeCount = ClumpBladeLayout.Length;
-            Vector3[] vertices = new Vector3[bladeCount * 3];
-            Vector2[] uvs = new Vector2[bladeCount * 3];
-            Vector3[] normals = new Vector3[bladeCount * 3];
-            int[] triangles = new int[bladeCount * 3];
-
-            for (int i = 0; i < bladeCount; i++)
-            {
-                var blade = ClumpBladeLayout[i];
-                float yaw = blade.yawDeg * Mathf.Deg2Rad;
-                float dx = Mathf.Cos(yaw) * blade.halfWidth;
-                float dz = -Mathf.Sin(yaw) * blade.halfWidth;
-
-                int baseIndex = i * 3;
-
-                vertices[baseIndex] = new Vector3(blade.cx - dx, 0f, blade.cz - dz);
-                vertices[baseIndex + 1] = new Vector3(blade.cx + dx, 0f, blade.cz + dz);
-                vertices[baseIndex + 2] = new Vector3(blade.cx, blade.height, blade.cz);
-
-                uvs[baseIndex] = new Vector2(0f, 0f);
-                uvs[baseIndex + 1] = new Vector2(1f, 0f);
-                uvs[baseIndex + 2] = new Vector2(0.5f, 1f);
-
-                normals[baseIndex] = Vector3.back;
-                normals[baseIndex + 1] = Vector3.back;
-                normals[baseIndex + 2] = Vector3.back;
-
-                triangles[baseIndex] = baseIndex;
-                triangles[baseIndex + 1] = baseIndex + 2;
-                triangles[baseIndex + 2] = baseIndex + 1;
-            }
-
-            return BuildMesh("ClumpGrassBlade", vertices, uvs, normals, triangles);
         }
 
         private static Mesh BuildMesh(string name, Vector3[] vertices, Vector2[] uvs, Vector3[] normals, int[] triangles)

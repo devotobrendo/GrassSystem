@@ -49,6 +49,17 @@ namespace GrassSystem.Consoles
         private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f, 0f };
         private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f, 0f };
 
+        private static readonly GrassProceduralType[] BladeTypeCycle =
+        {
+            GrassProceduralType.Blade,
+            GrassProceduralType.Tapered,
+            GrassProceduralType.Soft,
+            GrassProceduralType.SoftMid,
+            GrassProceduralType.SoftRound,
+            GrassProceduralType.SoftDome,
+            GrassProceduralType.Tuft
+        };
+
         private enum GrassSystemState
         {
             Console,
@@ -279,33 +290,7 @@ namespace GrassSystem.Consoles
             if (selectedRow == RowBladeType)
             {
                 if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
-                {
-                    if (!GrassConsoleDebug.BladeTypeOverrideEnabled)
-                    {
-                        GrassConsoleDebug.BladeTypeOverrideEnabled = true;
-                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Blade;
-                    }
-                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Blade)
-                    {
-                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Tapered;
-                    }
-                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Tapered)
-                    {
-                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Soft;
-                    }
-                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Soft)
-                    {
-                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Tuft;
-                    }
-                    else if (GrassConsoleDebug.BladeTypeOverride == GrassProceduralType.Tuft)
-                    {
-                        GrassConsoleDebug.BladeTypeOverride = GrassProceduralType.Clump;
-                    }
-                    else
-                    {
-                        GrassConsoleDebug.BladeTypeOverrideEnabled = false;
-                    }
-                }
+                    CycleBladeType();
                 fineRepeatTimer = 0f;
                 coarseRepeatTimer = 0f;
                 return;
@@ -346,6 +331,25 @@ namespace GrassSystem.Consoles
             float step = coarseDir != 0 ? CoarseStep[selectedRow] * coarseDir : FineStep[selectedRow] * fineDir;
             float next = Mathf.Clamp(GetRowValue(selectedRow) + step, range.min, range.max);
             SetRowValue(selectedRow, next);
+        }
+
+        private static void CycleBladeType()
+        {
+            if (!GrassConsoleDebug.BladeTypeOverrideEnabled)
+            {
+                GrassConsoleDebug.BladeTypeOverrideEnabled = true;
+                GrassConsoleDebug.BladeTypeOverride = BladeTypeCycle[0];
+                return;
+            }
+
+            int index = System.Array.IndexOf(BladeTypeCycle, GrassConsoleDebug.BladeTypeOverride);
+            if (index < 0 || index >= BladeTypeCycle.Length - 1)
+            {
+                GrassConsoleDebug.BladeTypeOverrideEnabled = false;
+                return;
+            }
+
+            GrassConsoleDebug.BladeTypeOverride = BladeTypeCycle[index + 1];
         }
 
         private bool ConsumeRepeat(bool pressedThisFrame, bool isHeld, ref float timer)
