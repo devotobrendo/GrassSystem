@@ -36,9 +36,9 @@ namespace GrassSystem.Consoles.Editor
         private static readonly string[] ReferencesProps = { "grassMode", "proceduralType", "cullingShader", "grassMaterial", "grassMesh" };
         private static readonly string[] WindProps = { "windSpeed", "windStrength", "windFrequency" };
         private static readonly string[] TiltProps = { "maxTiltAngle", "tiltVariation" };
-        private static readonly string[] ShadowsLightProps = { "castShadows", "useReceiveShadows", "shadowIntensity", "useLightProbes", "lightProbeInfluence", "ambientBoost" };
+        private static readonly string[] ShadowsLightProps = { "castShadows", "useReceiveShadows", "shadowIntensity" };
         private static readonly string[] DepthProps = { "useDepthPerception", "instanceColorVariation", "heightDarkening", "backfaceDarkening" };
-        private static readonly string[] TipProps = { "useTipCutout", "tipMaskTexture", "tipCutoffHeight", "albedoTexture", "defaultModeAlbedo" };
+        private static readonly string[] TipProps = { "albedoTexture", "defaultModeAlbedo" };
         private static readonly string[] InteractionProps = { "interactorStrength", "maxInteractors", "maxBendAngle" };
         private static readonly string[] DistanceProps = { "minFadeDistance", "maxDrawDistance" };
         private static readonly string[] BakeDefaultProps = { "minWidth", "maxWidth", "minHeight", "maxHeight" };
@@ -268,11 +268,11 @@ namespace GrassSystem.Consoles.Editor
             EditorGUILayout.Space();
             DrawGroup("Tilt", TiltProps);
             EditorGUILayout.Space();
-            DrawGroup("Shadows & Light", ShadowsLightProps);
+            DrawGroup("Shadows", ShadowsLightProps);
             EditorGUILayout.Space();
             DrawGroup("Depth", DepthProps);
             EditorGUILayout.Space();
-            DrawGroup("Tip", TipProps);
+            DrawGroup("Textures", TipProps);
             EditorGUILayout.Space();
             DrawGroup("Interaction", InteractionProps);
             EditorGUILayout.Space();

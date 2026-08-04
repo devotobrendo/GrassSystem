@@ -7,19 +7,10 @@ Shader "GrassSystem/GrassUnlitConsole"
         [Header(Textures)]
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
 
-        [Header(Tip Cutout)]
-        [Toggle] _UseTipCutout ("Use Tip Cutout", Float) = 0
-        _TipCutoff ("Tip Cutoff Height", Range(0, 1)) = 0.8
-        _AlphaCutoff ("Alpha Cutoff", Range(0, 1)) = 0.5
-
         [Header(Wind)]
         _WindSpeed ("Wind Speed", Range(0, 5)) = 1
         _WindStrength ("Wind Strength", Range(0, 1)) = 0.3
         _WindFrequency ("Wind Frequency", Range(0.01, 1)) = 0.1
-
-        [Header(Lighting)]
-        _AmbientBoost ("Ambient Boost", Range(0, 2)) = 1.0
-        _LightProbeInfluence ("Light Probe Influence", Range(0, 1)) = 1.0
 
         [Header(Shadow Receiving)]
         _ShadowIntensity ("Shadow Intensity", Range(0, 1)) = 0.5
@@ -121,9 +112,7 @@ Shader "GrassSystem/GrassUnlitConsole"
 
             #pragma multi_compile_local _ _DECALS_ON
             #pragma multi_compile_local _ _BAKED_DECALS
-            #pragma multi_compile_local _ _LIGHTPROBES_ON
             #pragma multi_compile_local _ _RECEIVE_SHADOWS_ON
-            #pragma multi_compile_local _ _TIPCUTOUT_ON
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -136,7 +125,6 @@ Shader "GrassSystem/GrassUnlitConsole"
             float _InteractorStrength;
 
             TEXTURE2D(_MainTex);
-            TEXTURE2D(_TipMask);
             TEXTURE2D(_DecalTex);
             TEXTURE2D(_Decal2Tex);
             TEXTURE2D(_Decal3Tex);
@@ -146,7 +134,6 @@ Shader "GrassSystem/GrassUnlitConsole"
             TEXTURE2D(_BakedMultiplyMap);
             TEXTURE2D(_BakedAdditiveMap);
             SAMPLER(sampler_MainTex);
-            SAMPLER(sampler_TipMask);
             SAMPLER(sampler_DecalTex);
             SAMPLER(sampler_Decal2Tex);
             SAMPLER(sampler_Decal3Tex);
@@ -158,14 +145,9 @@ Shader "GrassSystem/GrassUnlitConsole"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
-                float _UseTipCutout;
-                float _TipCutoff;
-                float _AlphaCutoff;
                 float _WindSpeed;
                 float _WindStrength;
                 float _WindFrequency;
-                float _AmbientBoost;
-                float _LightProbeInfluence;
                 float _ShadowIntensity;
                 float _InstanceColorVariation;
                 float _HeightDarkening;
@@ -221,9 +203,6 @@ Shader "GrassSystem/GrassUnlitConsole"
                 half instanceVariation : TEXCOORD3;
                 #if defined(_RECEIVE_SHADOWS_ON)
                 float4 shadowCoord : TEXCOORD4;
-                #endif
-                #if defined(_LIGHTPROBES_ON)
-                half3 lightProbeColor : TEXCOORD5;
                 #endif
             };
 
@@ -319,21 +298,11 @@ Shader "GrassSystem/GrassUnlitConsole"
                 output.shadowCoord = TransformWorldToShadowCoord(worldPos);
                 #endif
 
-                #if defined(_LIGHTPROBES_ON)
-                output.lightProbeColor = SampleSH(float3(0, 1, 0));
-                #endif
-
                 return output;
             }
 
             half4 frag(Varyings input, bool isFrontFace : SV_IsFrontFace) : SV_Target
             {
-                #if defined(_TIPCUTOUT_ON)
-                half tipMask = SAMPLE_TEXTURE2D(_TipMask, sampler_TipMask, input.uv).a;
-                if (input.uv.y > _TipCutoff && tipMask < _AlphaCutoff)
-                    discard;
-                #endif
-
                 half4 albedoTex = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                 half3 baseColor = albedoTex.rgb;
 
@@ -428,11 +397,6 @@ Shader "GrassSystem/GrassUnlitConsole"
                 baseColor *= lerp(1.0, shadowAtten, _ShadowIntensity);
                 #endif
 
-                #if defined(_LIGHTPROBES_ON)
-                half3 ambient = input.lightProbeColor * _AmbientBoost;
-                baseColor *= lerp(1.0, ambient, _LightProbeInfluence);
-                #endif
-
                 half3 finalColor = MixFog(baseColor, input.fogFactor);
                 return half4(finalColor, 1.0);
             }
@@ -463,14 +427,9 @@ Shader "GrassSystem/GrassUnlitConsole"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
-                float _UseTipCutout;
-                float _TipCutoff;
-                float _AlphaCutoff;
                 float _WindSpeed;
                 float _WindStrength;
                 float _WindFrequency;
-                float _AmbientBoost;
-                float _LightProbeInfluence;
                 float _ShadowIntensity;
                 float _InstanceColorVariation;
                 float _HeightDarkening;

@@ -550,14 +550,6 @@ namespace GrassSystem.Consoles
                 materialInstance.SetTexture("_MainTex", settings.defaultModeAlbedo != null ? settings.defaultModeAlbedo : Texture2D.linearGrayTexture);
             else if (settings.albedoTexture != null)
                 materialInstance.SetTexture("_MainTex", settings.albedoTexture);
-            if (settings.tipMaskTexture != null)
-                materialInstance.SetTexture("_TipMask", settings.tipMaskTexture);
-
-            if (settings.useTipCutout)
-                materialInstance.EnableKeyword("_TIPCUTOUT_ON");
-            else
-                materialInstance.DisableKeyword("_TIPCUTOUT_ON");
-            materialInstance.SetFloat("_TipCutoff", settings.tipCutoffHeight);
 
             materialInstance.SetFloat("_WindSpeed", settings.windSpeed);
             materialInstance.SetFloat("_WindStrength", settings.windStrength);
@@ -607,19 +599,6 @@ namespace GrassSystem.Consoles
 
             materialInstance.SetFloat("_MaxTiltAngle", settings.maxTiltAngle * Mathf.Deg2Rad);
             materialInstance.SetFloat("_TiltVariation", settings.tiltVariation);
-
-            if (settings.useLightProbes)
-            {
-                materialInstance.SetFloat("_LightProbeInfluence", settings.lightProbeInfluence);
-                materialInstance.SetFloat("_AmbientBoost", settings.ambientBoost);
-                materialInstance.EnableKeyword("_LIGHTPROBES_ON");
-            }
-            else
-            {
-                materialInstance.SetFloat("_LightProbeInfluence", 0f);
-                materialInstance.SetFloat("_AmbientBoost", 1f);
-                materialInstance.DisableKeyword("_LIGHTPROBES_ON");
-            }
 
             ApplyBakedDecalToMaterial();
         }
