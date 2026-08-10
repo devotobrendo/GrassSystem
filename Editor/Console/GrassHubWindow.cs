@@ -68,6 +68,12 @@ namespace GrassSystem.Consoles.Editor
         private bool scanned;
         private Vector2 boardScrollPos;
 
+        private string tuningJson = string.Empty;
+        private GrassPlatformProfile tuningTarget;
+        private string tuningStatus = string.Empty;
+        private MessageType tuningStatusType = MessageType.None;
+        private Vector2 tuningScrollPos;
+
         private GUIStyle titleStyle;
         private GUIStyle linkStyle;
         private GUIStyle linkBoldStyle;
@@ -138,7 +144,95 @@ namespace GrassSystem.Consoles.Editor
             EditorGUILayout.Space();
             DrawAssetsSection();
             EditorGUILayout.Space();
+            DrawTuningSection();
+            EditorGUILayout.Space();
             DrawToolsSection();
+        }
+
+        private void DrawTuningSection()
+        {
+            EditorGUILayout.LabelField("Device Tuning", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Tune on device, press the dump button in the overlay, then paste the [GrassTuning] line here.", EditorStyles.miniLabel);
+
+            tuningTarget = (GrassPlatformProfile)EditorGUILayout.ObjectField("Target Profile", tuningTarget, typeof(GrassPlatformProfile), false);
+
+            tuningScrollPos = EditorGUILayout.BeginScrollView(tuningScrollPos, GUILayout.Height(80));
+            tuningJson = EditorGUILayout.TextArea(tuningJson, GUILayout.ExpandHeight(true));
+            EditorGUILayout.EndScrollView();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Paste From Clipboard", GUILayout.Width(160)))
+                {
+                    tuningJson = EditorGUIUtility.systemCopyBuffer;
+                    ClearTuningStatus();
+                    GUI.FocusControl(null);
+                }
+
+                using (new EditorGUI.DisabledScope(tuningTarget == null || string.IsNullOrWhiteSpace(tuningJson)))
+                {
+                    if (GUILayout.Button("Apply To Profile", GUILayout.Width(140)))
+                        ApplyTuningToProfile();
+                }
+
+                GUILayout.FlexibleSpace();
+
+                if (GUILayout.Button("Clear", GUILayout.Width(70)))
+                {
+                    tuningJson = string.Empty;
+                    ClearTuningStatus();
+                    GUI.FocusControl(null);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(tuningStatus))
+                EditorGUILayout.HelpBox(tuningStatus, tuningStatusType);
+        }
+
+        private void ClearTuningStatus()
+        {
+            tuningStatus = string.Empty;
+            tuningStatusType = MessageType.None;
+        }
+
+        private void ApplyTuningToProfile()
+        {
+            string payload = ExtractTuningJson(tuningJson);
+
+            if (!GrassTuningSnapshot.TryParse(payload, out GrassTuningSnapshot snapshot, out string error))
+            {
+                tuningStatus = error;
+                tuningStatusType = MessageType.Error;
+                return;
+            }
+
+            Undo.RecordObject(tuningTarget, "Apply Grass Tuning");
+            snapshot.ApplyTo(tuningTarget);
+            EditorUtility.SetDirty(tuningTarget);
+            AssetDatabase.SaveAssets();
+
+            string note = snapshot.DescribeUnapplied();
+            if (string.IsNullOrEmpty(note))
+            {
+                tuningStatus = $"Applied to {tuningTarget.name}.";
+                tuningStatusType = MessageType.Info;
+            }
+            else
+            {
+                tuningStatus = $"Applied to {tuningTarget.name}.\n{note}";
+                tuningStatusType = MessageType.Warning;
+            }
+        }
+
+        private static string ExtractTuningJson(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return raw;
+
+            int start = raw.IndexOf('{');
+            int end = raw.LastIndexOf('}');
+            if (start < 0 || end <= start) return raw;
+
+            return raw.Substring(start, end - start + 1);
         }
 
         private void DrawHeader()

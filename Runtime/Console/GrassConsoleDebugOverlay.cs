@@ -14,6 +14,9 @@ namespace GrassSystem.Consoles
         public GamepadButton gamepadToggleButton = GamepadButton.RightStick;
         public bool useShoulderComboToggle = false;
 
+        [Header("Dump")]
+        public Key dumpKey = Key.F9;
+
         [Header("Display")]
         public TextAnchor anchor = TextAnchor.UpperRight;
         [Range(12, 24)]
@@ -26,13 +29,17 @@ namespace GrassSystem.Consoles
         private const int RowFarKeep = 2;
         private const int RowThinStart = 3;
         private const int RowCoverage = 4;
-        private const int RowSizeX = 5;
-        private const int RowSizeY = 6;
-        private const int RowGrassMode = 7;
-        private const int RowBladeType = 8;
-        private const int RowAlbedo = 9;
-        private const int RowGroundBlend = 10;
-        private const int RowSystem = 11;
+        private const int RowMinFade = 5;
+        private const int RowMaxDraw = 6;
+        private const int RowSizeX = 7;
+        private const int RowSizeY = 8;
+        private const int RowGrassMode = 9;
+        private const int RowBladeType = 10;
+        private const int RowAlbedo = 11;
+        private const int RowGroundBlend = 12;
+        private const int RowSystem = 13;
+
+        private const float DISTANCE_MAX = 500f;
 
         private static readonly int PropGroundBlendEnabled = Shader.PropertyToID("_GrassBlendDebugEnabled");
         private static readonly int PropGroundBlendValue = Shader.PropertyToID("_GrassBlendDebugValue");
@@ -44,6 +51,8 @@ namespace GrassSystem.Consoles
             "Far Keep",
             "Thin Start",
             "Coverage",
+            "Min Fade Dist",
+            "Max Draw Dist",
             "Size X (width)",
             "Size Y (height)",
             "Grass Mode",
@@ -53,8 +62,8 @@ namespace GrassSystem.Consoles
             "System"
         };
 
-        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 0.02f, 0.02f, 0f, 0f, 0f, 0.05f, 0f };
-        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 0.15f, 0.15f, 0f, 0f, 0f, 0.2f, 0f };
+        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 1f, 1f, 0.02f, 0.02f, 0f, 0f, 0f, 0.05f, 0f };
+        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 5f, 5f, 0.15f, 0.15f, 0f, 0f, 0f, 0.2f, 0f };
 
         private static readonly GrassProceduralType[] BladeTypeCycle =
         {
@@ -79,6 +88,8 @@ namespace GrassSystem.Consoles
         private const float REPEAT_INTERVAL = 0.05f;
 
         private bool showOverlay;
+        private bool showDump;
+        private string dumpJson = string.Empty;
         private int selectedRow;
         private GrassSystemState systemState;
         private int lastStickYDirection;
@@ -230,8 +241,22 @@ namespace GrassSystem.Consoles
 
             if (!showOverlay) return;
 
+            bool keyDumpPressed = Keyboard.current != null && Keyboard.current[dumpKey].wasPressedThisFrame;
+            bool padDumpPressed = Gamepad.current != null && Gamepad.current.buttonNorth.wasPressedThisFrame;
+            if (keyDumpPressed || padDumpPressed)
+                ToggleDump();
+
             HandleNavigation();
             HandleAdjustment();
+        }
+
+        private void ToggleDump()
+        {
+            showDump = !showDump;
+            if (!showDump) return;
+
+            dumpJson = GrassTuningSnapshot.Capture().ToJson();
+            Debug.Log($"[GrassTuning] {dumpJson}");
         }
 
         private bool GetGamepadTogglePressed()
@@ -345,7 +370,20 @@ namespace GrassSystem.Consoles
             {
                 if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
                 {
-                    GrassConsoleDebug.FlatAlbedoEnabled = !GrassConsoleDebug.FlatAlbedoEnabled;
+                    if (!GrassConsoleDebug.AlbedoOverrideEnabled)
+                    {
+                        GrassConsoleDebug.AlbedoOverrideEnabled = true;
+                        GrassConsoleDebug.FlatAlbedoEnabled = false;
+                    }
+                    else if (!GrassConsoleDebug.FlatAlbedoEnabled)
+                    {
+                        GrassConsoleDebug.FlatAlbedoEnabled = true;
+                    }
+                    else
+                    {
+                        GrassConsoleDebug.AlbedoOverrideEnabled = false;
+                        GrassConsoleDebug.FlatAlbedoEnabled = false;
+                    }
                     ResetPerfStats();
                 }
                 fineRepeatTimer = 0f;
@@ -443,6 +481,10 @@ namespace GrassSystem.Consoles
             GrassConsoleDebug.CoverageCompensation = source.coverageCompensation;
             GrassConsoleDebug.SizeScale = source.sizeScale;
             GrassConsoleDebug.InstanceDensity = source.instanceDensity;
+            GrassConsoleDebug.MinFadeDistance = source.EffectiveMinFadeDistance;
+            GrassConsoleDebug.MaxDrawDistance = source.EffectiveMaxDrawDistance;
+            GrassConsoleDebug.ModeOverride = source.EffectiveMode;
+            GrassConsoleDebug.BladeTypeOverride = source.EffectiveProceduralType;
         }
 
         private void ApplySystemState(GrassSystemState state)
@@ -521,6 +563,8 @@ namespace GrassSystem.Consoles
                 case RowFarKeep: return GrassConsoleDebug.FarKeepFraction;
                 case RowThinStart: return GrassConsoleDebug.ThinStartDistance;
                 case RowCoverage: return GrassConsoleDebug.CoverageCompensation;
+                case RowMinFade: return GrassConsoleDebug.MinFadeDistance;
+                case RowMaxDraw: return GrassConsoleDebug.MaxDrawDistance;
                 case RowSizeX: return GrassConsoleDebug.SizeScale.x;
                 case RowSizeY: return GrassConsoleDebug.SizeScale.y;
                 default: return 0f;
@@ -548,6 +592,14 @@ namespace GrassSystem.Consoles
                 case RowCoverage:
                     GrassConsoleDebug.CoverageCompensation = Mathf.Clamp01(value);
                     break;
+                case RowMinFade:
+                    GrassConsoleDebug.DrawDistanceOverrideEnabled = true;
+                    GrassConsoleDebug.MinFadeDistance = Mathf.Clamp(value, 0f, GrassConsoleDebug.MaxDrawDistance);
+                    break;
+                case RowMaxDraw:
+                    GrassConsoleDebug.DrawDistanceOverrideEnabled = true;
+                    GrassConsoleDebug.MaxDrawDistance = Mathf.Clamp(value, GrassConsoleDebug.MinFadeDistance, DISTANCE_MAX);
+                    break;
                 case RowSizeX:
                     GrassConsoleDebug.SizeScale = new Vector2(Mathf.Clamp(value, 0.01f, 3f), GrassConsoleDebug.SizeScale.y);
                     break;
@@ -564,6 +616,8 @@ namespace GrassSystem.Consoles
                 case RowInstanceDensity: return (0.01f, 1f);
                 case RowGroundBlend: return (0f, 1f);
                 case RowThinStart: return (0f, 50f);
+                case RowMinFade: return (0f, DISTANCE_MAX);
+                case RowMaxDraw: return (0f, DISTANCE_MAX);
                 case RowSizeX: return (0.01f, 3f);
                 case RowSizeY: return (0.01f, 3f);
                 default: return (0f, 1f);
@@ -588,7 +642,10 @@ namespace GrassSystem.Consoles
             }
 
             if (row == RowAlbedo)
+            {
+                if (!GrassConsoleDebug.AlbedoOverrideEnabled) return "Scene";
                 return GrassConsoleDebug.FlatAlbedoEnabled ? "Flat 1x1" : "Texture";
+            }
 
             if (row == RowSystem)
             {
@@ -601,7 +658,8 @@ namespace GrassSystem.Consoles
             }
 
             float value = GetRowValue(row);
-            return row == RowThinStart ? value.ToString("F1") : value.ToString("F2");
+            bool isDistance = row == RowThinStart || row == RowMinFade || row == RowMaxDraw;
+            return isDistance ? value.ToString("F1") : value.ToString("F2");
         }
 
         private void OnGUI()
@@ -610,12 +668,30 @@ namespace GrassSystem.Consoles
 
             InitStyles();
             DrawOverlay();
+            if (showDump)
+                DrawDumpPanel();
+        }
+
+        private void DrawDumpPanel()
+        {
+            float width = 420f;
+            float height = 430f;
+            bool mainOnRight = anchor == TextAnchor.UpperRight || anchor == TextAnchor.MiddleRight || anchor == TextAnchor.LowerRight;
+            float x = mainOnRight ? 10f : Screen.width - width - 10f;
+            float y = 10f;
+
+            GUI.Box(new Rect(x, y, width, height), "", boxStyle);
+
+            string hint = Gamepad.current != null ? "[X] close" : $"[{dumpKey}] close";
+            string body = $"<b>TUNING SNAPSHOT</b>\n<size=11><color=#888888>logged as [GrassTuning] - or photograph this   {hint}</color></size>\n\n<size=12>{dumpJson}</size>";
+
+            GUI.Label(new Rect(x + 10f, y + 5f, width - 20f, height - 10f), body, labelStyle);
         }
 
         private void DrawOverlay()
         {
             float width = 360f;
-            float height = 144f + RowLabels.Length * 22f + 30f;
+            float height = 144f + RowLabels.Length * 22f + 52f;
             float x = 10f;
             float y = 10f;
 
@@ -665,7 +741,9 @@ namespace GrassSystem.Consoles
                 ? (useShoulderComboToggle ? "[L+R] toggle" : $"[{GamepadHintName(gamepadToggleButton)}] toggle")
                 : "[F8] toggle";
             string navHint = hasGamepad ? "D-Pad nav/adjust  Shoulders coarse  A toggle" : "Arrows nav/adjust";
+            string dumpHint = hasGamepad ? "[X] dump values" : $"[{dumpKey}] dump values";
             sb.AppendLine($"<size=11><color=#666666>{toggleHint}   {navHint}</color></size>");
+            sb.AppendLine($"<size=11><color=#666666>{dumpHint}</color></size>");
 
             GUI.Label(new Rect(x + 10f, y + 5f, width - 20f, height - 10f), sb.ToString(), labelStyle);
         }

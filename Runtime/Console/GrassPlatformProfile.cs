@@ -26,6 +26,14 @@ namespace GrassSystem.Consoles
         [Range(0f, 1f)] public float coverageCompensation = 1f;
         public Vector2 sizeScale = Vector2.one;
 
+        [Header("Instance Density")]
+        public bool overrideInstanceDensity;
+        [Range(0.01f, 1f)] public float instanceDensity = 1f;
+
+        [Header("Albedo")]
+        public bool overrideAlbedo;
+        public bool useFlatAlbedo;
+
         [Header("Draw Distance")]
         public bool overrideDrawDistance;
         public float minFadeDistance = 30f;

@@ -130,8 +130,62 @@ namespace GrassSystem.Consoles
             }
         }
 
-        private float EffectiveInstanceDensity =>
-            GrassConsoleDebug.InstanceDensityOverrideEnabled ? GrassConsoleDebug.InstanceDensity : instanceDensity;
+        private float EffectiveInstanceDensity
+        {
+            get
+            {
+                if (GrassConsoleDebug.InstanceDensityOverrideEnabled) return GrassConsoleDebug.InstanceDensity;
+                var p = ActiveProfile;
+                if (p != null && p.overrideInstanceDensity) return p.instanceDensity;
+                return instanceDensity;
+            }
+        }
+
+        public GrassMode EffectiveMode => EffectiveGrassMode;
+
+        public GrassProceduralType EffectiveProceduralType
+        {
+            get
+            {
+                if (GrassConsoleDebug.BladeTypeOverrideEnabled) return GrassConsoleDebug.BladeTypeOverride;
+                var p = ActiveProfile;
+                if (p != null && p.overrideMesh) return p.proceduralType;
+                return settings != null ? settings.proceduralType : GrassProceduralType.Blade;
+            }
+        }
+
+        private bool EffectiveFlatAlbedo
+        {
+            get
+            {
+                if (GrassConsoleDebug.AlbedoOverrideEnabled) return GrassConsoleDebug.FlatAlbedoEnabled;
+                var p = ActiveProfile;
+                if (p != null && p.overrideAlbedo) return p.useFlatAlbedo;
+                return false;
+            }
+        }
+
+        public float EffectiveMinFadeDistance
+        {
+            get
+            {
+                if (GrassConsoleDebug.DrawDistanceOverrideEnabled) return GrassConsoleDebug.MinFadeDistance;
+                var p = ActiveProfile;
+                if (p != null && p.overrideDrawDistance) return p.minFadeDistance;
+                return settings != null ? settings.minFadeDistance : 30f;
+            }
+        }
+
+        public float EffectiveMaxDrawDistance
+        {
+            get
+            {
+                if (GrassConsoleDebug.DrawDistanceOverrideEnabled) return GrassConsoleDebug.MaxDrawDistance;
+                var p = ActiveProfile;
+                if (p != null && p.overrideDrawDistance) return p.maxDrawDistance;
+                return settings != null ? settings.maxDrawDistance : 50f;
+            }
+        }
 
         private GrassDataConsole[] BuildUploadData()
         {
@@ -167,13 +221,7 @@ namespace GrassSystem.Consoles
                 if (p.meshes[idx] != null) return p.meshes[idx];
             }
             if (mode == GrassMode.Default)
-            {
-                GrassProceduralType type;
-                if (GrassConsoleDebug.BladeTypeOverrideEnabled) type = GrassConsoleDebug.BladeTypeOverride;
-                else if (p != null && p.overrideMesh) type = p.proceduralType;
-                else type = settings.proceduralType;
-                return GrassMeshUtility.GetProceduralMesh(type);
-            }
+                return GrassMeshUtility.GetProceduralMesh(EffectiveProceduralType);
             return settings.GetActiveMesh(GetInstanceID(), mode);
         }
 
@@ -394,7 +442,7 @@ namespace GrassSystem.Consoles
             Mesh newMesh = ResolveActiveMesh();
             bool modeChanged = mode != lastAppliedMode;
             bool meshChanged = newMesh != null && newMesh != cachedMesh;
-            bool albedoChanged = GrassConsoleDebug.FlatAlbedoEnabled != lastAppliedFlatAlbedo;
+            bool albedoChanged = EffectiveFlatAlbedo != lastAppliedFlatAlbedo;
             if (!modeChanged && !meshChanged && !albedoChanged) return;
 
             if (meshChanged && argsBuffer != null && argsBuffer.IsValid())
@@ -406,7 +454,7 @@ namespace GrassSystem.Consoles
             }
             ApplySettingsToMaterial();
             lastAppliedMode = mode;
-            lastAppliedFlatAlbedo = GrassConsoleDebug.FlatAlbedoEnabled;
+            lastAppliedFlatAlbedo = EffectiveFlatAlbedo;
         }
 
         private void TryAutoRecover()
@@ -544,7 +592,7 @@ namespace GrassSystem.Consoles
         {
             if (materialInstance == null) return;
 
-            if (GrassConsoleDebug.FlatAlbedoEnabled)
+            if (EffectiveFlatAlbedo)
                 materialInstance.SetTexture("_MainTex", Texture2D.linearGrayTexture);
             else if (EffectiveGrassMode == GrassMode.Default)
                 materialInstance.SetTexture("_MainTex", settings.defaultModeAlbedo != null ? settings.defaultModeAlbedo : Texture2D.linearGrayTexture);
@@ -781,9 +829,8 @@ namespace GrassSystem.Consoles
             cullingShaderInstance.SetFloat(PropCoverageComp, Mathf.Clamp01(effCoverage));
             cullingShaderInstance.SetFloat(PropUseUniformScale, (EffectiveGrassMode == GrassMode.CustomMesh) ? 1f : 0f);
 
-            bool pd = p != null && p.overrideDrawDistance;
-            cullingShaderInstance.SetFloat(PropMinFade, pd ? p.minFadeDistance : settings.minFadeDistance);
-            cullingShaderInstance.SetFloat(PropMaxDraw, pd ? p.maxDrawDistance : settings.maxDrawDistance);
+            cullingShaderInstance.SetFloat(PropMinFade, EffectiveMinFadeDistance);
+            cullingShaderInstance.SetFloat(PropMaxDraw, EffectiveMaxDrawDistance);
 
             int threadGroups = Mathf.CeilToInt((float)activeInstanceCount / THREAD_GROUP_SIZE);
             cullingShaderInstance.Dispatch(cullingKernel, threadGroups, 1, 1);

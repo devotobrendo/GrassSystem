@@ -179,6 +179,8 @@ namespace GrassSystem.Consoles.Editor
             var parts = new System.Collections.Generic.List<string>();
             if (profile.overrideMesh) parts.Add("Mesh");
             if (profile.overrideThinning) parts.Add("Thinning");
+            if (profile.overrideInstanceDensity) parts.Add("Instance Density");
+            if (profile.overrideAlbedo) parts.Add("Albedo");
             if (profile.overrideDrawDistance) parts.Add("Draw Distance");
             if (profile.overrideShadows) parts.Add("Cast Shadows");
             if (profile.overrideReceiveShadows) parts.Add("Receive Shadows");
@@ -209,7 +211,13 @@ namespace GrassSystem.Consoles.Editor
             }
 
             EditorGUILayout.Space();
-            EditorGUILayout.PropertyField(propInstanceDensity);
+            bool densityOverridden = resolved != null && resolved.overrideInstanceDensity;
+            if (densityOverridden)
+                EditorGUILayout.HelpBox($"Instance Density is overridden by {resolved.name} ({resolved.instanceDensity:P0}) — this value is ignored while that profile is active.", MessageType.Warning);
+
+            using (new EditorGUI.DisabledScope(densityOverridden))
+                EditorGUILayout.PropertyField(propInstanceDensity);
+
             int baked = console.BakedInstanceCount;
             int uploaded = console.TotalGrassCount;
             if (baked > 0 && uploaded < baked)

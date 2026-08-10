@@ -9,11 +9,15 @@ namespace GrassSystem.Consoles
     public static class GrassConsoleDebug
     {
         public static bool OverrideEnabled;
+        public static bool AlbedoOverrideEnabled;
         public static bool FlatAlbedoEnabled;
         public static bool GroundBlendOverrideEnabled;
         public static float GroundBlend = 0.6f;
         public static bool InstanceDensityOverrideEnabled;
         public static float InstanceDensity = 1f;
+        public static bool DrawDistanceOverrideEnabled;
+        public static float MinFadeDistance = 30f;
+        public static float MaxDrawDistance = 50f;
         public static bool ReadoutEnabled;
         public static float FarKeepFraction = 1f;
         public static float ThinStartDistance = 0f;
