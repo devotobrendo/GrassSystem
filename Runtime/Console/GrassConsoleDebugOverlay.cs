@@ -39,6 +39,7 @@ namespace GrassSystem.Consoles
         private const int RowAlbedo = 12;
         private const int RowGroundBlend = 13;
         private const int RowSystem = 14;
+        private const int RowFrameCap = 15;
 
         private const float DISTANCE_MAX = 500f;
 
@@ -61,11 +62,12 @@ namespace GrassSystem.Consoles
             "Blade Type",
             "Albedo",
             "Ground Blend",
-            "System"
+            "System",
+            "Frame Cap"
         };
 
-        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 1f, 0.05f, 1f, 1f, 0.02f, 0.02f, 0f, 0f, 0f, 0.05f, 0f };
-        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 5f, 0.2f, 5f, 5f, 0.15f, 0.15f, 0f, 0f, 0f, 0.2f, 0f };
+        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 1f, 0.05f, 1f, 1f, 0.02f, 0.02f, 0f, 0f, 0f, 0.05f, 0f, 0f };
+        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 5f, 0.2f, 5f, 5f, 0.15f, 0.15f, 0f, 0f, 0f, 0.2f, 0f, 0f };
 
         private static readonly GrassProceduralType[] BladeTypeCycle =
         {
@@ -90,6 +92,11 @@ namespace GrassSystem.Consoles
         private const float REPEAT_INTERVAL = 0.05f;
 
         private bool showOverlay;
+        private bool frameCapCaptured;
+        private bool frameCapUncapped;
+        private int originalVSyncCount;
+        private int originalTargetFrameRate;
+
         private bool showDump;
         private bool dumpDirty = true;
         private string dumpJson = string.Empty;
@@ -129,6 +136,7 @@ namespace GrassSystem.Consoles
         {
             GrassConsoleDebug.ReadoutEnabled = false;
             Shader.SetGlobalFloat(PropGroundBlendEnabled, 0f);
+            RestoreFrameCap();
 
             if (bgTexture != null)
             {
@@ -261,6 +269,37 @@ namespace GrassSystem.Consoles
 
             if (!showDump)
                 Debug.Log($"[GrassTuning] {dumpJson}");
+        }
+
+        private void ToggleFrameCap()
+        {
+            if (!frameCapCaptured)
+            {
+                originalVSyncCount = QualitySettings.vSyncCount;
+                originalTargetFrameRate = Application.targetFrameRate;
+                frameCapCaptured = true;
+            }
+
+            frameCapUncapped = !frameCapUncapped;
+
+            if (frameCapUncapped)
+            {
+                QualitySettings.vSyncCount = 0;
+                Application.targetFrameRate = -1;
+            }
+            else
+            {
+                RestoreFrameCap();
+            }
+        }
+
+        private void RestoreFrameCap()
+        {
+            if (!frameCapCaptured) return;
+
+            QualitySettings.vSyncCount = originalVSyncCount;
+            Application.targetFrameRate = originalTargetFrameRate;
+            frameCapUncapped = false;
         }
 
         private void RefreshDump()
@@ -407,6 +446,18 @@ namespace GrassSystem.Consoles
                 {
                     systemState = (GrassSystemState)(((int)systemState + 1) % 3);
                     ApplySystemState(systemState);
+                    ResetPerfStats();
+                }
+                fineRepeatTimer = 0f;
+                coarseRepeatTimer = 0f;
+                return;
+            }
+
+            if (selectedRow == RowFrameCap)
+            {
+                if (keyLeft || keyRight || padLeftPressed || padRightPressed || southPressed)
+                {
+                    ToggleFrameCap();
                     ResetPerfStats();
                 }
                 fineRepeatTimer = 0f;
@@ -663,6 +714,15 @@ namespace GrassSystem.Consoles
                 return GrassConsoleDebug.FlatAlbedoEnabled ? "Flat 1x1" : "Texture";
             }
 
+            if (row == RowFrameCap)
+            {
+                if (frameCapUncapped) return "Uncapped";
+                int vsync = QualitySettings.vSyncCount;
+                int target = Application.targetFrameRate;
+                if (vsync > 0) return $"vsync {vsync}";
+                return target > 0 ? $"target {target}" : "Uncapped";
+            }
+
             if (row == RowSystem)
             {
                 switch (systemState)
@@ -737,8 +797,8 @@ namespace GrassSystem.Consoles
 
             bool capped = QualitySettings.vSyncCount > 0 || Application.targetFrameRate > 0;
             string cappedText = capped
-                ? $"<color=#FF9933>capped (vsync {QualitySettings.vSyncCount}, target {Application.targetFrameRate}) - compare GPU ms, not FPS</color>"
-                : "uncapped";
+                ? $"<color=#FF9933>capped (vsync {QualitySettings.vSyncCount}, target {Application.targetFrameRate}) - see Frame Cap row</color>"
+                : "<color=#55DD55>uncapped - absolute numbers</color>";
             sb.AppendLine($"<size=11><color=#888888>avg over {perfCount} frames | {cappedText}</color></size>");
 
             int total = GrassConsoleDebug.TotalInstances;
