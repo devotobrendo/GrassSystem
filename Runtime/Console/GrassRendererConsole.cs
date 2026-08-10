@@ -28,12 +28,14 @@ namespace GrassSystem.Consoles
         [Range(0f, 1f)]
         [Tooltip("Fraction of far blades kept by GPU thinning. 1 = off (no thinning). Lower thins distant grass, removing whole instances (fewer verts + fill). Switch target ~0.5.")]
         public float farKeepFraction = 1f;
-        [Tooltip("Distance (m) beyond which grass thins toward Far Keep Fraction over a ~5m blend. Nearer than this, all blades are kept.")]
+        [Tooltip("Distance (m) beyond which grass starts thinning toward Far Keep Fraction. Nearer than this, all blades are kept.")]
         public float thinStartDistance = 10f;
+        [Tooltip("Length (m) of the blend from full density down to Far Keep Fraction. Short = a visible cliff; long = a gradual falloff across the field.")]
+        public float thinRampDistance = 5f;
         [Tooltip("Runtime blade size multiplier. Default mode: x = width, y = height (independent). Custom Mesh mode: x = uniform scale, y ignored (mesh keeps its modeled proportions). 1,1 = original.")]
         public Vector2 sizeScale = Vector2.one;
         [Range(0f, 1f)]
-        [Tooltip("How much thinned-away blades widen the survivors to keep ground coverage. 1 = full (far grass widens as you thin). 0 = off (grass just gets sparser, no widening).")]
+        [Tooltip("How much thinned-away blades grow the survivors to keep ground coverage. 1 = full. 0 = off (grass just gets sparser). Default mode grows width only; Custom Mesh grows uniformly, so survivors also get taller.")]
         public float coverageCompensation = 1f;
         [Range(0.01f, 1f)]
         [Tooltip("Fraction of the baked instances actually uploaded to the GPU. Unlike Far Keep Fraction, which drops blades inside the compute shader, this shrinks the source buffer and the dispatch itself — use it to preview what a decimated bake would cost in memory and culling. Rebuilds buffers when changed.")]
@@ -76,6 +78,7 @@ namespace GrassSystem.Consoles
         private static readonly int PropMaxDraw = Shader.PropertyToID("_MaxDrawDistance");
         private static readonly int PropFarKeep = Shader.PropertyToID("_FarKeepFraction");
         private static readonly int PropThinStart = Shader.PropertyToID("_ThinStartDistance");
+        private static readonly int PropThinRamp = Shader.PropertyToID("_ThinRampDistance");
         private static readonly int PropSizeScale = Shader.PropertyToID("_SizeScale");
         private static readonly int PropCoverageComp = Shader.PropertyToID("_CoverageCompensation");
         private static readonly int PropUseUniformScale = Shader.PropertyToID("_UseUniformScale");
@@ -347,6 +350,7 @@ namespace GrassSystem.Consoles
         {
             farKeepFraction = Mathf.Clamp01(farKeepFraction);
             thinStartDistance = Mathf.Max(0f, thinStartDistance);
+            thinRampDistance = Mathf.Max(0.01f, thinRampDistance);
             if (!Application.isPlaying && isInitialized)
             {
                 UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
@@ -633,7 +637,7 @@ namespace GrassSystem.Consoles
             }
 
             bool isCustomMeshMode = EffectiveGrassMode == GrassMode.CustomMesh;
-            materialInstance.SetFloat("_UseUniformScale", isCustomMeshMode ? 1 : 0);
+            materialInstance.SetFloat(PropUseUniformScale, isCustomMeshMode ? 1 : 0);
 
             if (isCustomMeshMode)
             {
@@ -821,13 +825,14 @@ namespace GrassSystem.Consoles
             bool pt = p != null && p.overrideThinning;
             float effFarKeep = ov ? GrassConsoleDebug.FarKeepFraction : (pt ? p.farKeepFraction : farKeepFraction);
             float effThinStart = ov ? GrassConsoleDebug.ThinStartDistance : (pt ? p.thinStartDistance : thinStartDistance);
+            float effThinRamp = ov ? GrassConsoleDebug.ThinRampDistance : (pt ? p.thinRampDistance : thinRampDistance);
             float effCoverage = ov ? GrassConsoleDebug.CoverageCompensation : (pt ? p.coverageCompensation : coverageCompensation);
             Vector2 effSize = ov ? GrassConsoleDebug.SizeScale : (pt ? p.sizeScale : sizeScale);
             cullingShaderInstance.SetFloat(PropFarKeep, Mathf.Clamp01(effFarKeep));
             cullingShaderInstance.SetFloat(PropThinStart, effThinStart);
+            cullingShaderInstance.SetFloat(PropThinRamp, Mathf.Max(0.01f, effThinRamp));
             cullingShaderInstance.SetVector(PropSizeScale, effSize);
             cullingShaderInstance.SetFloat(PropCoverageComp, Mathf.Clamp01(effCoverage));
-            cullingShaderInstance.SetFloat(PropUseUniformScale, (EffectiveGrassMode == GrassMode.CustomMesh) ? 1f : 0f);
 
             cullingShaderInstance.SetFloat(PropMinFade, EffectiveMinFadeDistance);
             cullingShaderInstance.SetFloat(PropMaxDraw, EffectiveMaxDrawDistance);

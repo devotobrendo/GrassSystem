@@ -23,6 +23,7 @@ namespace GrassSystem.Consoles
         public bool overrideThinning;
         [Range(0f, 1f)] public float farKeepFraction = 1f;
         public float thinStartDistance = 10f;
+        public float thinRampDistance = 5f;
         [Range(0f, 1f)] public float coverageCompensation = 1f;
         public Vector2 sizeScale = Vector2.one;
 

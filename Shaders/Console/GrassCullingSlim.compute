@@ -26,9 +26,9 @@ float _MinFadeDistance;
 float _MaxDrawDistance;
 float _FarKeepFraction;
 float _ThinStartDistance;
+float _ThinRampDistance;
 float2 _SizeScale;
 float _CoverageCompensation;
-float _UseUniformScale;
 
 uint _InstanceCount;
 
@@ -66,7 +66,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (distScale <= 0.01)
         return;
 
-    float thinT = saturate((dist - _ThinStartDistance) / 5.0);
+    float thinT = saturate((dist - _ThinStartDistance) / max(_ThinRampDistance, 0.001));
     float keep = lerp(1.0, _FarKeepFraction, thinT);
 
     uint h = id.x;
@@ -79,7 +79,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (rnd > keep)
         return;
 
-    float widthComp = (_UseUniformScale > 0.5) ? 1.0 : lerp(1.0, rsqrt(max(keep, 0.001)), _CoverageCompensation);
+    float widthComp = lerp(1.0, rsqrt(max(keep, 0.001)), _CoverageCompensation);
 
     GrassOutput output;
     output.position = input.position;

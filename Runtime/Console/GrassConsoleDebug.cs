@@ -21,6 +21,7 @@ namespace GrassSystem.Consoles
         public static bool ReadoutEnabled;
         public static float FarKeepFraction = 1f;
         public static float ThinStartDistance = 0f;
+        public static float ThinRampDistance = 5f;
         public static float CoverageCompensation = 0f;
         public static Vector2 SizeScale = Vector2.one;
         public static bool ModeOverrideEnabled;

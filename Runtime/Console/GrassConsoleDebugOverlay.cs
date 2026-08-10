@@ -28,16 +28,17 @@ namespace GrassSystem.Consoles
         private const int RowInstanceDensity = 1;
         private const int RowFarKeep = 2;
         private const int RowThinStart = 3;
-        private const int RowCoverage = 4;
-        private const int RowMinFade = 5;
-        private const int RowMaxDraw = 6;
-        private const int RowSizeX = 7;
-        private const int RowSizeY = 8;
-        private const int RowGrassMode = 9;
-        private const int RowBladeType = 10;
-        private const int RowAlbedo = 11;
-        private const int RowGroundBlend = 12;
-        private const int RowSystem = 13;
+        private const int RowThinRamp = 4;
+        private const int RowCoverage = 5;
+        private const int RowMinFade = 6;
+        private const int RowMaxDraw = 7;
+        private const int RowSizeX = 8;
+        private const int RowSizeY = 9;
+        private const int RowGrassMode = 10;
+        private const int RowBladeType = 11;
+        private const int RowAlbedo = 12;
+        private const int RowGroundBlend = 13;
+        private const int RowSystem = 14;
 
         private const float DISTANCE_MAX = 500f;
 
@@ -50,6 +51,7 @@ namespace GrassSystem.Consoles
             "Instance Density",
             "Far Keep",
             "Thin Start",
+            "Thin Ramp",
             "Coverage",
             "Min Fade Dist",
             "Max Draw Dist",
@@ -62,8 +64,8 @@ namespace GrassSystem.Consoles
             "System"
         };
 
-        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 0.05f, 1f, 1f, 0.02f, 0.02f, 0f, 0f, 0f, 0.05f, 0f };
-        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 0.2f, 5f, 5f, 0.15f, 0.15f, 0f, 0f, 0f, 0.2f, 0f };
+        private static readonly float[] FineStep = { 0f, 0.05f, 0.05f, 1f, 1f, 0.05f, 1f, 1f, 0.02f, 0.02f, 0f, 0f, 0f, 0.05f, 0f };
+        private static readonly float[] CoarseStep = { 0f, 0.2f, 0.2f, 5f, 5f, 0.2f, 5f, 5f, 0.15f, 0.15f, 0f, 0f, 0f, 0.2f, 0f };
 
         private static readonly GrassProceduralType[] BladeTypeCycle =
         {
@@ -486,6 +488,7 @@ namespace GrassSystem.Consoles
 
             GrassConsoleDebug.FarKeepFraction = source.farKeepFraction;
             GrassConsoleDebug.ThinStartDistance = source.thinStartDistance;
+            GrassConsoleDebug.ThinRampDistance = source.thinRampDistance;
             GrassConsoleDebug.CoverageCompensation = source.coverageCompensation;
             GrassConsoleDebug.SizeScale = source.sizeScale;
             GrassConsoleDebug.InstanceDensity = source.instanceDensity;
@@ -570,6 +573,7 @@ namespace GrassSystem.Consoles
                 case RowGroundBlend: return GrassConsoleDebug.GroundBlend;
                 case RowFarKeep: return GrassConsoleDebug.FarKeepFraction;
                 case RowThinStart: return GrassConsoleDebug.ThinStartDistance;
+                case RowThinRamp: return GrassConsoleDebug.ThinRampDistance;
                 case RowCoverage: return GrassConsoleDebug.CoverageCompensation;
                 case RowMinFade: return GrassConsoleDebug.MinFadeDistance;
                 case RowMaxDraw: return GrassConsoleDebug.MaxDrawDistance;
@@ -596,6 +600,9 @@ namespace GrassSystem.Consoles
                     break;
                 case RowThinStart:
                     GrassConsoleDebug.ThinStartDistance = Mathf.Clamp(value, 0f, 50f);
+                    break;
+                case RowThinRamp:
+                    GrassConsoleDebug.ThinRampDistance = Mathf.Clamp(value, 0.01f, DISTANCE_MAX);
                     break;
                 case RowCoverage:
                     GrassConsoleDebug.CoverageCompensation = Mathf.Clamp01(value);
@@ -624,6 +631,7 @@ namespace GrassSystem.Consoles
                 case RowInstanceDensity: return (0.01f, 1f);
                 case RowGroundBlend: return (0f, 1f);
                 case RowThinStart: return (0f, 50f);
+                case RowThinRamp: return (0.01f, DISTANCE_MAX);
                 case RowMinFade: return (0f, DISTANCE_MAX);
                 case RowMaxDraw: return (0f, DISTANCE_MAX);
                 case RowSizeX: return (0.01f, 3f);
@@ -666,7 +674,7 @@ namespace GrassSystem.Consoles
             }
 
             float value = GetRowValue(row);
-            bool isDistance = row == RowThinStart || row == RowMinFade || row == RowMaxDraw;
+            bool isDistance = row == RowThinStart || row == RowThinRamp || row == RowMinFade || row == RowMaxDraw;
             return isDistance ? value.ToString("F1") : value.ToString("F2");
         }
 

@@ -16,6 +16,7 @@ namespace GrassSystem.Consoles
         public bool overrideThinning;
         public float farKeepFraction = 1f;
         public float thinStartDistance;
+        public float thinRampDistance = 5f;
         public float coverageCompensation;
         public Vector2 sizeScale = Vector2.one;
 
@@ -45,6 +46,7 @@ namespace GrassSystem.Consoles
                 overrideThinning = GrassConsoleDebug.OverrideEnabled,
                 farKeepFraction = GrassConsoleDebug.FarKeepFraction,
                 thinStartDistance = GrassConsoleDebug.ThinStartDistance,
+                thinRampDistance = GrassConsoleDebug.ThinRampDistance,
                 coverageCompensation = GrassConsoleDebug.CoverageCompensation,
                 sizeScale = GrassConsoleDebug.SizeScale,
 
@@ -119,6 +121,7 @@ namespace GrassSystem.Consoles
             profile.overrideThinning = overrideThinning;
             profile.farKeepFraction = Mathf.Clamp01(farKeepFraction);
             profile.thinStartDistance = Mathf.Max(0f, thinStartDistance);
+            profile.thinRampDistance = Mathf.Max(0.01f, thinRampDistance);
             profile.coverageCompensation = Mathf.Clamp01(coverageCompensation);
             profile.sizeScale = sizeScale;
 

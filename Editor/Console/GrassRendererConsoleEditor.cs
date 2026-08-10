@@ -17,6 +17,7 @@ namespace GrassSystem.Consoles.Editor
         private SerializedProperty propBakedDecalAsset;
         private SerializedProperty propFarKeepFraction;
         private SerializedProperty propThinStartDistance;
+        private SerializedProperty propThinRampDistance;
         private SerializedProperty propCoverageCompensation;
         private SerializedProperty propInstanceDensity;
         private SerializedProperty propSizeScale;
@@ -57,6 +58,7 @@ namespace GrassSystem.Consoles.Editor
             propBakedDecalAsset = serializedObject.FindProperty("bakedDecalAsset");
             propFarKeepFraction = serializedObject.FindProperty("farKeepFraction");
             propThinStartDistance = serializedObject.FindProperty("thinStartDistance");
+            propThinRampDistance = serializedObject.FindProperty("thinRampDistance");
             propCoverageCompensation = serializedObject.FindProperty("coverageCompensation");
             propInstanceDensity = serializedObject.FindProperty("instanceDensity");
             propSizeScale = serializedObject.FindProperty("sizeScale");
@@ -205,7 +207,11 @@ namespace GrassSystem.Consoles.Editor
                 EditorGUI.BeginChangeCheck();
                 EditorGUILayout.PropertyField(propFarKeepFraction);
                 EditorGUILayout.PropertyField(propThinStartDistance);
+                EditorGUILayout.PropertyField(propThinRampDistance);
                 EditorGUILayout.PropertyField(propCoverageCompensation);
+
+                if (console.EffectiveMode == GrassMode.CustomMesh && propCoverageCompensation.floatValue > 0f)
+                    EditorGUILayout.HelpBox("Custom Mesh scales uniformly, so coverage compensation grows the survivors in height too, not just width. Lower it if the far grass starts looking too tall.", MessageType.Info);
                 if (EditorGUI.EndChangeCheck())
                     SceneView.RepaintAll();
             }
