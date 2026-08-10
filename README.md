@@ -66,7 +66,7 @@ Right-click in Project > **Create > Grass System > Grass Settings**
 2. Add the `GrassRenderer` component
 3. Assign your Grass Settings asset
 4. Assign the culling shader (Shaders/GrassCulling.compute)
-5. Assign a grass material (create one using Shaders/GrassLit or GrassUnlit)
+5. Assign a grass material (create one using Shaders/GrassUnlit)
 
 ### 3. Paint Grass
 1. Open **Window > Grass System > Grass Painter**
@@ -224,7 +224,7 @@ Projects a texture onto grass, allowing you to "paint" patterns, logos, or effec
 - Full rotation support via Transform component
 - Scene view gizmos for easy positioning
 - Alpha-blended projection
-- Works with both GrassLit and GrassUnlit shaders
+- Works with the GrassUnlit shader
 
 **Usage Example:**
 
@@ -469,10 +469,15 @@ GrassSystem/
 │   ├── SO_GrassSettingsEditor.cs
 │   └── GrassMeshGenerator.cs
 ├── Shaders/          # Grass shaders
-│   ├── GrassLit.shader
 │   ├── GrassUnlit.shader
 │   ├── GrassCulling.compute
-│   └── GrassCommon.hlsl
+│   ├── GrassCommon.hlsl
+│   └── Console/      # Slim console fork
+│       ├── GrassUnlitConsole.shader
+│       ├── GrassCullingSlim.compute
+│       ├── GrassCommonSlim.hlsl
+│       ├── GroundBlend.shader      # ground borrows the grass colour
+│       └── GrassGroundBlend.hlsl   # drop-in for your own ground shader
 ├── Textures/         # Default grass textures
 └── Presets/          # Example settings and materials
 ```
