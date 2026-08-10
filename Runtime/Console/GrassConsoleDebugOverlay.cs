@@ -89,6 +89,7 @@ namespace GrassSystem.Consoles
 
         private bool showOverlay;
         private bool showDump;
+        private bool dumpDirty = true;
         private string dumpJson = string.Empty;
         private int selectedRow;
         private GrassSystemState systemState;
@@ -155,6 +156,7 @@ namespace GrassSystem.Consoles
 
         private void ResetPerfStats()
         {
+            dumpDirty = true;
             perfIndex = 0;
             perfCount = 0;
             perfDisplayTimer = 0f;
@@ -253,10 +255,16 @@ namespace GrassSystem.Consoles
         private void ToggleDump()
         {
             showDump = !showDump;
-            if (!showDump) return;
+            RefreshDump();
 
+            if (!showDump)
+                Debug.Log($"[GrassTuning] {dumpJson}");
+        }
+
+        private void RefreshDump()
+        {
             dumpJson = GrassTuningSnapshot.Capture().ToJson();
-            Debug.Log($"[GrassTuning] {dumpJson}");
+            dumpDirty = false;
         }
 
         private bool GetGamepadTogglePressed()
@@ -668,8 +676,13 @@ namespace GrassSystem.Consoles
 
             InitStyles();
             DrawOverlay();
-            if (showDump)
-                DrawDumpPanel();
+
+            if (!showDump) return;
+
+            if (dumpDirty)
+                RefreshDump();
+
+            DrawDumpPanel();
         }
 
         private void DrawDumpPanel()
@@ -682,8 +695,8 @@ namespace GrassSystem.Consoles
 
             GUI.Box(new Rect(x, y, width, height), "", boxStyle);
 
-            string hint = Gamepad.current != null ? "[X] close" : $"[{dumpKey}] close";
-            string body = $"<b>TUNING SNAPSHOT</b>\n<size=11><color=#888888>logged as [GrassTuning] - or photograph this   {hint}</color></size>\n\n<size=12>{dumpJson}</size>";
+            string hint = Gamepad.current != null ? "[X]" : $"[{dumpKey}]";
+            string body = $"<b>TUNING SNAPSHOT</b>  <size=11><color=#55DD55>LIVE</color></size>\n<size=11><color=#888888>tracks the panel - {hint} closes and logs it as [GrassTuning]</color></size>\n\n<size=12>{dumpJson}</size>";
 
             GUI.Label(new Rect(x + 10f, y + 5f, width - 20f, height - 10f), body, labelStyle);
         }
