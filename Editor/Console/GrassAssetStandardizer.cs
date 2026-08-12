@@ -189,6 +189,18 @@ namespace GrassSystem.Consoles.Editor
             return result;
         }
 
+        public static string CanonicalSceneName(string sceneName)
+        {
+            if (string.IsNullOrEmpty(sceneName)) return null;
+            return ResolveScenePascal(sceneName, new List<string>(sceneName.Split('_')));
+        }
+
+        public static string SceneDayNight(string sceneName)
+        {
+            if (string.IsNullOrEmpty(sceneName)) return null;
+            return DetectDayNight(sceneName);
+        }
+
         private static void EnsureFolder(string assetFolderPath)
         {
             if (string.IsNullOrEmpty(assetFolderPath)) return;
