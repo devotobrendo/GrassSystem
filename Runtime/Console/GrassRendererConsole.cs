@@ -301,6 +301,7 @@ namespace GrassSystem.Consoles
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
 #if UNITY_EDITOR
             UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+            InstallEditorSceneHook();
 #endif
 
             if (!GrassConsoleDebug.ActiveRenderers.Contains(this))
@@ -341,6 +342,38 @@ namespace GrassSystem.Consoles
         private void OnApplicationQuit() => Cleanup();
 
 #if UNITY_EDITOR
+        private static bool editorSceneHookInstalled;
+        private static Matrix4x4 lastSceneCullMatrix;
+
+        private static void InstallEditorSceneHook()
+        {
+            if (editorSceneHookInstalled)
+                return;
+
+            editorSceneHookInstalled = true;
+            UnityEditor.SceneView.duringSceneGui += OnEditorSceneGui;
+        }
+
+        private static void OnEditorSceneGui(UnityEditor.SceneView view)
+        {
+            if (Application.isPlaying || GrassConsoleDebug.ActiveRenderers.Count == 0)
+                return;
+
+            if (Event.current == null || Event.current.type != EventType.Repaint)
+                return;
+
+            if (view != UnityEditor.SceneView.lastActiveSceneView || view.camera == null)
+                return;
+
+            Matrix4x4 cullMatrix = view.camera.cullingMatrix;
+            if (cullMatrix == lastSceneCullMatrix)
+                return;
+
+            lastSceneCullMatrix = cullMatrix;
+            UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
+            view.Repaint();
+        }
+
         private void OnBeforeAssemblyReload()
         {
             Cleanup();
