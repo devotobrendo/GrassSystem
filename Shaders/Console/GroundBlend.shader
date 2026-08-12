@@ -8,9 +8,11 @@ Shader "GrassSystem/GroundBlend"
         _BaseColor  ("Base Color", Color)        = (1,1,1,1)
         _GrassBlend ("Grass Blend", Range(0, 1)) = 0.6
 
-        [HideInInspector] _GrassOverrideMap ("Grass Override Map", 2D)     = "black" {}
-        [HideInInspector] _GrassMultiplyMap ("Grass Multiply Map", 2D)     = "white" {}
-        [HideInInspector] _GrassDecalBounds ("Grass Decal Bounds", Vector) = (0, 0, 100, 100)
+        [Enum(Off,0,On,1)] _ReceiveShadows ("Receive Shadows", Float) = 1
+
+        [NoScaleOffset] _GrassOverrideMap ("Grass Override Map (from Bind Ground Blend)", 2D) = "black" {}
+        [NoScaleOffset] _GrassMultiplyMap ("Grass Multiply Map (from Bind Ground Blend)", 2D) = "black" {}
+        _GrassDecalBounds ("Grass Decal Bounds (minX, minZ, sizeX, sizeZ)", Vector) = (0, 0, 0, 0)
     }
 
     SubShader
@@ -29,6 +31,7 @@ Shader "GrassSystem/GroundBlend"
                 float4 _BaseMap_ST;
                 float4 _BaseColor;
                 float  _GrassBlend;
+                float  _ReceiveShadows;
                 float4 _GrassDecalBounds;
             CBUFFER_END
 
@@ -52,6 +55,8 @@ Shader "GrassSystem/GroundBlend"
 
             #pragma multi_compile _ LIGHTMAP_ON
             #pragma multi_compile _ DIRLIGHTMAP_COMBINED
+            #pragma multi_compile_fragment _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fog
             #pragma skip_variants STEREO_CUBEMAP_RENDER_ON STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON UNITY_SINGLE_PASS_STEREO DOTS_INSTANCING_ON
 
@@ -106,7 +111,10 @@ Shader "GrassSystem/GroundBlend"
 
                 half3 bakedGI = SAMPLE_GI(IN.lightmapUV, IN.vertexSH, normalWS);
 
-                half3 color = albedo * bakedGI;
+                Light mainLight = GetMainLight(TransformWorldToShadowCoord(IN.positionWS));
+                half shadowAtten = lerp(1.0h, half(mainLight.shadowAttenuation), half(_ReceiveShadows));
+
+                half3 color = albedo * bakedGI * shadowAtten;
                 color = MixFog(color, IN.fogFactor);
 
                 return half4(color, 1.0h);
