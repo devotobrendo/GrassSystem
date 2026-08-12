@@ -58,6 +58,7 @@ namespace GrassSystem.Consoles.Editor
         private int standardizeMovableCount;
         private string standardizeSummaryText = string.Empty;
         private string standardizeScopeNote = string.Empty;
+        private string standardizeCacheNote = string.Empty;
         private bool standardizeOpenSceneOnly = true;
 
         private MigrationResult lastMigration;
@@ -562,6 +563,9 @@ namespace GrassSystem.Consoles.Editor
             if (!string.IsNullOrEmpty(standardizeScopeNote))
                 EditorGUILayout.LabelField(standardizeScopeNote, EditorStyles.miniLabel);
 
+            if (!string.IsNullOrEmpty(standardizeCacheNote))
+                EditorGUILayout.LabelField(standardizeCacheNote, EditorStyles.miniLabel);
+
             if (lastApply != null)
                 EditorGUILayout.LabelField($"Moved {lastApply.moved}   Skipped {lastApply.skipped}   Failed {lastApply.failed}", EditorStyles.miniLabel);
         }
@@ -687,7 +691,12 @@ namespace GrassSystem.Consoles.Editor
 
         private void BuildStandardizePlan()
         {
+            bool reusedCache = GrassAssetStandardizer.HasSceneDependencyCache;
             standardizePlan = FilterStandardizePlan(GrassAssetStandardizer.BuildPlan());
+
+            standardizeCacheNote = reusedCache
+                ? "Reusing this session's scene dependency snapshot. Press Rescan up top if scenes or references changed since."
+                : string.Empty;
 
             int ready = 0, ambiguous = 0, already = 0, deferred = 0, unused = 0;
             for (int i = 0; i < standardizePlan.Count; i++)
@@ -716,6 +725,7 @@ namespace GrassSystem.Consoles.Editor
             try
             {
                 ResolveProfileSets();
+                GrassAssetStandardizer.InvalidateSceneDependencyCache();
 
                 HashSet<string> dataAssetPaths = CollectPaths("t:GrassDataAsset");
                 HashSet<string> consoleDataPaths = CollectPaths("t:GrassDataConsoleAsset");

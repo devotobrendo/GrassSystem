@@ -109,6 +109,13 @@ namespace GrassSystem.Consoles.Editor
             public HashSet<string> deps;
         }
 
+        public static bool HasSceneDependencyCache => cachedSceneInfos != null;
+
+        public static void InvalidateSceneDependencyCache()
+        {
+            cachedSceneInfos = null;
+        }
+
         public static List<StandardizePlanEntry> BuildPlan()
         {
             var entries = new List<StandardizePlanEntry>();
@@ -116,7 +123,7 @@ namespace GrassSystem.Consoles.Editor
 
             try
             {
-                sceneInfos = BuildSceneInfos();
+                sceneInfos = GetSceneInfos();
             }
             finally
             {
@@ -225,6 +232,7 @@ namespace GrassSystem.Consoles.Editor
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+            InvalidateSceneDependencyCache();
             return result;
         }
 
@@ -277,6 +285,17 @@ namespace GrassSystem.Consoles.Editor
             return paths;
         }
 
+        private static List<SceneUsageInfo> cachedSceneInfos;
+
+        private static List<SceneUsageInfo> GetSceneInfos()
+        {
+            if (cachedSceneInfos != null)
+                return cachedSceneInfos;
+
+            cachedSceneInfos = BuildSceneInfos();
+            return cachedSceneInfos;
+        }
+
         private static List<SceneUsageInfo> BuildSceneInfos()
         {
             var sceneInfos = new List<SceneUsageInfo>();
@@ -289,7 +308,10 @@ namespace GrassSystem.Consoles.Editor
                 string scenePath = scenePaths[i];
                 string sceneName = Path.GetFileNameWithoutExtension(scenePath);
 
-                EditorUtility.DisplayProgressBar("Standardize", sceneName, (float)i / scenePaths.Length);
+                EditorUtility.DisplayProgressBar(
+                    "Standardize",
+                    $"Reading dependencies of {sceneName} - every scene has to be read once to tell a scene-owned asset from a shared one",
+                    (float)i / scenePaths.Length);
 
                 var tokens = new List<string>(sceneName.Split('_'));
                 string canonicalScene = ResolveScenePascal(sceneName, tokens);
