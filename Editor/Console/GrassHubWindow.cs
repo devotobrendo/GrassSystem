@@ -40,9 +40,6 @@ namespace GrassSystem.Consoles.Editor
         private const string MenuPathConverter = "Tools/Grass System/Convert to Console (Slim)";
         private const string MenuPathDashboard = "Tools/Grass System/Migration Dashboard";
 
-        private const string ProfileSetDefaultFolder = "Assets/Grass/_Shared";
-        private const string ProfileSetPrefsKey = "GrassHub.SelectedProfileSetPath";
-
         private const float SceneColumnWidth = 250f;
         private const float StateColumnWidth = 130f;
         private const float ActionColumnWidth = 170f;
@@ -51,14 +48,7 @@ namespace GrassSystem.Consoles.Editor
         private readonly List<SceneScanInfo> scanInfos = new List<SceneScanInfo>();
         private readonly List<SceneRow> sceneRows = new List<SceneRow>();
 
-        private GrassPlatformProfileSet[] foundProfileSets = Array.Empty<GrassPlatformProfileSet>();
-        private string[] foundProfileSetNames = Array.Empty<string>();
         private readonly HashSet<string> profileSetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private int selectedProfileSetIndex = -1;
-        private GrassPlatformProfileSet profileSet;
-        private int selectedSetUsageCount;
-        private string blastRadiusWarningText = string.Empty;
-        private MessageType blastRadiusWarningType = MessageType.Info;
 
         private GrassProfileSceneStatus profileSceneStatus;
         private GrassProfileApplyResult lastProfileApply;
@@ -95,6 +85,8 @@ namespace GrassSystem.Consoles.Editor
         private static readonly GUIContent RevertButtonContent = new GUIContent("Revert Open Scene", "Reverts console migration in the currently open scene. Requires a valid open scene.");
         private static readonly GUIContent RenameButtonContent = new GUIContent("Rename Scene Objects", "Renames grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention. Undoable. Requires a valid open scene.");
         private static readonly GUIContent CreateProfilesContent = new GUIContent("Create Profiles For Open Scene", "Creates the Full and Switch profiles for the open scene under Assets/Grass/<Scene>/Profiles, fills both with the values this scene is using right now, and assigns the set to its renderers. Existing profiles are never overwritten.");
+        private static readonly GUIContent SaveProfilesContent = new GUIContent("Save Assets", "Writes edited profiles to disk. Changing a profile in the Inspector only marks it dirty - Unity flushes it on File > Save Project, on quit, or here.");
+        private static readonly GUIContent RefreshProfilesContent = new GUIContent("Refresh", "Re-reads the open scene and its profile assets, and updates that scene's row on the board.");
 
         [MenuItem("Tools/Grass System/Grass Hub", priority = 0)]
         private static void Open()
@@ -279,33 +271,6 @@ namespace GrassSystem.Consoles.Editor
             }
 
             EditorGUILayout.Space(2);
-
-            if (foundProfileSets.Length > 1)
-            {
-                EditorGUI.BeginChangeCheck();
-                selectedProfileSetIndex = EditorGUILayout.Popup("Profile Set", selectedProfileSetIndex, foundProfileSetNames);
-                if (EditorGUI.EndChangeCheck())
-                {
-                    profileSet = foundProfileSets[selectedProfileSetIndex];
-                    EditorPrefs.SetString(ProfileSetPrefsKey, AssetDatabase.GetAssetPath(profileSet));
-                    RecomputeRows();
-                }
-            }
-            else if (foundProfileSets.Length == 1)
-            {
-                EditorGUILayout.LabelField("Profile Set", profileSet != null ? profileSet.name : "-");
-            }
-
-            if (foundProfileSets.Length == 0)
-            {
-                EditorGUILayout.HelpBox("No GrassPlatformProfileSet found in the project.", MessageType.Warning);
-                if (GUILayout.Button("Create Profile Set", GUILayout.Width(160)))
-                    CreateProfileSet();
-            }
-            else if (profileSet != null)
-            {
-                EditorGUILayout.HelpBox(blastRadiusWarningText, blastRadiusWarningType);
-            }
         }
 
         private void DrawBoard()
@@ -402,9 +367,17 @@ namespace GrassSystem.Consoles.Editor
                 GUILayout.Label(ProfileStatusText(status), status.CanCreate ? stateWarnStyle : stateReadyStyle);
                 GUILayout.FlexibleSpace();
 
-                if (GUILayout.Button("Refresh", GUILayout.Width(70)))
+                if (GUILayout.Button(SaveProfilesContent, GUILayout.Width(90)))
+                {
+                    AssetDatabase.SaveAssets();
+                    profileSceneStatus = null;
+                    Repaint();
+                }
+
+                if (GUILayout.Button(RefreshProfilesContent, GUILayout.Width(70)))
                 {
                     profileSceneStatus = null;
+                    RecomputeRows();
                     Repaint();
                 }
             }
@@ -473,6 +446,8 @@ namespace GrassSystem.Consoles.Editor
         {
             lastProfileApply = GrassProfileFactory.CreateForOpenScene();
             profileSceneStatus = GrassProfileFactory.InspectOpenScene();
+            ResolveProfileSets();
+            RecomputeRows();
             Repaint();
         }
 
@@ -643,35 +618,23 @@ namespace GrassSystem.Consoles.Editor
             }
         }
 
-        private void CreateProfileSet()
+        private static bool OpenSceneRenderersHaveProfileSet()
         {
-            EnsureFolder(ProfileSetDefaultFolder);
-            string path = AssetDatabase.GenerateUniqueAssetPath($"{ProfileSetDefaultFolder}/GrassProfileSet.asset");
+            Scene scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid())
+                return false;
 
-            var asset = ScriptableObject.CreateInstance<GrassPlatformProfileSet>();
-            AssetDatabase.CreateAsset(asset, path);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
+            GrassRendererConsole[] all = UnityEngine.Object.FindObjectsByType<GrassRendererConsole>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            bool any = false;
 
-            EditorGUIUtility.PingObject(asset);
-            ResolveProfileSets();
-            RecomputeRows();
-            Repaint();
-        }
-
-        private static void EnsureFolder(string assetFolderPath)
-        {
-            if (AssetDatabase.IsValidFolder(assetFolderPath)) return;
-
-            string[] segments = assetFolderPath.Split('/');
-            string current = segments[0];
-            for (int i = 1; i < segments.Length; i++)
+            for (int i = 0; i < all.Length; i++)
             {
-                string next = $"{current}/{segments[i]}";
-                if (!AssetDatabase.IsValidFolder(next))
-                    AssetDatabase.CreateFolder(current, segments[i]);
-                current = next;
+                if (all[i] == null || all[i].gameObject.scene != scene) continue;
+                if (all[i].profileSet == null) return false;
+                any = true;
             }
+
+            return any;
         }
 
         private void BuildStandardizePlan()
@@ -781,46 +744,10 @@ namespace GrassSystem.Consoles.Editor
         private void ResolveProfileSets()
         {
             string[] guids = AssetDatabase.FindAssets("t:GrassPlatformProfileSet");
-            foundProfileSets = new GrassPlatformProfileSet[guids.Length];
-            foundProfileSetNames = new string[guids.Length];
             profileSetPaths.Clear();
 
             for (int i = 0; i < guids.Length; i++)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
-                foundProfileSets[i] = AssetDatabase.LoadAssetAtPath<GrassPlatformProfileSet>(path);
-                foundProfileSetNames[i] = foundProfileSets[i] != null ? foundProfileSets[i].name : Path.GetFileNameWithoutExtension(path);
-                profileSetPaths.Add(path);
-            }
-
-            if (foundProfileSets.Length == 1)
-            {
-                selectedProfileSetIndex = 0;
-                profileSet = foundProfileSets[0];
-            }
-            else if (foundProfileSets.Length > 1)
-            {
-                string savedPath = EditorPrefs.GetString(ProfileSetPrefsKey, string.Empty);
-                int idx = -1;
-                if (!string.IsNullOrEmpty(savedPath))
-                {
-                    for (int i = 0; i < foundProfileSets.Length; i++)
-                    {
-                        if (foundProfileSets[i] != null && string.Equals(AssetDatabase.GetAssetPath(foundProfileSets[i]), savedPath, StringComparison.OrdinalIgnoreCase))
-                        {
-                            idx = i;
-                            break;
-                        }
-                    }
-                }
-                selectedProfileSetIndex = idx >= 0 ? idx : 0;
-                profileSet = foundProfileSets[selectedProfileSetIndex];
-            }
-            else
-            {
-                selectedProfileSetIndex = -1;
-                profileSet = null;
-            }
+                profileSetPaths.Add(AssetDatabase.GUIDToAssetPath(guids[i]));
         }
 
         private void RecomputeRows()
@@ -828,20 +755,19 @@ namespace GrassSystem.Consoles.Editor
             sceneRows.Clear();
 
             string activeScenePath = SceneManager.GetActiveScene().path;
-            string profilePath = profileSet != null ? AssetDatabase.GetAssetPath(profileSet) : null;
             bool anyProfileSetExists = profileSetPaths.Count > 0;
-            selectedSetUsageCount = 0;
+            bool openSceneHasProfile = OpenSceneRenderersHaveProfileSet();
 
             for (int i = 0; i < scanInfos.Count; i++)
             {
                 SceneScanInfo info = scanInfos[i];
-                bool hasProfileRef = anyProfileSetExists && info.deps.Overlaps(profileSetPaths);
-                SceneGrassState state = DeriveState(info, anyProfileSetExists, hasProfileRef);
-
-                if (profilePath != null && info.deps.Contains(profilePath))
-                    selectedSetUsageCount++;
-
                 bool isOpen = string.Equals(info.scenePath, activeScenePath, StringComparison.OrdinalIgnoreCase);
+
+                bool hasProfileRef = isOpen
+                    ? openSceneHasProfile
+                    : anyProfileSetExists && info.deps.Overlaps(profileSetPaths);
+
+                SceneGrassState state = DeriveState(info, anyProfileSetExists, hasProfileRef);
 
                 sceneRows.Add(new SceneRow
                 {
@@ -852,23 +778,6 @@ namespace GrassSystem.Consoles.Editor
                     actionLabel = ActionLabel(state),
                     isOpenScene = isOpen,
                 });
-            }
-
-            string setName = profileSet != null ? profileSet.name : "-";
-            if (selectedSetUsageCount > 1)
-            {
-                blastRadiusWarningText = $"{setName} is shared by {selectedSetUsageCount} scenes - editing it affects all of them. Use Profiles below to give each scene its own pair.";
-                blastRadiusWarningType = MessageType.Warning;
-            }
-            else if (selectedSetUsageCount == 1)
-            {
-                blastRadiusWarningText = $"{setName} is used by 1 scene.";
-                blastRadiusWarningType = MessageType.Info;
-            }
-            else
-            {
-                blastRadiusWarningText = $"{setName} is not referenced by any scanned scene.";
-                blastRadiusWarningType = MessageType.Info;
             }
         }
 
