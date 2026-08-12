@@ -46,6 +46,7 @@ namespace GrassSystem.Consoles.Editor
         private const float SceneColumnWidth = 250f;
         private const float StateColumnWidth = 130f;
         private const float ActionColumnWidth = 170f;
+        private const float OpenColumnWidth = 56f;
 
         private readonly List<SceneScanInfo> scanInfos = new List<SceneScanInfo>();
         private readonly List<SceneRow> sceneRows = new List<SceneRow>();
@@ -83,6 +84,8 @@ namespace GrassSystem.Consoles.Editor
         private GUIStyle stateNeutralStyle;
         private GUIStyle stateGrayStyle;
 
+        private GUIContent buildFilterContent;
+        private GUIContent openButtonContent;
         private GUIContent migrateButtonContent;
         private GUIContent revertButtonContent;
         private GUIContent renameButtonContent;
@@ -95,13 +98,16 @@ namespace GrassSystem.Consoles.Editor
         }
 
         private const string SceneFolderPrefKey = "GrassHub.SceneSearchFolder";
+        private const string OnlyInBuildPrefKey = "GrassHub.OnlyScenesInBuild";
         private const string DefaultSceneFolder = "Assets/Scenes";
         private string sceneSearchFolder = DefaultSceneFolder;
+        private bool onlyScenesInBuild = true;
 
         private void OnEnable()
         {
             minSize = new Vector2(820, 620);
             sceneSearchFolder = EditorPrefs.GetString(SceneFolderPrefKey, DefaultSceneFolder);
+            onlyScenesInBuild = EditorPrefs.GetBool(OnlyInBuildPrefKey, true);
             ResolveProfileSets();
         }
 
@@ -126,6 +132,9 @@ namespace GrassSystem.Consoles.Editor
 
             stateGrayStyle = new GUIStyle(EditorStyles.label);
             stateGrayStyle.normal.textColor = Color.gray;
+
+            buildFilterContent = new GUIContent("Scenes in build", "Scans only the scenes enabled in Build Settings. Uncheck to scan a folder instead. Either way, scenes without grass are left out.");
+            openButtonContent = new GUIContent("Open", "Opens this scene, prompting to save the current one first.");
 
             migrateButtonContent = new GUIContent("Migrate Open Scene", "Adds console renderers and creates assets for the currently open scene. Requires a valid open scene.");
             revertButtonContent = new GUIContent("Revert Open Scene", "Reverts console migration in the currently open scene. Requires a valid open scene.");
@@ -241,17 +250,31 @@ namespace GrassSystem.Consoles.Editor
             {
                 EditorGUILayout.LabelField("Grass Hub", titleStyle);
                 GUILayout.FlexibleSpace();
-                EditorGUILayout.LabelField("Scenes in", GUILayout.Width(58));
                 EditorGUI.BeginChangeCheck();
-                sceneSearchFolder = EditorGUILayout.TextField(sceneSearchFolder, GUILayout.Width(190));
+                onlyScenesInBuild = GUILayout.Toggle(onlyScenesInBuild, buildFilterContent, GUILayout.Width(112));
                 if (EditorGUI.EndChangeCheck())
-                    EditorPrefs.SetString(SceneFolderPrefKey, sceneSearchFolder);
+                    EditorPrefs.SetBool(OnlyInBuildPrefKey, onlyScenesInBuild);
+
+                using (new EditorGUI.DisabledScope(onlyScenesInBuild))
+                {
+                    EditorGUILayout.LabelField("in", GUILayout.Width(14));
+                    EditorGUI.BeginChangeCheck();
+                    sceneSearchFolder = EditorGUILayout.TextField(sceneSearchFolder, GUILayout.Width(170));
+                    if (EditorGUI.EndChangeCheck())
+                        EditorPrefs.SetString(SceneFolderPrefKey, sceneSearchFolder);
+                }
+
                 if (GUILayout.Button(scanned ? "Rescan" : "Scan", GUILayout.Width(80)))
                     Rescan();
             }
 
             if (!scanned)
-                EditorGUILayout.HelpBox($"Not scanned yet. Press Scan to walk the scenes under '{sceneSearchFolder}'. Each scene's full dependency graph is resolved, so narrowing this folder is the main way to keep the scan fast.", MessageType.Info);
+            {
+                string source = onlyScenesInBuild
+                    ? "the scenes enabled in Build Settings"
+                    : $"the scenes under '{sceneSearchFolder}'";
+                EditorGUILayout.HelpBox($"Not scanned yet. Press Scan to walk {source}. Each scene's full dependency graph is resolved, so keeping this list short is what keeps the scan fast. Scenes without grass never show up.", MessageType.Info);
+            }
 
             EditorGUILayout.Space(2);
 
@@ -296,6 +319,7 @@ namespace GrassSystem.Consoles.Editor
             using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
             {
                 GUILayout.Label("Scene", EditorStyles.boldLabel, GUILayout.Width(SceneColumnWidth));
+                GUILayout.Label(GUIContent.none, EditorStyles.boldLabel, GUILayout.Width(OpenColumnWidth));
                 GUILayout.Label("State", EditorStyles.boldLabel, GUILayout.Width(StateColumnWidth));
                 GUILayout.Label("Next Action", EditorStyles.boldLabel, GUILayout.Width(ActionColumnWidth));
                 GUILayout.FlexibleSpace();
@@ -314,6 +338,17 @@ namespace GrassSystem.Consoles.Editor
                 GUIStyle nameStyle = row.state == SceneGrassState.NoGrass ? linkGrayStyle : (row.isOpenScene ? linkBoldStyle : linkStyle);
                 if (GUILayout.Button(row.displayName, nameStyle, GUILayout.Width(SceneColumnWidth)))
                     EditorGUIUtility.PingObject(row.info.sceneAsset);
+
+                using (new EditorGUI.DisabledScope(row.isOpenScene))
+                {
+                    if (GUILayout.Button(openButtonContent, GUILayout.Width(OpenColumnWidth)) &&
+                        OpenSceneIfNeeded(row.info.scenePath))
+                    {
+                        RecomputeRows();
+                        Repaint();
+                        GUIUtility.ExitGUI();
+                    }
+                }
 
                 GUILayout.Label(row.stateLabel, GetStateStyle(row.state), GUILayout.Width(StateColumnWidth));
 
@@ -770,10 +805,33 @@ namespace GrassSystem.Consoles.Editor
 
         private string[] FindSceneGuids()
         {
+            if (onlyScenesInBuild)
+                return FindBuildSceneGuids();
+
             if (!string.IsNullOrEmpty(sceneSearchFolder) && AssetDatabase.IsValidFolder(sceneSearchFolder))
                 return AssetDatabase.FindAssets("t:Scene", new[] { sceneSearchFolder });
 
             return AssetDatabase.FindAssets("t:Scene");
+        }
+
+        private static string[] FindBuildSceneGuids()
+        {
+            var guids = new List<string>();
+
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+            {
+                if (scene == null || !scene.enabled || string.IsNullOrEmpty(scene.path))
+                    continue;
+
+                if (!File.Exists(scene.path))
+                    continue;
+
+                string guid = AssetDatabase.AssetPathToGUID(scene.path);
+                if (!string.IsNullOrEmpty(guid) && !guids.Contains(guid))
+                    guids.Add(guid);
+            }
+
+            return guids.ToArray();
         }
 
         private static HashSet<string> CollectPaths(string filter)
