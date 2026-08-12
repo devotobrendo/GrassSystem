@@ -6,7 +6,6 @@
 TEXTURE2D(_GrassOverrideMap);
 SAMPLER(sampler_GrassOverrideMap);
 TEXTURE2D(_GrassMultiplyMap);
-TEXTURE2D(_GrassAdditiveMap);
 
 float _GrassBlendDebugEnabled;
 float _GrassBlendDebugValue;
@@ -27,23 +26,13 @@ half3 GrassGroundBlend(half3 albedo, float3 positionWS, float4 decalBounds, half
     float2 clamped = saturate(uv);
     half4 ovr = SAMPLE_TEXTURE2D(_GrassOverrideMap, sampler_GrassOverrideMap, clamped);
     half4 mul = SAMPLE_TEXTURE2D(_GrassMultiplyMap, sampler_GrassOverrideMap, clamped);
-    half4 add = SAMPLE_TEXTURE2D(_GrassAdditiveMap, sampler_GrassOverrideMap, clamped);
-
-    half overrideCoverage = ovr.a * inside;
-    half multiplyCoverage = mul.a * inside;
-    half additiveCoverage = add.a * inside;
-    half decalCoverage = saturate(overrideCoverage + multiplyCoverage + additiveCoverage);
 
     half3 grass = albedo;
-    grass = lerp(grass, grass * mul.rgb, multiplyCoverage);
-    grass += add.rgb * inside;
-    grass = lerp(grass, ovr.rgb, overrideCoverage);
+    grass = lerp(grass, grass * mul.rgb, mul.a * inside);
+    grass = lerp(grass, ovr.rgb, ovr.a * inside);
 
-    half albedoLuma = dot(albedo, half3(0.299h, 0.587h, 0.114h));
-    half lumaFactor = lerp(1.0h, albedoLuma * 2.0h, 0.5h);
-    grass = lerp(grass, grass * lumaFactor, decalCoverage);
-
-    return lerp(albedo, grass, decalCoverage * blend);
+    half coverage = saturate(max(ovr.a, mul.a)) * inside;
+    return lerp(albedo, grass, coverage * blend);
 }
 
 #endif

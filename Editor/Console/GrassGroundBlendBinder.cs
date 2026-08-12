@@ -11,7 +11,6 @@ namespace GrassSystem.Consoles.Editor
 
         private static readonly int PropOverrideMap = Shader.PropertyToID("_GrassOverrideMap");
         private static readonly int PropMultiplyMap = Shader.PropertyToID("_GrassMultiplyMap");
-        private static readonly int PropAdditiveMap = Shader.PropertyToID("_GrassAdditiveMap");
         private static readonly int PropBounds = Shader.PropertyToID("_GrassDecalBounds");
         private static readonly int PropBlend = Shader.PropertyToID("_GrassBlend");
 
@@ -52,7 +51,6 @@ namespace GrassSystem.Consoles.Editor
                 Undo.RecordObject(material, "Bind Ground Blend");
                 material.SetTexture(PropOverrideMap, bake.overrideMap);
                 material.SetTexture(PropMultiplyMap, bake.multiplyMap);
-                material.SetTexture(PropAdditiveMap, bake.additiveMap);
                 material.SetVector(PropBounds, bake.bounds);
                 if (material.GetFloat(PropBlend) <= 0f)
                     material.SetFloat(PropBlend, 0.6f);

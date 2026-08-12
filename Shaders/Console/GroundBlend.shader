@@ -12,7 +12,6 @@ Shader "GrassSystem/GroundBlend"
         _GrassBlend                       ("Grass Blend", Range(0, 1))       = 0.0
         [NoScaleOffset] _GrassOverrideMap ("Grass Override Map", 2D)         = "black" {}
         [NoScaleOffset] _GrassMultiplyMap ("Grass Multiply Map", 2D)         = "white" {}
-        [NoScaleOffset] _GrassAdditiveMap ("Grass Additive Map", 2D)         = "black" {}
         _GrassDecalBounds                 ("Grass Decal Bounds (minX, minZ, sizeX, sizeZ)", Vector) = (0, 0, 100, 100)
 
         [Header(Realtime Shadows)]
