@@ -60,13 +60,8 @@ namespace GrassSystem.Consoles.Editor
         private string blastRadiusWarningText = string.Empty;
         private MessageType blastRadiusWarningType = MessageType.Info;
 
-        private List<GrassProfilePlanEntry> profilePlan;
+        private GrassProfileSceneStatus profileSceneStatus;
         private GrassProfileApplyResult lastProfileApply;
-        private string profilePlanSummary = string.Empty;
-        private int profilePlanWorkCount;
-        private bool splitDayNightProfiles;
-        private bool profilePlanFoldout = true;
-        private Vector2 profilePlanScrollPos;
 
         private List<StandardizePlanEntry> standardizePlan;
         private StandardizeApplyResult lastApply;
@@ -99,10 +94,7 @@ namespace GrassSystem.Consoles.Editor
         private static readonly GUIContent MigrateButtonContent = new GUIContent("Migrate Open Scene", "Adds console renderers and creates assets for the currently open scene. Requires a valid open scene.");
         private static readonly GUIContent RevertButtonContent = new GUIContent("Revert Open Scene", "Reverts console migration in the currently open scene. Requires a valid open scene.");
         private static readonly GUIContent RenameButtonContent = new GUIContent("Rename Scene Objects", "Renames grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention. Undoable. Requires a valid open scene.");
-        private static readonly GUIContent ProfilePlanButtonContent = new GUIContent("Build Plan", "Works out, per scene, which Full/Switch profiles already exist and which are missing. Reads assets only - nothing is created yet.");
-        private static readonly GUIContent ProfileRebuildPlanContent = new GUIContent("Rebuild Plan", "Recomputes the profile plan from the current assets.");
-        private static readonly GUIContent SplitDayNightContent = new GUIContent("Split Day/Night", "Off: the Day and Night versions of a stadium share one profile set, so you tune the Switch numbers once. On: each scene gets its own pair.");
-        private static readonly GUIContent CreateProfilesContent = new GUIContent("Create Profiles", "Creates the missing Full and Switch profiles under Assets/Grass/<Scene>/Profiles and assigns them to that scene's renderers. Opens and saves each affected scene.");
+        private static readonly GUIContent CreateProfilesContent = new GUIContent("Create Profiles For Open Scene", "Creates the Full and Switch profiles for the open scene under Assets/Grass/<Scene>/Profiles, fills both with the values this scene is using right now, and assigns the set to its renderers. Existing profiles are never overwritten.");
 
         [MenuItem("Tools/Grass System/Grass Hub", priority = 0)]
         private static void Open()
@@ -113,7 +105,6 @@ namespace GrassSystem.Consoles.Editor
 
         private const string SceneFolderPrefKey = "GrassHub.SceneSearchFolder";
         private const string OnlyInBuildPrefKey = "GrassHub.OnlyScenesInBuild";
-        private const string SplitDayNightPrefKey = "GrassHub.SplitDayNightProfiles";
         private const string DefaultSceneFolder = "Assets/Scenes";
         private string sceneSearchFolder = DefaultSceneFolder;
         private bool onlyScenesInBuild = true;
@@ -123,7 +114,6 @@ namespace GrassSystem.Consoles.Editor
             minSize = new Vector2(820, 620);
             sceneSearchFolder = EditorPrefs.GetString(SceneFolderPrefKey, DefaultSceneFolder);
             onlyScenesInBuild = EditorPrefs.GetBool(OnlyInBuildPrefKey, true);
-            splitDayNightProfiles = EditorPrefs.GetBool(SplitDayNightPrefKey, false);
             ResolveProfileSets();
         }
 
@@ -390,151 +380,100 @@ namespace GrassSystem.Consoles.Editor
         {
             EditorGUILayout.LabelField("Profiles", EditorStyles.boldLabel);
 
+            RefreshProfileStatusIfNeeded();
+            GrassProfileSceneStatus status = profileSceneStatus;
+
+            if (status.blocker != null)
+            {
+                EditorGUILayout.HelpBox(status.blocker, MessageType.Info);
+                return;
+            }
+
+            EditorGUILayout.LabelField("Folder", status.folder, EditorStyles.miniLabel);
+
             using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUI.DisabledScope(sceneRows.Count == 0))
+                using (new EditorGUI.DisabledScope(!status.CanCreate))
                 {
-                    if (GUILayout.Button(profilePlan == null ? ProfilePlanButtonContent : ProfileRebuildPlanContent, GUILayout.Width(110)))
-                        BuildProfilePlan();
+                    if (GUILayout.Button(CreateProfilesContent, GUILayout.Width(200), GUILayout.Height(22)))
+                        CreateProfilesForOpenScene();
                 }
 
-                EditorGUI.BeginChangeCheck();
-                splitDayNightProfiles = GUILayout.Toggle(splitDayNightProfiles, SplitDayNightContent, GUILayout.Width(110));
-                if (EditorGUI.EndChangeCheck())
-                {
-                    EditorPrefs.SetBool(SplitDayNightPrefKey, splitDayNightProfiles);
-                    if (profilePlan != null)
-                        BuildProfilePlan();
-                }
-
-                GUILayout.Label(profilePlanSummary);
+                GUILayout.Label(ProfileStatusText(status), status.CanCreate ? stateWarnStyle : stateReadyStyle);
                 GUILayout.FlexibleSpace();
 
-                using (new EditorGUI.DisabledScope(profilePlanWorkCount == 0))
+                if (GUILayout.Button("Refresh", GUILayout.Width(70)))
                 {
-                    if (GUILayout.Button(CreateProfilesContent, GUILayout.Width(120)))
-                        ApplyProfilePlan();
+                    profileSceneStatus = null;
+                    Repaint();
                 }
             }
 
-            if (profilePlan == null)
+            if (status.AssetsComplete)
             {
-                EditorGUILayout.HelpBox(
-                    scanned
-                        ? "Press Build Plan to work out which scenes are missing their Full/Switch pair."
-                        : "Scan first - the plan is built from the scanned scenes. Each scene then gets a Full and a Switch profile under Assets/Grass/<Scene>/Profiles, wired into its own profile set.",
-                    MessageType.Info);
-                return;
+                DrawProfileAssetRow("Set", status.set);
+                DrawProfileAssetRow("Full", status.full);
+                DrawProfileAssetRow("Switch", status.switchProfile);
+            }
+            else
+            {
+                EditorGUILayout.LabelField($"Creates {Path.GetFileNameWithoutExtension(status.setPath)} plus its Full and Switch pair, both filled with what this scene renders right now.", EditorStyles.miniLabel);
             }
 
-            if (profilePlanWorkCount == 0)
-                EditorGUILayout.LabelField("Every scanned scene already has its own profile set - nothing to create.", EditorStyles.miniLabel);
-
-            profilePlanFoldout = EditorGUILayout.Foldout(profilePlanFoldout, $"Plan ({profilePlan.Count} group(s))", true);
-            if (!profilePlanFoldout)
-                return;
-
-            profilePlanScrollPos = EditorGUILayout.BeginScrollView(profilePlanScrollPos, GUILayout.Height(Mathf.Min(140f, 20f + profilePlan.Count * 18f)));
-            for (int i = 0; i < profilePlan.Count; i++)
-                DrawProfilePlanRow(profilePlan[i]);
-            EditorGUILayout.EndScrollView();
+            if (status.renderersOnOtherSet > 0)
+                EditorGUILayout.HelpBox($"{status.renderersOnOtherSet} renderer(s) here point at a different profile set. An existing assignment is never overwritten - clear the field on the renderer to repoint it.", MessageType.Warning);
 
             if (lastProfileApply != null)
                 DrawProfileApplyResult();
         }
 
-        private void DrawProfilePlanRow(GrassProfilePlanEntry entry)
+        private void DrawProfileAssetRow(string label, UnityEngine.Object asset)
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button(entry.groupKey, entry.NeedsWork ? linkStyle : linkGrayStyle, GUILayout.Width(SceneColumnWidth)))
-                {
-                    var set = AssetDatabase.LoadAssetAtPath<GrassPlatformProfileSet>(entry.setPath);
-                    if (set != null)
-                        EditorGUIUtility.PingObject(set);
-                }
-
-                GUILayout.Label($"{entry.scenePaths.Count} scene(s)", stateGrayStyle, GUILayout.Width(80));
-                GUILayout.Label(entry.status, entry.NeedsWork ? stateWarnStyle : stateReadyStyle, GUILayout.Width(70));
-                GUILayout.Label(entry.note ?? string.Empty, stateGrayStyle);
+                GUILayout.Label(label, GUILayout.Width(56));
+                if (GUILayout.Button(asset != null ? asset.name : "(missing)", asset != null ? linkStyle : linkGrayStyle, GUILayout.Width(SceneColumnWidth)))
+                    EditorGUIUtility.PingObject(asset);
                 GUILayout.FlexibleSpace();
             }
         }
 
+        private static string ProfileStatusText(GrassProfileSceneStatus status)
+        {
+            if (!status.AssetsComplete) return "Not created yet";
+            if (status.SetWiringBroken) return "Set is not wired to both profiles";
+            if (status.renderersUnassigned > 0) return $"{status.renderersUnassigned} renderer(s) without a set";
+            return "Ready";
+        }
+
         private void DrawProfileApplyResult()
         {
-            if (lastProfileApply.cancelled)
-            {
-                EditorGUILayout.HelpBox("Cancelled - assets already created were kept, remaining scenes were left untouched.", MessageType.Warning);
-                return;
-            }
-
             EditorGUILayout.LabelField(
-                $"Sets {lastProfileApply.setsCreated}   Profiles {lastProfileApply.profilesCreated}   Repaired {lastProfileApply.setsRepaired}   Scenes {lastProfileApply.scenesAssigned}   Renderers {lastProfileApply.renderersAssigned}   Left alone {lastProfileApply.scenesLeftAlone}",
+                $"Profiles {lastProfileApply.profilesCreated}   Renderers {lastProfileApply.renderersAssigned}   Set {(lastProfileApply.setCreated ? "created" : lastProfileApply.setRepaired ? "rewired" : "kept")}",
                 EditorStyles.miniLabel);
+
+            if (lastProfileApply.renderersAssigned > 0)
+                EditorGUILayout.HelpBox("Save the scene to keep the assignment. The board above only picks it up on the next Scan after saving.", MessageType.Info);
 
             if (lastProfileApply.problems.Count > 0)
                 EditorGUILayout.HelpBox(string.Join("\n", lastProfileApply.problems), MessageType.Warning);
         }
 
-        private void BuildProfilePlan()
+        private void RefreshProfileStatusIfNeeded()
         {
-            var scenes = new List<GrassProfileSceneRef>(sceneRows.Count);
-            for (int i = 0; i < sceneRows.Count; i++)
-            {
-                SceneRow row = sceneRows[i];
-                if (row.state == SceneGrassState.NoGrass)
-                    continue;
-
-                scenes.Add(new GrassProfileSceneRef { scenePath = row.info.scenePath, deps = row.info.deps });
-            }
-
-            profilePlan = GrassProfileFactory.BuildPlan(scenes, splitDayNightProfiles);
-
-            int create = 0, repair = 0, assign = 0, ready = 0;
-            for (int i = 0; i < profilePlan.Count; i++)
-            {
-                switch (profilePlan[i].status)
-                {
-                    case GrassProfileFactory.StatusCreate: create++; break;
-                    case GrassProfileFactory.StatusRepair: repair++; break;
-                    case GrassProfileFactory.StatusAssign: assign++; break;
-                    default: ready++; break;
-                }
-            }
-
-            profilePlanWorkCount = create + repair + assign;
-            profilePlanSummary = $"Create {create} | Repair {repair} | Assign {assign} | Ready {ready}";
-            lastProfileApply = null;
-            Repaint();
-        }
-
-        private void ApplyProfilePlan()
-        {
-            int scenesTouched = 0;
-            int scenesKept = 0;
-            for (int i = 0; i < profilePlan.Count; i++)
-            {
-                scenesTouched += profilePlan[i].scenesToAssign;
-                scenesKept += profilePlan[i].scenesWithOtherSet;
-            }
-
-            string keptLine = scenesKept > 0
-                ? $"\n\n{scenesKept} scene(s) already point at another profile set and are left untouched - an existing assignment is never overwritten."
-                : string.Empty;
-
-            string message =
-                $"Create the missing Full and Switch profiles for {profilePlanWorkCount} scene group(s) under Assets/Grass/<Scene>/Profiles?\n\n" +
-                $"{scenesTouched} scene(s) will be opened one by one, pointed at their own profile set, and saved. That part is not undoable - do it on a clean branch.\n\n" +
-                "New profiles start with every override off, so nothing changes visually until you enable one." +
-                keptLine;
-
-            if (!EditorUtility.DisplayDialog("Create Grass Profiles", message, "Create", "Cancel"))
+            string activePath = SceneManager.GetActiveScene().path;
+            if (profileSceneStatus != null && string.Equals(profileSceneStatus.scenePath, activePath, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            GrassProfileApplyResult result = GrassProfileFactory.Apply(profilePlan);
-            Rescan();
-            lastProfileApply = result;
+            profileSceneStatus = GrassProfileFactory.InspectOpenScene();
+            lastProfileApply = null;
+        }
+
+        private void CreateProfilesForOpenScene()
+        {
+            lastProfileApply = GrassProfileFactory.CreateForOpenScene();
+            profileSceneStatus = GrassProfileFactory.InspectOpenScene();
+            Repaint();
         }
 
         private void DrawSceneActions()
@@ -835,7 +774,7 @@ namespace GrassSystem.Consoles.Editor
             }
 
             RecomputeRows();
-            BuildProfilePlan();
+            profileSceneStatus = null;
             Repaint();
         }
 

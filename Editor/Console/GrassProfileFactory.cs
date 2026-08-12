@@ -11,333 +11,185 @@ using GrassSystem;
 
 namespace GrassSystem.Consoles.Editor
 {
-    public struct GrassProfileSceneRef
+    public class GrassProfileSceneStatus
     {
         public string scenePath;
-        public HashSet<string> deps;
-    }
-
-    public class GrassProfilePlanEntry
-    {
-        public string groupKey;
+        public string sceneName;
+        public string groupName;
         public string folder;
         public string setPath;
         public string fullPath;
         public string switchPath;
-        public readonly List<string> scenePaths = new List<string>();
-        public bool setExists;
-        public bool fullExists;
-        public bool switchExists;
-        public bool setWiringBroken;
-        public int scenesToAssign;
-        public int scenesWithOtherSet;
-        public string status;
-        public string note;
 
-        public bool NeedsWork => status != GrassProfileFactory.StatusReady;
+        public GrassPlatformProfileSet set;
+        public GrassPlatformProfile full;
+        public GrassPlatformProfile switchProfile;
+
+        public int rendererCount;
+        public int renderersUnassigned;
+        public int renderersOnOtherSet;
+        public string blocker;
+
+        public bool AssetsComplete => set != null && full != null && switchProfile != null;
+        public bool SetWiringBroken => set != null && (set.fullProfile != full || set.switchProfile != switchProfile);
+        public bool CanCreate => blocker == null && (!AssetsComplete || SetWiringBroken || renderersUnassigned > 0);
     }
 
     public class GrassProfileApplyResult
     {
-        public int setsCreated;
         public int profilesCreated;
-        public int setsRepaired;
-        public int scenesAssigned;
         public int renderersAssigned;
-        public int scenesLeftAlone;
-        public bool cancelled;
+        public bool setCreated;
+        public bool setRepaired;
         public readonly List<string> problems = new List<string>();
     }
 
     public static class GrassProfileFactory
     {
-        public const string StatusReady = "Ready";
-        public const string StatusCreate = "Create";
-        public const string StatusRepair = "Repair";
-        public const string StatusAssign = "Assign";
-
         private const string GrassRootFolder = "Assets/Grass";
         private const string ProfilesFolderSegment = "Profiles";
         private const string SetPrefix = "GrassProfileSet";
         private const string ProfilePrefix = "GrassProfile";
 
-        public static List<GrassProfilePlanEntry> BuildPlan(IEnumerable<GrassProfileSceneRef> scenes, bool splitDayNight)
+        public static GrassProfileSceneStatus InspectOpenScene()
         {
-            var byGroup = new Dictionary<string, GrassProfilePlanEntry>(StringComparer.OrdinalIgnoreCase);
-            var ordered = new List<GrassProfilePlanEntry>();
-            var pendingAssign = new Dictionary<string, List<GrassProfileSceneRef>>(StringComparer.OrdinalIgnoreCase);
+            var status = new GrassProfileSceneStatus();
 
-            foreach (GrassProfileSceneRef scene in scenes)
+            Scene scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid())
             {
-                if (string.IsNullOrEmpty(scene.scenePath)) continue;
-
-                string sceneName = Path.GetFileNameWithoutExtension(scene.scenePath);
-                ResolveGroup(sceneName, splitDayNight, out string groupKey, out string folderScene);
-
-                if (!byGroup.TryGetValue(groupKey, out GrassProfilePlanEntry entry))
-                {
-                    string folder = $"{GrassRootFolder}/{folderScene}/{ProfilesFolderSegment}";
-                    entry = new GrassProfilePlanEntry
-                    {
-                        groupKey = groupKey,
-                        folder = folder,
-                        setPath = $"{folder}/{SetPrefix}_{groupKey}.asset",
-                        fullPath = $"{folder}/{ProfilePrefix}_{groupKey}_Full.asset",
-                        switchPath = $"{folder}/{ProfilePrefix}_{groupKey}_Switch.asset",
-                    };
-                    byGroup.Add(groupKey, entry);
-                    pendingAssign.Add(groupKey, new List<GrassProfileSceneRef>());
-                    ordered.Add(entry);
-                }
-
-                entry.scenePaths.Add(scene.scenePath);
-                pendingAssign[groupKey].Add(scene);
+                status.blocker = "No valid open scene.";
+                return status;
             }
 
-            HashSet<string> allSetPaths = CollectProfileSetPaths();
+            status.scenePath = scene.path;
+            status.sceneName = scene.name;
 
-            for (int i = 0; i < ordered.Count; i++)
+            if (string.IsNullOrEmpty(scene.path))
             {
-                GrassProfilePlanEntry entry = ordered[i];
-                var set = AssetDatabase.LoadAssetAtPath<GrassPlatformProfileSet>(entry.setPath);
-                var full = AssetDatabase.LoadAssetAtPath<GrassPlatformProfile>(entry.fullPath);
-                var switchProfile = AssetDatabase.LoadAssetAtPath<GrassPlatformProfile>(entry.switchPath);
-
-                entry.setExists = set != null;
-                entry.fullExists = full != null;
-                entry.switchExists = switchProfile != null;
-                entry.setWiringBroken = set != null && (set.fullProfile != full || set.switchProfile != switchProfile);
-
-                entry.scenesToAssign = 0;
-                entry.scenesWithOtherSet = 0;
-                foreach (GrassProfileSceneRef scene in pendingAssign[entry.groupKey])
-                {
-                    if (SceneReferences(scene, entry.setPath))
-                        continue;
-
-                    if (SceneReferencesAnyExcept(scene, allSetPaths, entry.setPath))
-                        entry.scenesWithOtherSet++;
-                    else
-                        entry.scenesToAssign++;
-                }
-
-                string otherSetNote = entry.scenesWithOtherSet > 0
-                    ? $", {entry.scenesWithOtherSet} kept on their current set"
-                    : string.Empty;
-
-                if (!entry.setExists || !entry.fullExists || !entry.switchExists)
-                {
-                    entry.status = StatusCreate;
-                    entry.note = entry.scenesToAssign > 0
-                        ? $"create + assign to {entry.scenesToAssign} scene(s){otherSetNote}"
-                        : $"create assets{otherSetNote}";
-                }
-                else if (entry.setWiringBroken)
-                {
-                    entry.status = StatusRepair;
-                    entry.note = "set does not point at both profiles";
-                }
-                else if (entry.scenesToAssign > 0)
-                {
-                    entry.status = StatusAssign;
-                    entry.note = $"assign to {entry.scenesToAssign} scene(s){otherSetNote}";
-                }
-                else
-                {
-                    entry.status = StatusReady;
-                    entry.note = entry.scenesWithOtherSet > 0
-                        ? $"{entry.scenesWithOtherSet} scene(s) point at another set"
-                        : null;
-                }
+                status.blocker = "The open scene has never been saved - save it first so its profiles get a folder.";
+                return status;
             }
 
-            ordered.Sort((a, b) => string.Compare(a.groupKey, b.groupKey, StringComparison.OrdinalIgnoreCase));
-            return ordered;
+            ResolveNaming(scene.name, out string groupName, out string folderScene);
+            status.groupName = groupName;
+            status.folder = $"{GrassRootFolder}/{folderScene}/{ProfilesFolderSegment}";
+            status.setPath = $"{status.folder}/{SetPrefix}_{groupName}.asset";
+            status.fullPath = $"{status.folder}/{ProfilePrefix}_{groupName}_Full.asset";
+            status.switchPath = $"{status.folder}/{ProfilePrefix}_{groupName}_Switch.asset";
+
+            status.set = AssetDatabase.LoadAssetAtPath<GrassPlatformProfileSet>(status.setPath);
+            status.full = AssetDatabase.LoadAssetAtPath<GrassPlatformProfile>(status.fullPath);
+            status.switchProfile = AssetDatabase.LoadAssetAtPath<GrassPlatformProfile>(status.switchPath);
+
+            List<GrassRendererConsole> renderers = FindRenderersInScene(scene);
+            status.rendererCount = renderers.Count;
+
+            for (int i = 0; i < renderers.Count; i++)
+            {
+                GrassPlatformProfileSet assigned = renderers[i].profileSet;
+                if (assigned == null)
+                    status.renderersUnassigned++;
+                else if (status.set == null || assigned != status.set)
+                    status.renderersOnOtherSet++;
+            }
+
+            if (renderers.Count == 0)
+                status.blocker = "This scene has no GrassRendererConsole - run the console migration first.";
+
+            return status;
         }
 
-        public static GrassProfileApplyResult Apply(List<GrassProfilePlanEntry> entries)
+        public static GrassProfileApplyResult CreateForOpenScene()
         {
             var result = new GrassProfileApplyResult();
-            if (entries == null || entries.Count == 0)
+            GrassProfileSceneStatus status = InspectOpenScene();
+
+            if (status.blocker != null)
+            {
+                result.problems.Add(status.blocker);
                 return result;
+            }
 
-            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+            Scene scene = SceneManager.GetActiveScene();
+            List<GrassRendererConsole> renderers = FindRenderersInScene(scene);
+            if (renderers.Count == 0)
             {
-                result.cancelled = true;
+                result.problems.Add("No GrassRendererConsole in the open scene.");
                 return result;
             }
 
-            string originalScenePath = SceneManager.GetActiveScene().path;
-            var needsSeed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            EnsureFolder(status.folder);
 
-            try
+            GrassPlatformProfile full = status.full;
+            if (full == null)
             {
-                for (int i = 0; i < entries.Count; i++)
-                {
-                    GrassProfilePlanEntry entry = entries[i];
-                    if (!entry.NeedsWork) continue;
-
-                    EnsureFolder(entry.folder);
-
-                    GrassPlatformProfile full = LoadOrCreateProfile(entry.fullPath, GrassPlatformClass.Full, result, needsSeed);
-                    GrassPlatformProfile switchProfile = LoadOrCreateProfile(entry.switchPath, GrassPlatformClass.Switch, result, needsSeed);
-
-                    var set = AssetDatabase.LoadAssetAtPath<GrassPlatformProfileSet>(entry.setPath);
-                    if (set == null)
-                    {
-                        set = ScriptableObject.CreateInstance<GrassPlatformProfileSet>();
-                        set.fullProfile = full;
-                        set.switchProfile = switchProfile;
-                        AssetDatabase.CreateAsset(set, entry.setPath);
-                        result.setsCreated++;
-                    }
-                    else if (set.fullProfile != full || set.switchProfile != switchProfile)
-                    {
-                        set.fullProfile = full;
-                        set.switchProfile = switchProfile;
-                        EditorUtility.SetDirty(set);
-                        result.setsRepaired++;
-                    }
-                }
-
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-
-                HashSet<string> allSetPaths = CollectProfileSetPaths();
-
-                for (int i = 0; i < entries.Count; i++)
-                {
-                    GrassProfilePlanEntry entry = entries[i];
-                    if (!entry.NeedsWork) continue;
-
-                    var set = AssetDatabase.LoadAssetAtPath<GrassPlatformProfileSet>(entry.setPath);
-                    if (set == null)
-                    {
-                        result.problems.Add($"{entry.groupKey}: profile set could not be created at {entry.setPath}");
-                        continue;
-                    }
-
-                    bool seedGroup = needsSeed.Contains(entry.fullPath) || needsSeed.Contains(entry.switchPath);
-
-                    for (int s = 0; s < entry.scenePaths.Count; s++)
-                    {
-                        string scenePath = entry.scenePaths[s];
-                        InspectSceneSets(scenePath, allSetPaths, entry.setPath, out bool alreadyAssigned, out bool referencesOther);
-
-                        if (!alreadyAssigned && referencesOther)
-                        {
-                            result.scenesLeftAlone++;
-                            result.problems.Add($"{Path.GetFileNameWithoutExtension(scenePath)}: already points at another profile set, left untouched");
-                            continue;
-                        }
-
-                        bool assignNeeded = !alreadyAssigned;
-                        if (!assignNeeded && !seedGroup) continue;
-
-                        float progress = entries.Count == 0 ? 0f : (float)i / entries.Count;
-                        if (EditorUtility.DisplayCancelableProgressBar("Grass Profiles", $"Assigning {Path.GetFileNameWithoutExtension(scenePath)}", progress))
-                        {
-                            result.cancelled = true;
-                            return result;
-                        }
-
-                        if (!OpenScene(scenePath))
-                        {
-                            result.problems.Add($"{Path.GetFileNameWithoutExtension(scenePath)}: could not be opened");
-                            continue;
-                        }
-
-                        Scene scene = SceneManager.GetActiveScene();
-                        List<GrassRendererConsole> renderers = FindRenderersInScene(scene);
-                        if (renderers.Count == 0)
-                        {
-                            result.problems.Add($"{scene.name}: no GrassRendererConsole found, nothing to assign");
-                            continue;
-                        }
-
-                        if (seedGroup)
-                        {
-                            SeedFromRenderer(AssetDatabase.LoadAssetAtPath<GrassPlatformProfile>(entry.fullPath), renderers[0]);
-                            SeedFromRenderer(AssetDatabase.LoadAssetAtPath<GrassPlatformProfile>(entry.switchPath), renderers[0]);
-                            seedGroup = false;
-                        }
-
-                        bool sceneDirty = false;
-                        for (int r = 0; r < renderers.Count; r++)
-                        {
-                            if (renderers[r].profileSet == set) continue;
-
-                            if (renderers[r].profileSet != null)
-                            {
-                                result.problems.Add($"{scene.name}/{renderers[r].name}: already has '{renderers[r].profileSet.name}', left untouched");
-                                continue;
-                            }
-
-                            renderers[r].profileSet = set;
-                            EditorUtility.SetDirty(renderers[r]);
-                            result.renderersAssigned++;
-                            sceneDirty = true;
-                        }
-
-                        if (sceneDirty)
-                        {
-                            EditorSceneManager.MarkSceneDirty(scene);
-                            if (EditorSceneManager.SaveScene(scene))
-                                result.scenesAssigned++;
-                            else
-                                result.problems.Add($"{scene.name}: could not be saved, the assignment was not written to disk");
-                        }
-                    }
-                }
-
-                AssetDatabase.SaveAssets();
+                full = CreateProfile(status.fullPath, GrassPlatformClass.Full, renderers[0]);
+                result.profilesCreated++;
             }
-            finally
+
+            GrassPlatformProfile switchProfile = status.switchProfile;
+            if (switchProfile == null)
             {
-                EditorUtility.ClearProgressBar();
+                switchProfile = CreateProfile(status.switchPath, GrassPlatformClass.Switch, renderers[0]);
+                result.profilesCreated++;
+            }
 
-                if (!string.IsNullOrEmpty(originalScenePath) &&
-                    !string.Equals(SceneManager.GetActiveScene().path, originalScenePath, StringComparison.OrdinalIgnoreCase) &&
-                    File.Exists(originalScenePath))
+            GrassPlatformProfileSet set = status.set;
+            if (set == null)
+            {
+                set = ScriptableObject.CreateInstance<GrassPlatformProfileSet>();
+                set.fullProfile = full;
+                set.switchProfile = switchProfile;
+                AssetDatabase.CreateAsset(set, status.setPath);
+                result.setCreated = true;
+            }
+            else if (set.fullProfile != full || set.switchProfile != switchProfile)
+            {
+                set.fullProfile = full;
+                set.switchProfile = switchProfile;
+                EditorUtility.SetDirty(set);
+                result.setRepaired = true;
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            for (int i = 0; i < renderers.Count; i++)
+            {
+                GrassRendererConsole renderer = renderers[i];
+                if (renderer.profileSet == set) continue;
+
+                if (renderer.profileSet != null)
                 {
-                    EditorSceneManager.OpenScene(originalScenePath, OpenSceneMode.Single);
+                    result.problems.Add($"{renderer.name} already points at '{renderer.profileSet.name}', left untouched.");
+                    continue;
                 }
 
-                AssetDatabase.Refresh();
+                Undo.RecordObject(renderer, "Assign Grass Profile Set");
+                renderer.profileSet = set;
+                EditorUtility.SetDirty(renderer);
+                result.renderersAssigned++;
             }
+
+            if (result.renderersAssigned > 0)
+                EditorSceneManager.MarkSceneDirty(scene);
 
             return result;
         }
 
-        private static GrassPlatformProfile LoadOrCreateProfile(
-            string path,
-            GrassPlatformClass targetClass,
-            GrassProfileApplyResult result,
-            HashSet<string> needsSeed)
+        private static GrassPlatformProfile CreateProfile(string path, GrassPlatformClass targetClass, GrassRendererConsole renderer)
         {
-            var profile = AssetDatabase.LoadAssetAtPath<GrassPlatformProfile>(path);
-            if (profile != null)
-                return profile;
-
-            profile = ScriptableObject.CreateInstance<GrassPlatformProfile>();
+            var profile = ScriptableObject.CreateInstance<GrassPlatformProfile>();
             profile.targetClass = targetClass;
-            profile.overrideMesh = false;
-            profile.overrideThinning = false;
-            profile.overrideInstanceDensity = false;
-            profile.overrideAlbedo = false;
-            profile.overrideDrawDistance = false;
-            profile.overrideShadows = false;
-            profile.overrideReceiveShadows = false;
 
-            AssetDatabase.CreateAsset(profile, path);
-            result.profilesCreated++;
-            needsSeed.Add(path);
-            return profile;
-        }
-
-        private static void SeedFromRenderer(GrassPlatformProfile profile, GrassRendererConsole renderer)
-        {
-            if (profile == null || renderer == null) return;
+            profile.overrideMesh = true;
+            profile.overrideThinning = true;
+            profile.overrideInstanceDensity = true;
+            profile.overrideAlbedo = true;
+            profile.overrideDrawDistance = true;
+            profile.overrideShadows = true;
+            profile.overrideReceiveShadows = true;
 
             profile.farKeepFraction = renderer.farKeepFraction;
             profile.thinStartDistance = renderer.thinStartDistance;
@@ -345,6 +197,7 @@ namespace GrassSystem.Consoles.Editor
             profile.coverageCompensation = renderer.coverageCompensation;
             profile.sizeScale = renderer.sizeScale;
             profile.instanceDensity = renderer.instanceDensity;
+            profile.useFlatAlbedo = false;
 
             SO_GrassSettings settings = renderer.settings;
             if (settings != null)
@@ -357,7 +210,8 @@ namespace GrassSystem.Consoles.Editor
                 profile.receiveShadows = settings.useReceiveShadows;
             }
 
-            EditorUtility.SetDirty(profile);
+            AssetDatabase.CreateAsset(profile, path);
+            return profile;
         }
 
         private static List<GrassRendererConsole> FindRenderersInScene(Scene scene)
@@ -372,106 +226,21 @@ namespace GrassSystem.Consoles.Editor
             return found;
         }
 
-        private static bool OpenScene(string scenePath)
-        {
-            if (string.Equals(SceneManager.GetActiveScene().path, scenePath, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (!File.Exists(scenePath))
-                return false;
-
-            EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
-            return string.Equals(SceneManager.GetActiveScene().path, scenePath, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool SceneReferences(GrassProfileSceneRef scene, string assetPath)
-        {
-            if (scene.deps != null)
-                return scene.deps.Contains(assetPath);
-
-            return SceneReferencesAsset(scene.scenePath, assetPath);
-        }
-
-        private static bool SceneReferencesAnyExcept(GrassProfileSceneRef scene, HashSet<string> setPaths, string exceptPath)
-        {
-            if (scene.deps == null)
-                return SceneReferencesAnyExcept(scene.scenePath, setPaths, exceptPath);
-
-            foreach (string setPath in setPaths)
-            {
-                if (string.Equals(setPath, exceptPath, StringComparison.OrdinalIgnoreCase)) continue;
-                if (scene.deps.Contains(setPath)) return true;
-            }
-            return false;
-        }
-
-        private static bool SceneReferencesAnyExcept(string scenePath, HashSet<string> setPaths, string exceptPath)
-        {
-            InspectSceneSets(scenePath, setPaths, exceptPath, out _, out bool referencesOther);
-            return referencesOther;
-        }
-
-        private static void InspectSceneSets(
-            string scenePath,
-            HashSet<string> setPaths,
-            string targetPath,
-            out bool referencesTarget,
-            out bool referencesOther)
-        {
-            referencesTarget = false;
-            referencesOther = false;
-
-            string[] deps = AssetDatabase.GetDependencies(scenePath, true);
-            for (int i = 0; i < deps.Length; i++)
-            {
-                if (string.Equals(deps[i], targetPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    referencesTarget = true;
-                    continue;
-                }
-
-                if (setPaths.Contains(deps[i]))
-                    referencesOther = true;
-            }
-        }
-
-        private static HashSet<string> CollectProfileSetPaths()
-        {
-            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            string[] guids = AssetDatabase.FindAssets("t:GrassPlatformProfileSet");
-            for (int i = 0; i < guids.Length; i++)
-                paths.Add(AssetDatabase.GUIDToAssetPath(guids[i]));
-            return paths;
-        }
-
-        private static bool SceneReferencesAsset(string scenePath, string assetPath)
-        {
-            string[] deps = AssetDatabase.GetDependencies(scenePath, true);
-            for (int i = 0; i < deps.Length; i++)
-            {
-                if (string.Equals(deps[i], assetPath, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
-        }
-
-        private static void ResolveGroup(string sceneName, bool splitDayNight, out string groupKey, out string folderScene)
+        private static void ResolveNaming(string sceneName, out string groupName, out string folderScene)
         {
             string canonical = GrassAssetStandardizer.CanonicalSceneName(sceneName);
 
             if (string.IsNullOrEmpty(canonical))
             {
-                groupKey = Sanitize(sceneName);
-                folderScene = groupKey;
+                groupName = Sanitize(sceneName);
+                folderScene = groupName;
                 return;
             }
 
             folderScene = canonical;
 
             string dayNight = GrassAssetStandardizer.SceneDayNight(sceneName);
-            groupKey = splitDayNight && !string.IsNullOrEmpty(dayNight)
-                ? $"{canonical}_{dayNight}"
-                : canonical;
+            groupName = string.IsNullOrEmpty(dayNight) ? canonical : $"{canonical}_{dayNight}";
         }
 
         private static string Sanitize(string value)
