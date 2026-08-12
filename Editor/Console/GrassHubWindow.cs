@@ -419,9 +419,16 @@ namespace GrassSystem.Consoles.Editor
 
             if (profilePlan == null)
             {
-                EditorGUILayout.LabelField("Each scene gets a Full and a Switch profile under Assets/Grass/<Scene>/Profiles, wired into its own profile set.", EditorStyles.miniLabel);
+                EditorGUILayout.HelpBox(
+                    scanned
+                        ? "Press Build Plan to work out which scenes are missing their Full/Switch pair."
+                        : "Scan first - the plan is built from the scanned scenes. Each scene then gets a Full and a Switch profile under Assets/Grass/<Scene>/Profiles, wired into its own profile set.",
+                    MessageType.Info);
                 return;
             }
+
+            if (profilePlanWorkCount == 0)
+                EditorGUILayout.LabelField("Every scanned scene already has its own profile set - nothing to create.", EditorStyles.miniLabel);
 
             profilePlanFoldout = EditorGUILayout.Foldout(profilePlanFoldout, $"Plan ({profilePlan.Count} group(s))", true);
             if (!profilePlanFoldout)
@@ -527,7 +534,6 @@ namespace GrassSystem.Consoles.Editor
 
             GrassProfileApplyResult result = GrassProfileFactory.Apply(profilePlan);
             Rescan();
-            BuildProfilePlan();
             lastProfileApply = result;
         }
 
@@ -829,6 +835,7 @@ namespace GrassSystem.Consoles.Editor
             }
 
             RecomputeRows();
+            BuildProfilePlan();
             Repaint();
         }
 
