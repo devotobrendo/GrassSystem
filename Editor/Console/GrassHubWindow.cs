@@ -84,11 +84,11 @@ namespace GrassSystem.Consoles.Editor
         private GUIStyle stateNeutralStyle;
         private GUIStyle stateGrayStyle;
 
-        private GUIContent buildFilterContent;
-        private GUIContent openButtonContent;
-        private GUIContent migrateButtonContent;
-        private GUIContent revertButtonContent;
-        private GUIContent renameButtonContent;
+        private static readonly GUIContent BuildFilterContent = new GUIContent("Scenes in build", "Scans only the scenes enabled in Build Settings. Uncheck to scan a folder instead. Either way, scenes without grass are left out.");
+        private static readonly GUIContent OpenButtonContent = new GUIContent("Open", "Opens this scene, prompting to save the current one first.");
+        private static readonly GUIContent MigrateButtonContent = new GUIContent("Migrate Open Scene", "Adds console renderers and creates assets for the currently open scene. Requires a valid open scene.");
+        private static readonly GUIContent RevertButtonContent = new GUIContent("Revert Open Scene", "Reverts console migration in the currently open scene. Requires a valid open scene.");
+        private static readonly GUIContent RenameButtonContent = new GUIContent("Rename Scene Objects", "Renames grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention. Undoable. Requires a valid open scene.");
 
         [MenuItem("Tools/Grass System/Grass Hub", priority = 0)]
         private static void Open()
@@ -133,12 +133,6 @@ namespace GrassSystem.Consoles.Editor
             stateGrayStyle = new GUIStyle(EditorStyles.label);
             stateGrayStyle.normal.textColor = Color.gray;
 
-            buildFilterContent = new GUIContent("Scenes in build", "Scans only the scenes enabled in Build Settings. Uncheck to scan a folder instead. Either way, scenes without grass are left out.");
-            openButtonContent = new GUIContent("Open", "Opens this scene, prompting to save the current one first.");
-
-            migrateButtonContent = new GUIContent("Migrate Open Scene", "Adds console renderers and creates assets for the currently open scene. Requires a valid open scene.");
-            revertButtonContent = new GUIContent("Revert Open Scene", "Reverts console migration in the currently open scene. Requires a valid open scene.");
-            renameButtonContent = new GUIContent("Rename Scene Objects", "Renames grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention. Undoable. Requires a valid open scene.");
         }
 
         private void OnGUI()
@@ -251,7 +245,7 @@ namespace GrassSystem.Consoles.Editor
                 EditorGUILayout.LabelField("Grass Hub", titleStyle);
                 GUILayout.FlexibleSpace();
                 EditorGUI.BeginChangeCheck();
-                onlyScenesInBuild = GUILayout.Toggle(onlyScenesInBuild, buildFilterContent, GUILayout.Width(112));
+                onlyScenesInBuild = GUILayout.Toggle(onlyScenesInBuild, BuildFilterContent, GUILayout.Width(112));
                 if (EditorGUI.EndChangeCheck())
                     EditorPrefs.SetBool(OnlyInBuildPrefKey, onlyScenesInBuild);
 
@@ -341,7 +335,7 @@ namespace GrassSystem.Consoles.Editor
 
                 using (new EditorGUI.DisabledScope(row.isOpenScene))
                 {
-                    if (GUILayout.Button(openButtonContent, GUILayout.Width(OpenColumnWidth)) &&
+                    if (GUILayout.Button(OpenButtonContent, GUILayout.Width(OpenColumnWidth)) &&
                         OpenSceneIfNeeded(row.info.scenePath))
                     {
                         RecomputeRows();
@@ -387,7 +381,7 @@ namespace GrassSystem.Consoles.Editor
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (GUILayout.Button(migrateButtonContent, GUILayout.Height(24)))
+                    if (GUILayout.Button(MigrateButtonContent, GUILayout.Height(24)))
                     {
                         if (EditorUtility.DisplayDialog("Migrate Scene", $"Migrate scene '{activeScene.name}'? This adds console renderers and creates assets.", "Migrate", "Cancel"))
                         {
@@ -396,7 +390,7 @@ namespace GrassSystem.Consoles.Editor
                         }
                     }
 
-                    if (GUILayout.Button(revertButtonContent, GUILayout.Height(24)))
+                    if (GUILayout.Button(RevertButtonContent, GUILayout.Height(24)))
                     {
                         if (EditorUtility.DisplayDialog("Revert Scene", $"Revert console migration in scene '{activeScene.name}'?", "Revert", "Cancel"))
                         {
@@ -406,7 +400,7 @@ namespace GrassSystem.Consoles.Editor
                         }
                     }
 
-                    if (GUILayout.Button(renameButtonContent, GUILayout.Height(24)))
+                    if (GUILayout.Button(RenameButtonContent, GUILayout.Height(24)))
                     {
                         if (EditorUtility.DisplayDialog("Rename Scene Objects", "Rename grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention? (Undoable)", "Rename", "Cancel"))
                         {
