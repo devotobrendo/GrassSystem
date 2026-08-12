@@ -16,6 +16,7 @@ namespace GrassSystem.Consoles.Editor
         public string targetPath;
         public string category;
         public string scene;
+        public bool consoleTier;
         public string status;
         public string note;
         public UnityEngine.Object pingTarget;
@@ -45,6 +46,7 @@ namespace GrassSystem.Consoles.Editor
         private const string ScenesFolder = "Assets/Scenes";
         private const string GrassRootFolder = "Assets/Grass";
         private const string DecalFolderSegment = "Decals";
+        private const string DeprecatedSuffix = "_Deprecated";
         private const string MaterialFolder = "Assets/GrassSystem-Test/Material";
 
         private const string MaterialLeadingPrefix = "MT";
@@ -66,6 +68,7 @@ namespace GrassSystem.Consoles.Editor
             "GrassSettings",
             "GrassMat",
             "MT",
+            "Deprecated",
         };
 
         private static readonly KeyValuePair<string, string>[] FullNameMap =
@@ -125,9 +128,44 @@ namespace GrassSystem.Consoles.Editor
             CollectDecalEntries(entries, sceneInfos);
             CollectMaterialEntries(entries, sceneInfos);
 
+            MarkSupersededOriginals(entries);
             ResolveCollisions(entries);
 
             return entries;
+        }
+
+        private static void MarkSupersededOriginals(List<StandardizePlanEntry> entries)
+        {
+            var consolePairs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (StandardizePlanEntry entry in entries)
+            {
+                if (!entry.consoleTier || string.IsNullOrEmpty(entry.scene)) continue;
+                if (entry.category != CategoryData && entry.category != CategorySettings) continue;
+
+                consolePairs.Add($"{entry.category}|{entry.scene}");
+            }
+
+            foreach (StandardizePlanEntry entry in entries)
+            {
+                if (entry.consoleTier || string.IsNullOrEmpty(entry.scene)) continue;
+                if (entry.category != CategoryData && entry.category != CategorySettings) continue;
+                if (string.IsNullOrEmpty(entry.targetPath)) continue;
+                if (!consolePairs.Contains($"{entry.category}|{entry.scene}")) continue;
+
+                string directory = Path.GetDirectoryName(entry.targetPath)?.Replace('\\', '/');
+                string nameNoExt = Path.GetFileNameWithoutExtension(entry.targetPath);
+                string ext = Path.GetExtension(entry.targetPath);
+
+                if (nameNoExt.EndsWith(DeprecatedSuffix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                entry.targetPath = $"{directory}/{nameNoExt}{DeprecatedSuffix}{ext}";
+                entry.note = "superseded by the console asset";
+                entry.status = string.Equals(entry.assetPath, entry.targetPath, StringComparison.OrdinalIgnoreCase)
+                    ? StatusAlreadyStandard
+                    : StatusReady;
+            }
         }
 
         public static StandardizeApplyResult Apply(List<StandardizePlanEntry> plan)
@@ -501,6 +539,7 @@ namespace GrassSystem.Consoles.Editor
 
                 string veg = ComputeVegFromName(nameNoExt, leadingPrefix, stripMaterialBoilerplate, targetScene, out bool verifyName);
                 bool consoleTier = DetectConsoleTier(nameNoExt, isConsoleType, shaderName);
+                entry.consoleTier = consoleTier;
 
                 string sceneNameToken = targetScene ?? "Shared";
                 string standardName = BuildStandardName(namePrefix, sceneNameToken, dayNight, veg, consoleTier);
