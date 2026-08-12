@@ -57,6 +57,8 @@ namespace GrassSystem.Consoles.Editor
         private StandardizeApplyResult lastApply;
         private int standardizeMovableCount;
         private string standardizeSummaryText = string.Empty;
+        private string standardizeScopeNote = string.Empty;
+        private bool standardizeOpenSceneOnly = true;
 
         private MigrationResult lastMigration;
         private GrassObjectRenameResult lastRename;
@@ -87,6 +89,7 @@ namespace GrassSystem.Consoles.Editor
         private static readonly GUIContent CreateProfilesContent = new GUIContent("Create Profiles For Open Scene", "Creates the Full and Switch profiles for the open scene under Assets/Grass/<Scene>/Profiles, fills both with the values this scene is using right now, and assigns the set to its renderers. Existing profiles are never overwritten.");
         private static readonly GUIContent SaveProfilesContent = new GUIContent("Save Assets", "Writes edited profiles to disk. Changing a profile in the Inspector only marks it dirty - Unity flushes it on File > Save Project, on quit, or here.");
         private static readonly GUIContent RefreshProfilesContent = new GUIContent("Refresh", "Re-reads the open scene and its profile assets, and updates that scene's row on the board.");
+        private static readonly GUIContent StandardizeScopeContent = new GUIContent("Open scene only", "Limits the plan to the assets this scene owns - settings, data, decal maps and material. Uncheck to standardize the whole project in one go.");
 
         [MenuItem("Tools/Grass System/Grass Hub", priority = 0)]
         private static void Open()
@@ -97,6 +100,7 @@ namespace GrassSystem.Consoles.Editor
 
         private const string SceneFolderPrefKey = "GrassHub.SceneSearchFolder";
         private const string OnlyInBuildPrefKey = "GrassHub.OnlyScenesInBuild";
+        private const string StandardizeScopePrefKey = "GrassHub.StandardizeOpenSceneOnly";
         private const string DefaultSceneFolder = "Assets/Scenes";
         private string sceneSearchFolder = DefaultSceneFolder;
         private bool onlyScenesInBuild = true;
@@ -106,6 +110,7 @@ namespace GrassSystem.Consoles.Editor
             minSize = new Vector2(820, 620);
             sceneSearchFolder = EditorPrefs.GetString(SceneFolderPrefKey, DefaultSceneFolder);
             onlyScenesInBuild = EditorPrefs.GetBool(OnlyInBuildPrefKey, true);
+            standardizeOpenSceneOnly = EditorPrefs.GetBool(StandardizeScopePrefKey, true);
             ResolveProfileSets();
         }
 
@@ -524,6 +529,15 @@ namespace GrassSystem.Consoles.Editor
                 if (GUILayout.Button(standardizePlan == null ? "Build Plan" : "Rebuild Plan", GUILayout.Width(110)))
                     BuildStandardizePlan();
 
+                EditorGUI.BeginChangeCheck();
+                standardizeOpenSceneOnly = GUILayout.Toggle(standardizeOpenSceneOnly, StandardizeScopeContent, GUILayout.Width(112));
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorPrefs.SetBool(StandardizeScopePrefKey, standardizeOpenSceneOnly);
+                    if (standardizePlan != null)
+                        BuildStandardizePlan();
+                }
+
                 GUILayout.Label(standardizeSummaryText);
                 GUILayout.FlexibleSpace();
 
@@ -531,7 +545,11 @@ namespace GrassSystem.Consoles.Editor
                 {
                     if (GUILayout.Button("Apply", GUILayout.Width(90)))
                     {
-                        if (EditorUtility.DisplayDialog("Standardize Assets", $"Move {standardizeMovableCount} grass items? Used assets are standardized into Assets/Grass/<Scene>/, unused ones are quarantined into Assets/Grass/_Unused/. GUIDs are preserved. Do this on a clean branch and coordinate with the team.", "Apply", "Cancel"))
+                        string scope = standardizeOpenSceneOnly
+                            ? $"the {standardizeMovableCount} item(s) owned by the open scene"
+                            : $"{standardizeMovableCount} grass item(s) across the whole project";
+
+                        if (EditorUtility.DisplayDialog("Standardize Assets", $"Move {scope}? Used assets are filed into Assets/Grass/<Scene>/<Category>/, unused ones are quarantined into Assets/Grass/_Unused/. GUIDs are preserved, so every reference survives the move. Do this on a clean branch and coordinate with the team.", "Apply", "Cancel"))
                         {
                             lastApply = GrassAssetStandardizer.Apply(standardizePlan);
                             BuildStandardizePlan();
@@ -540,6 +558,9 @@ namespace GrassSystem.Consoles.Editor
                     }
                 }
             }
+
+            if (!string.IsNullOrEmpty(standardizeScopeNote))
+                EditorGUILayout.LabelField(standardizeScopeNote, EditorStyles.miniLabel);
 
             if (lastApply != null)
                 EditorGUILayout.LabelField($"Moved {lastApply.moved}   Skipped {lastApply.skipped}   Failed {lastApply.failed}", EditorStyles.miniLabel);
@@ -618,6 +639,33 @@ namespace GrassSystem.Consoles.Editor
             }
         }
 
+        private List<StandardizePlanEntry> FilterStandardizePlan(List<StandardizePlanEntry> plan)
+        {
+            standardizeScopeNote = string.Empty;
+
+            if (!standardizeOpenSceneOnly)
+                return plan;
+
+            string sceneName = SceneManager.GetActiveScene().name;
+            string canonical = GrassAssetStandardizer.CanonicalSceneName(sceneName);
+
+            if (string.IsNullOrEmpty(canonical))
+            {
+                standardizeScopeNote = $"'{sceneName}' is not in the scene naming map, so no asset can be filed under it. Uncheck to see the whole project.";
+                return new List<StandardizePlanEntry>();
+            }
+
+            var filtered = new List<StandardizePlanEntry>();
+            for (int i = 0; i < plan.Count; i++)
+            {
+                if (string.Equals(plan[i].scene, canonical, StringComparison.OrdinalIgnoreCase))
+                    filtered.Add(plan[i]);
+            }
+
+            standardizeScopeNote = $"Only the assets owned by {canonical}. Shared and unused ones are hidden - uncheck to see them.";
+            return filtered;
+        }
+
         private static bool OpenSceneRenderersHaveProfileSet()
         {
             Scene scene = SceneManager.GetActiveScene();
@@ -639,7 +687,7 @@ namespace GrassSystem.Consoles.Editor
 
         private void BuildStandardizePlan()
         {
-            standardizePlan = GrassAssetStandardizer.BuildPlan();
+            standardizePlan = FilterStandardizePlan(GrassAssetStandardizer.BuildPlan());
 
             int ready = 0, ambiguous = 0, already = 0, deferred = 0, unused = 0;
             for (int i = 0; i < standardizePlan.Count; i++)

@@ -15,6 +15,7 @@ namespace GrassSystem.Consoles.Editor
         public string assetPath;
         public string targetPath;
         public string category;
+        public string scene;
         public string status;
         public string note;
         public UnityEngine.Object pingTarget;
@@ -43,7 +44,7 @@ namespace GrassSystem.Consoles.Editor
 
         private const string ScenesFolder = "Assets/Scenes";
         private const string GrassRootFolder = "Assets/Grass";
-        private const string DecalFolder = "Assets/BakedDecals";
+        private const string DecalFolderSegment = "Decals";
         private const string MaterialFolder = "Assets/GrassSystem-Test/Material";
 
         private const string MaterialLeadingPrefix = "MT";
@@ -121,7 +122,7 @@ namespace GrassSystem.Consoles.Editor
 
             CollectDataEntries(entries, sceneInfos);
             CollectSettingsEntries(entries, sceneInfos);
-            CollectDecalSummary(entries);
+            CollectDecalEntries(entries, sceneInfos);
             CollectMaterialEntries(entries, sceneInfos);
 
             ResolveCollisions(entries);
@@ -312,18 +313,117 @@ namespace GrassSystem.Consoles.Editor
             }
         }
 
-        private static void CollectDecalSummary(List<StandardizePlanEntry> entries)
+        private static void CollectDecalEntries(List<StandardizePlanEntry> entries, List<SceneUsageInfo> sceneInfos)
         {
-            int count = FindPathsInFolder("t:GrassDecalBakeAsset", DecalFolder).Length;
-            entries.Add(new StandardizePlanEntry
+            foreach (string path in FindPathsProjectWide("t:GrassDecalBakeAsset"))
             {
-                assetPath = DecalFolder,
-                targetPath = string.Empty,
+                GrassDecalBakeAsset bake = AssetDatabase.LoadAssetAtPath<GrassDecalBakeAsset>(path);
+                if (bake == null) continue;
+
+                bool used = ResolveUsage(path, sceneInfos, out string targetScene, out string dayNight);
+
+                if (!used)
+                {
+                    entries.Add(new StandardizePlanEntry
+                    {
+                        assetPath = path,
+                        category = CategoryDecal,
+                        pingTarget = bake,
+                        status = StatusUnused,
+                        note = "not referenced by any scene",
+                        targetPath = $"{GrassRootFolder}/_Unused/{DecalFolderSegment}/{Path.GetFileName(path)}",
+                    });
+                    continue;
+                }
+
+                string sceneFolder = targetScene ?? "_Shared";
+                string baseName = BuildDecalName(targetScene ?? "Shared", dayNight);
+                string folder = $"{GrassRootFolder}/{sceneFolder}/{DecalFolderSegment}";
+
+                entries.Add(BuildDecalEntry(path, bake, targetScene, $"{folder}/{baseName}.asset",
+                    targetScene == null ? "used by more than one scene" : null));
+
+                AddDecalMapEntry(entries, bake.overrideMap, "Override", folder, baseName, targetScene);
+                AddDecalMapEntry(entries, bake.multiplyMap, "Multiply", folder, baseName, targetScene);
+                AddDecalMapEntry(entries, bake.additiveMap, "Additive", folder, baseName, targetScene);
+            }
+        }
+
+        private static void AddDecalMapEntry(
+            List<StandardizePlanEntry> entries,
+            Texture2D map,
+            string suffix,
+            string folder,
+            string baseName,
+            string targetScene)
+        {
+            if (map == null) return;
+
+            string path = AssetDatabase.GetAssetPath(map);
+            if (string.IsNullOrEmpty(path)) return;
+
+            string ext = Path.GetExtension(path);
+            entries.Add(BuildDecalEntry(path, map, targetScene, $"{folder}/{baseName}_{suffix}{ext}", null));
+        }
+
+        private static StandardizePlanEntry BuildDecalEntry(
+            string path,
+            UnityEngine.Object asset,
+            string targetScene,
+            string targetPath,
+            string note)
+        {
+            return new StandardizePlanEntry
+            {
+                assetPath = path,
                 category = CategoryDecal,
-                status = StatusDeferred,
-                note = $"{count} grass decals found - standardized in a later phase",
-                pingTarget = AssetDatabase.IsValidFolder(DecalFolder) ? AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(DecalFolder) : null,
-            });
+                scene = targetScene,
+                pingTarget = asset,
+                targetPath = targetPath,
+                note = note,
+                status = string.Equals(path, targetPath, StringComparison.OrdinalIgnoreCase)
+                    ? StatusAlreadyStandard
+                    : StatusReady,
+            };
+        }
+
+        private static string BuildDecalName(string scenePascal, string dayNight)
+        {
+            var parts = new List<string> { "GrassDecal" };
+            if (!string.IsNullOrEmpty(scenePascal)) parts.Add(scenePascal);
+            if (!string.IsNullOrEmpty(dayNight)) parts.Add(dayNight);
+            return string.Join("_", parts);
+        }
+
+        private static bool ResolveUsage(string path, List<SceneUsageInfo> sceneInfos, out string targetScene, out string dayNight)
+        {
+            targetScene = null;
+            dayNight = null;
+
+            List<SceneUsageInfo> usedScenes = sceneInfos.Where(si => si.deps.Contains(path)).ToList();
+            if (usedScenes.Count == 0)
+                return false;
+
+            List<string> distinctScenes = usedScenes
+                .Select(si => si.canonicalScene)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            string scene = distinctScenes.Count == 1 ? distinctScenes[0] : null;
+
+            if (scene != null)
+            {
+                List<string> dnValues = usedScenes
+                    .Where(si => string.Equals(si.canonicalScene, scene, StringComparison.OrdinalIgnoreCase))
+                    .Select(si => si.dayNight)
+                    .ToList();
+
+                if (dnValues.Count > 0 && dnValues.All(v => v != null) && dnValues.Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1)
+                    dayNight = dnValues[0];
+            }
+
+            targetScene = scene;
+            return true;
         }
 
         private static void CollectMaterialEntries(List<StandardizePlanEntry> entries, List<SceneUsageInfo> sceneInfos)
@@ -388,9 +488,8 @@ namespace GrassSystem.Consoles.Editor
             try
             {
                 string nameNoExt = Path.GetFileNameWithoutExtension(path);
-                List<SceneUsageInfo> usedScenes = sceneInfos.Where(si => si.deps.Contains(path)).ToList();
 
-                if (usedScenes.Count == 0)
+                if (!ResolveUsage(path, sceneInfos, out string targetScene, out string dayNight))
                 {
                     entry.status = StatusUnused;
                     entry.targetPath = $"{GrassRootFolder}/_Unused/{folderSegment}/{Path.GetFileName(path)}";
@@ -398,29 +497,12 @@ namespace GrassSystem.Consoles.Editor
                     return entry;
                 }
 
-                List<string> distinctScenes = usedScenes
-                    .Select(si => si.canonicalScene)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                string targetScene = distinctScenes.Count == 1 ? distinctScenes[0] : null;
-
-                string dayNight = null;
-                if (targetScene != null)
-                {
-                    List<string> dnValues = usedScenes
-                        .Where(si => string.Equals(si.canonicalScene, targetScene, StringComparison.OrdinalIgnoreCase))
-                        .Select(si => si.dayNight)
-                        .ToList();
-
-                    if (dnValues.Count > 0 && dnValues.All(v => v != null) && dnValues.Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1)
-                        dayNight = dnValues[0];
-                }
+                entry.scene = targetScene;
 
                 string veg = ComputeVegFromName(nameNoExt, leadingPrefix, stripMaterialBoilerplate, targetScene, out bool verifyName);
                 bool consoleTier = DetectConsoleTier(nameNoExt, isConsoleType, shaderName);
 
-                string sceneNameToken = targetScene != null ? null : "Shared";
+                string sceneNameToken = targetScene ?? "Shared";
                 string standardName = BuildStandardName(namePrefix, sceneNameToken, dayNight, veg, consoleTier);
                 string ext = Path.GetExtension(path);
 
