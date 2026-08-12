@@ -367,9 +367,10 @@ Shader "GrassSystem/GrassUnlitConsole"
                     float2 inBounds = step(float2(0, 0), bakedUV) * step(bakedUV, float2(1, 1));
                     float isInMap = inBounds.x * inBounds.y;
 
-                    half4 bakedOverride = SAMPLE_TEXTURE2D(_BakedOverrideMap, sampler_BakedOverrideMap, bakedUV);
-                    half4 bakedMultiply = SAMPLE_TEXTURE2D(_BakedMultiplyMap, sampler_BakedMultiplyMap, bakedUV);
-                    half4 bakedAdditive = SAMPLE_TEXTURE2D(_BakedAdditiveMap, sampler_BakedAdditiveMap, bakedUV);
+                    float2 bakedUVClamped = saturate(bakedUV);
+                    half4 bakedOverride = SAMPLE_TEXTURE2D(_BakedOverrideMap, sampler_BakedOverrideMap, bakedUVClamped);
+                    half4 bakedMultiply = SAMPLE_TEXTURE2D(_BakedMultiplyMap, sampler_BakedMultiplyMap, bakedUVClamped);
+                    half4 bakedAdditive = SAMPLE_TEXTURE2D(_BakedAdditiveMap, sampler_BakedAdditiveMap, bakedUVClamped);
 
                     float overrideCoverage = bakedOverride.a * isInMap;
                     float multiplyCoverage = bakedMultiply.a * isInMap;

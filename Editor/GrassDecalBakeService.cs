@@ -211,11 +211,13 @@ namespace GrassSystem
             {
                 importer.sRGBTexture = isColorMap;
                 importer.textureCompression = TextureImporterCompression.Compressed;
-                importer.crunchedCompression = true;
+                importer.crunchedCompression = false;
                 importer.filterMode = FilterMode.Bilinear;
                 importer.maxTextureSize = resolution;
                 importer.mipmapEnabled = false;
-                importer.alphaIsTransparency = false;
+                importer.alphaIsTransparency = isColorMap;
+                importer.ignoreMipmapLimit = true;
+                importer.wrapMode = TextureWrapMode.Clamp;
                 importer.SaveAndReimport();
             }
 
