@@ -768,13 +768,27 @@ namespace GrassSystem.Consoles.Editor
             }
 
             var filtered = new List<StandardizePlanEntry>();
+            int unusedHidden = 0;
+            int sharedHidden = 0;
+
             for (int i = 0; i < plan.Count; i++)
             {
-                if (string.Equals(plan[i].scene, canonical, StringComparison.OrdinalIgnoreCase))
-                    filtered.Add(plan[i]);
+                StandardizePlanEntry entry = plan[i];
+                if (string.Equals(entry.scene, canonical, StringComparison.OrdinalIgnoreCase))
+                {
+                    filtered.Add(entry);
+                    continue;
+                }
+
+                if (entry.status == GrassAssetStandardizer.StatusUnused) unusedHidden++;
+                else if (string.IsNullOrEmpty(entry.scene)) sharedHidden++;
             }
 
-            standardizeScopeNote = $"Only the assets owned by {canonical}. Shared and unused ones are hidden - uncheck to see them.";
+            standardizeScopeNote = $"Only the assets owned by {canonical}. Hidden: {unusedHidden} unused, {sharedHidden} shared or unattributed - uncheck to see them.";
+
+            if (unusedHidden > 0)
+                standardizeScopeNote += $"\nAn asset shows up as unused when no SAVED scene references it. If you just migrated, save the scene and press Rescan before trusting this.";
+
             return filtered;
         }
 
