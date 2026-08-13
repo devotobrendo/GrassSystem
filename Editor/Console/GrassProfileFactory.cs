@@ -182,7 +182,14 @@ namespace GrassSystem.Consoles.Editor
         {
             var profile = ScriptableObject.CreateInstance<GrassPlatformProfile>();
             profile.targetClass = targetClass;
+            ApplyRendererToProfile(profile, renderer);
 
+            AssetDatabase.CreateAsset(profile, path);
+            return profile;
+        }
+
+        private static void ApplyRendererToProfile(GrassPlatformProfile profile, GrassRendererConsole renderer)
+        {
             profile.overrideMesh = true;
             profile.overrideThinning = true;
             profile.overrideInstanceDensity = true;
@@ -209,9 +216,6 @@ namespace GrassSystem.Consoles.Editor
                 profile.castShadows = settings.castShadows;
                 profile.receiveShadows = settings.useReceiveShadows;
             }
-
-            AssetDatabase.CreateAsset(profile, path);
-            return profile;
         }
 
         private static List<GrassRendererConsole> FindRenderersInScene(Scene scene)

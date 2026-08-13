@@ -27,6 +27,23 @@ namespace GrassSystem.Consoles.Editor
         private SO_GrassSettings cachedSettings;
         private SerializedObject serializedSettings;
 
+        private enum KnobTarget { SceneKnobs, FullProfile, SwitchProfile }
+        private static readonly GUIContent[] KnobTargetLabels =
+        {
+            new GUIContent("Scene knobs"),
+            new GUIContent("Full profile"),
+            new GUIContent("Switch profile"),
+        };
+        private static readonly GUIContent KnobTargetLabel = new GUIContent("Editing", "Where the Performance and Size sliders below write. Pick a profile and you edit that asset in place - no copy step, and the viewport shows it live.");
+        private static readonly GUIContent ThinningOverrideLabel = new GUIContent("Override Thinning", "While off, this profile leaves thinning and size to the scene knobs and the sliders below stay locked.");
+        private static readonly GUIContent DensityOverrideLabel = new GUIContent("Override Instance Density", "While off, this profile leaves instance density to the scene knobs and the slider below stays locked.");
+        private static readonly GUIContent SaveProfileLabel = new GUIContent("Save Profile", "Writes this profile asset to disk. Edits above only mark it dirty until then.");
+
+        private KnobTarget knobTarget = KnobTarget.SceneKnobs;
+        private bool knobTargetInitialized;
+        private GrassPlatformProfile knobProfile;
+        private SerializedObject knobProfileSO;
+
         private bool showData = true;
         private bool showVariant = true;
         private bool showPerformance = true;
@@ -64,6 +81,7 @@ namespace GrassSystem.Consoles.Editor
             propSizeScale = serializedObject.FindProperty("sizeScale");
             propVariantMode = serializedObject.FindProperty("variantMode");
             propProfileSet = serializedObject.FindProperty("profileSet");
+            knobTargetInitialized = false;
             RefreshSettingsSerializedObject();
         }
 
@@ -71,6 +89,68 @@ namespace GrassSystem.Consoles.Editor
         {
             serializedSettings?.Dispose();
             serializedSettings = null;
+            knobProfileSO?.Dispose();
+            knobProfileSO = null;
+            knobProfile = null;
+            ClearEditorPreview();
+            RepaintScene();
+        }
+
+        private void SyncKnobTarget()
+        {
+            var set = propProfileSet.objectReferenceValue as GrassPlatformProfileSet;
+
+            if (!knobTargetInitialized)
+            {
+                knobTargetInitialized = true;
+                GrassPlatformProfile inCharge = set != null ? set.Resolve((PlatformVariant)propVariantMode.enumValueIndex) : null;
+                if (inCharge != null && DescribeOverrides(inCharge).Length > 0)
+                    knobTarget = inCharge == set.switchProfile ? KnobTarget.SwitchProfile : KnobTarget.FullProfile;
+            }
+
+            GrassPlatformProfile target = null;
+            if (set != null)
+            {
+                if (knobTarget == KnobTarget.FullProfile) target = set.fullProfile;
+                else if (knobTarget == KnobTarget.SwitchProfile) target = set.switchProfile;
+            }
+
+            if (target != knobProfile)
+            {
+                knobProfileSO?.Dispose();
+                knobProfile = target;
+                knobProfileSO = target != null ? new SerializedObject(target) : null;
+            }
+
+            knobProfileSO?.Update();
+            PushEditorPreview();
+        }
+
+        private void PushEditorPreview()
+        {
+            GrassRendererConsole.EditorPreviewIgnoreProfile = knobTarget == KnobTarget.SceneKnobs;
+            GrassRendererConsole.EditorPreviewVariant =
+                knobTarget == KnobTarget.FullProfile ? PlatformVariant.ForceFull :
+                knobTarget == KnobTarget.SwitchProfile ? PlatformVariant.ForceSwitch :
+                (PlatformVariant?)null;
+        }
+
+        private static void ClearEditorPreview()
+        {
+            GrassRendererConsole.EditorPreviewIgnoreProfile = false;
+            GrassRendererConsole.EditorPreviewVariant = null;
+        }
+
+        private static void RepaintScene()
+        {
+            if (!Application.isPlaying)
+                EditorApplication.QueuePlayerLoopUpdate();
+            SceneView.RepaintAll();
+        }
+
+        private SerializedProperty KnobProp(string name, SerializedProperty sceneFallback)
+        {
+            return knobProfileSO != null ? knobProfileSO.FindProperty(name) : sceneFallback;
         }
 
         private void RefreshSettingsSerializedObject()
@@ -89,6 +169,7 @@ namespace GrassSystem.Consoles.Editor
 
             serializedObject.Update();
             RefreshSettingsSerializedObject();
+            SyncKnobTarget();
 
             DrawStatus();
             EditorGUILayout.Space();
@@ -105,6 +186,9 @@ namespace GrassSystem.Consoles.Editor
             DrawAdvanced();
 
             serializedObject.ApplyModifiedProperties();
+
+            if (knobProfileSO != null && knobProfileSO.ApplyModifiedProperties())
+                RepaintScene();
         }
 
         private void DrawStatus()
@@ -173,7 +257,53 @@ namespace GrassSystem.Consoles.Editor
             EditorGUILayout.HelpBox(overrides.Length == 0
                 ? $"{resolved.name} has no overrides enabled — the scene knobs below are in charge."
                 : $"{resolved.name} overrides: {overrides}", MessageType.None);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.PrefixLabel(KnobTargetLabel);
+                EditorGUI.BeginChangeCheck();
+                knobTarget = (KnobTarget)GUILayout.Toolbar((int)knobTarget, KnobTargetLabels);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    SyncKnobTarget();
+                    RepaintScene();
+                }
+            }
+
+            if (knobProfile != null)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    bool dirty = EditorUtility.IsDirty(knobProfile);
+                    EditorGUILayout.LabelField(dirty ? $"{knobProfile.name} - unsaved" : knobProfile.name, EditorStyles.miniLabel);
+                    using (new EditorGUI.DisabledScope(!dirty))
+                    {
+                        if (GUILayout.Button(SaveProfileLabel, GUILayout.Width(100)))
+                            AssetDatabase.SaveAssetIfDirty(knobProfile);
+                    }
+                }
+
+                EditorGUILayout.HelpBox($"Performance and Size below write straight into {knobProfile.name}, and the viewport is previewing it.", MessageType.Info);
+            }
+            else if (knobTarget != KnobTarget.SceneKnobs)
+            {
+                EditorGUILayout.HelpBox($"{set.name} has nothing in that slot.", MessageType.Warning);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("Previewing the scene knobs - the profiles are bypassed while this tab is selected.", MessageType.None);
+            }
+
             EditorGUI.indentLevel--;
+        }
+
+        private bool IsSceneKnobOverridden(System.Func<GrassPlatformProfile, bool> selector)
+        {
+            var set = propProfileSet.objectReferenceValue as GrassPlatformProfileSet;
+            if (set == null) return false;
+
+            GrassPlatformProfile resolved = set.Resolve((PlatformVariant)propVariantMode.enumValueIndex);
+            return resolved != null && selector(resolved);
         }
 
         private static string DescribeOverrides(GrassPlatformProfile profile)
@@ -196,33 +326,50 @@ namespace GrassSystem.Consoles.Editor
 
             EditorGUI.indentLevel++;
 
+            bool editingProfile = knobProfileSO != null;
             GrassPlatformProfileSet set = propProfileSet.objectReferenceValue as GrassPlatformProfileSet;
             GrassPlatformProfile resolved = set != null ? set.Resolve((PlatformVariant)propVariantMode.enumValueIndex) : null;
-            bool thinningOverridden = resolved != null && resolved.overrideThinning;
-            if (thinningOverridden)
-                EditorGUILayout.HelpBox($"Overridden by {resolved.name} — these values are ignored while that profile is active.", MessageType.Warning);
 
-            using (new EditorGUI.DisabledScope(thinningOverridden))
+            SerializedProperty thinToggle = editingProfile ? knobProfileSO.FindProperty("overrideThinning") : null;
+            bool thinningLocked = editingProfile
+                ? !thinToggle.boolValue
+                : resolved != null && resolved.overrideThinning;
+
+            if (editingProfile)
+                EditorGUILayout.PropertyField(thinToggle, ThinningOverrideLabel);
+            else if (thinningLocked)
+                EditorGUILayout.HelpBox($"Overridden by {resolved.name}. Set 'Editing' above to that profile to tune it right here.", MessageType.Warning);
+
+            SerializedProperty coverageProp = KnobProp("coverageCompensation", propCoverageCompensation);
+
+            using (new EditorGUI.DisabledScope(thinningLocked))
             {
                 EditorGUI.BeginChangeCheck();
-                EditorGUILayout.PropertyField(propFarKeepFraction);
-                EditorGUILayout.PropertyField(propThinStartDistance);
-                EditorGUILayout.PropertyField(propThinRampDistance);
-                EditorGUILayout.PropertyField(propCoverageCompensation);
+                EditorGUILayout.PropertyField(KnobProp("farKeepFraction", propFarKeepFraction));
+                EditorGUILayout.PropertyField(KnobProp("thinStartDistance", propThinStartDistance));
+                EditorGUILayout.PropertyField(KnobProp("thinRampDistance", propThinRampDistance));
+                EditorGUILayout.PropertyField(coverageProp);
 
-                if (console.EffectiveMode == GrassMode.CustomMesh && propCoverageCompensation.floatValue > 0f)
+                if (console.EffectiveMode == GrassMode.CustomMesh && coverageProp.floatValue > 0f)
                     EditorGUILayout.HelpBox("Custom Mesh scales uniformly, so coverage compensation grows the survivors in height too, not just width. Lower it if the far grass starts looking too tall.", MessageType.Info);
                 if (EditorGUI.EndChangeCheck())
                     SceneView.RepaintAll();
             }
 
             EditorGUILayout.Space();
-            bool densityOverridden = resolved != null && resolved.overrideInstanceDensity;
-            if (densityOverridden)
-                EditorGUILayout.HelpBox($"Instance Density is overridden by {resolved.name} ({resolved.instanceDensity:P0}) — this value is ignored while that profile is active.", MessageType.Warning);
 
-            using (new EditorGUI.DisabledScope(densityOverridden))
-                EditorGUILayout.PropertyField(propInstanceDensity);
+            SerializedProperty densityToggle = editingProfile ? knobProfileSO.FindProperty("overrideInstanceDensity") : null;
+            bool densityLocked = editingProfile
+                ? !densityToggle.boolValue
+                : resolved != null && resolved.overrideInstanceDensity;
+
+            if (editingProfile)
+                EditorGUILayout.PropertyField(densityToggle, DensityOverrideLabel);
+            else if (densityLocked)
+                EditorGUILayout.HelpBox($"Instance Density is overridden by {resolved.name} ({resolved.instanceDensity:P0}). Set 'Editing' above to that profile to tune it right here.", MessageType.Warning);
+
+            using (new EditorGUI.DisabledScope(densityLocked))
+                EditorGUILayout.PropertyField(KnobProp("instanceDensity", propInstanceDensity));
 
             int baked = console.BakedInstanceCount;
             int uploaded = console.TotalGrassCount;
@@ -243,19 +390,27 @@ namespace GrassSystem.Consoles.Editor
 
             EditorGUI.indentLevel++;
             bool isCustomMesh = console.settings != null && console.settings.grassMode == GrassMode.CustomMesh;
-            if (isCustomMesh)
+            SerializedProperty sizeProp = KnobProp("sizeScale", propSizeScale);
+            bool sizeLocked = knobProfileSO != null
+                ? !knobProfileSO.FindProperty("overrideThinning").boolValue
+                : IsSceneKnobOverridden(p => p.overrideThinning);
+
+            using (new EditorGUI.DisabledScope(sizeLocked))
             {
-                Vector2 current = propSizeScale.vector2Value;
-                EditorGUI.BeginChangeCheck();
-                float uniform = EditorGUILayout.FloatField("Size Scale (Uniform)", current.x);
-                if (EditorGUI.EndChangeCheck())
-                    propSizeScale.vector2Value = new Vector2(uniform, current.y);
-                EditorGUILayout.HelpBox("Custom Mesh: x = uniform scale, y ignored", MessageType.None);
-            }
-            else
-            {
-                EditorGUILayout.PropertyField(propSizeScale);
-                EditorGUILayout.HelpBox("Default: x = width, y = height", MessageType.None);
+                if (isCustomMesh)
+                {
+                    Vector2 current = sizeProp.vector2Value;
+                    EditorGUI.BeginChangeCheck();
+                    float uniform = EditorGUILayout.FloatField("Size Scale (Uniform)", current.x);
+                    if (EditorGUI.EndChangeCheck())
+                        sizeProp.vector2Value = new Vector2(uniform, current.y);
+                    EditorGUILayout.HelpBox("Custom Mesh: x = uniform scale, y ignored", MessageType.None);
+                }
+                else
+                {
+                    EditorGUILayout.PropertyField(sizeProp);
+                    EditorGUILayout.HelpBox("Default: x = width, y = height", MessageType.None);
+                }
             }
             EditorGUILayout.HelpBox("Base blade size is BAKED into the data asset; sizeScale is the live multiplier.", MessageType.Info);
             EditorGUI.indentLevel--;

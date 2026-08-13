@@ -120,7 +120,28 @@ namespace GrassSystem.Consoles
         public GrassDecalBakeAsset BakedDecalAsset => bakedDecalAsset;
         public Material MaterialInstance => materialInstance;
         public bool IsInitialized => isInitialized;
-        private GrassPlatformProfile ActiveProfile => profileSet != null ? profileSet.Resolve(variantMode) : null;
+#if UNITY_EDITOR
+        public static bool EditorPreviewIgnoreProfile;
+        public static PlatformVariant? EditorPreviewVariant;
+#endif
+
+        private GrassPlatformProfile ActiveProfile
+        {
+            get
+            {
+                if (profileSet == null) return null;
+
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                {
+                    if (EditorPreviewIgnoreProfile) return null;
+                    if (EditorPreviewVariant.HasValue) return profileSet.Resolve(EditorPreviewVariant.Value);
+                }
+#endif
+
+                return profileSet.Resolve(variantMode);
+            }
+        }
 
         private GrassMode EffectiveGrassMode
         {
