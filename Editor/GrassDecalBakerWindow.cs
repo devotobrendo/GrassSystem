@@ -9,6 +9,21 @@ namespace GrassSystem
     public class GrassDecalBakerWindow : EditorWindow
     {
         private int resolution = 2048;
+        private int switchResolution = 1024;
+
+        private static readonly GUIContent SwitchResolutionLabel = new GUIContent("Switch Resolution", "Per-platform importer override written on the baked maps. One asset on disk - Unity resizes it when it packs the Switch build. These maps have no mipmaps, so the global Mipmap Limit cannot shrink them; this is the only lever.");
+
+        private static readonly GUIContent[] SwitchResolutionOptions =
+        {
+            new GUIContent("256"), new GUIContent("512"), new GUIContent("1024"),
+            new GUIContent("2048"), new GUIContent("4096"),
+        };
+        private static readonly int[] SwitchResolutionValues = { 256, 512, 1024, 2048, 4096 };
+
+        private static float MapMegabytes(int size)
+        {
+            return size * size / (1024f * 1024f);
+        }
         private string outputFolder = "Assets/BakedDecals";
         private string assetName = "BakedGrassDecalMap";
         private bool disableOriginalsAfterBake = true;
@@ -30,6 +45,7 @@ namespace GrassSystem
         private void OnEnable()
         {
             resolution = EditorPrefs.GetInt("GrassDecalBaker_Resolution", 2048);
+            switchResolution = EditorPrefs.GetInt("GrassDecalBaker_SwitchResolution", 1024);
             outputFolder = EditorPrefs.GetString("GrassDecalBaker_OutputFolder", "Assets/BakedDecals");
             assetName = EditorPrefs.GetString("GrassDecalBaker_AssetName", "BakedGrassDecalMap");
             disableOriginalsAfterBake = EditorPrefs.GetBool("GrassDecalBaker_DisableOriginals", true);
@@ -39,6 +55,7 @@ namespace GrassSystem
         private void OnDisable()
         {
             EditorPrefs.SetInt("GrassDecalBaker_Resolution", resolution);
+            EditorPrefs.SetInt("GrassDecalBaker_SwitchResolution", switchResolution);
             EditorPrefs.SetString("GrassDecalBaker_OutputFolder", outputFolder);
             EditorPrefs.SetString("GrassDecalBaker_AssetName", assetName);
             EditorPrefs.SetBool("GrassDecalBaker_DisableOriginals", disableOriginalsAfterBake);
@@ -97,6 +114,14 @@ namespace GrassSystem
             resolution = EditorGUILayout.IntPopup("Resolution", resolution,
                 new[] { "512", "1024", "2048", "4096" },
                 new[] { 512, 1024, 2048, 4096 });
+
+            switchResolution = EditorGUILayout.IntPopup(SwitchResolutionLabel, Mathf.Min(switchResolution, resolution),
+                SwitchResolutionOptions, SwitchResolutionValues);
+            switchResolution = Mathf.Min(switchResolution, resolution);
+
+            EditorGUILayout.LabelField(
+                $"Switch build: {switchResolution}x{switchResolution} per map ({MapMegabytes(switchResolution):0.##} MB) instead of {resolution}x{resolution} ({MapMegabytes(resolution):0.##} MB). Same asset, resized on build - no second bake.",
+                EditorStyles.miniLabel);
 
             EditorGUILayout.BeginHorizontal();
             outputFolder = EditorGUILayout.TextField("Output Folder", outputFolder);
@@ -230,7 +255,7 @@ namespace GrassSystem
             {
                 EditorUtility.DisplayProgressBar("Baking Decal Map", "Preparing...", 0f);
 
-                loadedBakeAsset = GrassDecalBakeService.Bake(decals, outputFolder, assetName, resolution, false, false);
+                loadedBakeAsset = GrassDecalBakeService.Bake(decals, outputFolder, assetName, resolution, false, false, switchResolution);
                 ApplyBakeToRenderers(loadedBakeAsset, renderers, disableOriginalsAfterBake);
 
                 EditorUtility.DisplayDialog("Bake Complete",

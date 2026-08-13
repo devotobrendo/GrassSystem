@@ -14,14 +14,21 @@ namespace GrassSystem
             public Texture2D asset;
         }
 
+        public static readonly string[] SwitchPlatformNames = { "Nintendo Switch", "Switch" };
+
         public static GrassDecalBakeAsset Bake(
             List<GrassDecal> decals,
             string outputFolder,
             string assetName,
             int resolution,
             bool disableOriginalsAfterBake,
-            bool silent)
+            bool silent,
+            int switchResolution = 0)
         {
+            if (switchResolution <= 0)
+                switchResolution = Mathf.Max(256, resolution / 2);
+            switchResolution = Mathf.Min(switchResolution, resolution);
+
             EnsureTexturesReadable(decals);
 
             Vector4 mapBounds = ComputeMapBounds(decals);
@@ -35,9 +42,9 @@ namespace GrassSystem
             Material bakeMat = new Material(bakeShader);
 
             EnsureFolderExists(outputFolder);
-            var overrideResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Override, $"{assetName}_Override", outputFolder, resolution, silent);
-            var multiplyResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Multiply, $"{assetName}_Multiply", outputFolder, resolution, silent);
-            var additiveResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Additive, $"{assetName}_Additive", outputFolder, resolution, silent);
+            var overrideResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Override, $"{assetName}_Override", outputFolder, resolution, switchResolution, silent);
+            var multiplyResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Multiply, $"{assetName}_Multiply", outputFolder, resolution, switchResolution, silent);
+            var additiveResult = BakeModeMap(sorted, mapBounds, bakeMat, DecalBlendMode.Additive, $"{assetName}_Additive", outputFolder, resolution, switchResolution, silent);
 
             Object.DestroyImmediate(bakeMat);
 
@@ -122,6 +129,7 @@ namespace GrassSystem
             string fileNameBase,
             string outputFolder,
             int resolution,
+            int switchResolution,
             bool silent)
         {
             var modeDecals = sortedDecals.Where(d => d.blendMode == targetMode).ToList();
@@ -218,6 +226,7 @@ namespace GrassSystem
                 importer.alphaIsTransparency = isColorMap;
                 importer.ignoreMipmapLimit = true;
                 importer.wrapMode = TextureWrapMode.Clamp;
+                ApplySwitchPlatformSettings(importer, switchResolution);
                 importer.SaveAndReimport();
             }
 
@@ -226,6 +235,20 @@ namespace GrassSystem
                 path = savePath,
                 asset = AssetDatabase.LoadAssetAtPath<Texture2D>(savePath)
             };
+        }
+
+        private static void ApplySwitchPlatformSettings(TextureImporter importer, int switchResolution)
+        {
+            foreach (string platform in SwitchPlatformNames)
+            {
+                TextureImporterPlatformSettings settings = importer.GetPlatformTextureSettings(platform);
+                settings.name = platform;
+                settings.overridden = true;
+                settings.maxTextureSize = switchResolution;
+                settings.textureCompression = TextureImporterCompression.Compressed;
+                settings.format = TextureImporterFormat.Automatic;
+                importer.SetPlatformTextureSettings(settings);
+            }
         }
 
         private static void DeleteExistingBakeAsset(string assetPath)
