@@ -118,26 +118,100 @@ namespace GrassSystem.Consoles
         {
             if (profile == null) return;
 
-            profile.overrideThinning = overrideThinning;
-            profile.farKeepFraction = Mathf.Clamp01(farKeepFraction);
-            profile.thinStartDistance = Mathf.Max(0f, thinStartDistance);
-            profile.thinRampDistance = Mathf.Max(0.01f, thinRampDistance);
-            profile.coverageCompensation = Mathf.Clamp01(coverageCompensation);
-            profile.sizeScale = sizeScale;
+            if (overrideThinning)
+            {
+                profile.overrideThinning = true;
+                profile.farKeepFraction = Mathf.Clamp01(farKeepFraction);
+                profile.thinStartDistance = Mathf.Max(0f, thinStartDistance);
+                profile.thinRampDistance = Mathf.Max(0.01f, thinRampDistance);
+                profile.coverageCompensation = Mathf.Clamp01(coverageCompensation);
+                profile.sizeScale = sizeScale;
+            }
 
-            profile.overrideInstanceDensity = overrideInstanceDensity;
-            profile.instanceDensity = Mathf.Clamp(instanceDensity, 0.01f, 1f);
+            if (overrideInstanceDensity)
+            {
+                profile.overrideInstanceDensity = true;
+                profile.instanceDensity = Mathf.Clamp(instanceDensity, 0.01f, 1f);
+            }
 
-            profile.overrideDrawDistance = overrideDrawDistance;
-            profile.minFadeDistance = Mathf.Max(0f, minFadeDistance);
-            profile.maxDrawDistance = Mathf.Max(profile.minFadeDistance, maxDrawDistance);
+            if (overrideDrawDistance)
+            {
+                profile.overrideDrawDistance = true;
+                profile.minFadeDistance = Mathf.Max(0f, minFadeDistance);
+                profile.maxDrawDistance = Mathf.Max(profile.minFadeDistance, maxDrawDistance);
+            }
 
-            profile.overrideMesh = overrideMesh;
-            profile.meshMode = meshMode;
-            profile.proceduralType = proceduralType;
+            if (overrideMesh)
+            {
+                profile.overrideMesh = true;
+                profile.meshMode = meshMode;
+                profile.proceduralType = proceduralType;
+            }
 
-            profile.overrideAlbedo = overrideAlbedo;
-            profile.useFlatAlbedo = useFlatAlbedo;
+            if (overrideAlbedo)
+            {
+                profile.overrideAlbedo = true;
+                profile.useFlatAlbedo = useFlatAlbedo;
+            }
+        }
+
+        public string DescribeDiff(GrassPlatformProfile profile)
+        {
+            if (profile == null) return string.Empty;
+
+            var lines = new System.Collections.Generic.List<string>();
+
+            if (overrideThinning)
+            {
+                AddFloat(lines, "Far Keep Fraction", profile.farKeepFraction, Mathf.Clamp01(farKeepFraction));
+                AddFloat(lines, "Thin Start Distance", profile.thinStartDistance, Mathf.Max(0f, thinStartDistance));
+                AddFloat(lines, "Thin Ramp Distance", profile.thinRampDistance, Mathf.Max(0.01f, thinRampDistance));
+                AddFloat(lines, "Coverage Compensation", profile.coverageCompensation, Mathf.Clamp01(coverageCompensation));
+                if (profile.sizeScale != sizeScale)
+                    lines.Add($"Size Scale  {profile.sizeScale} -> {sizeScale}");
+            }
+
+            if (overrideInstanceDensity)
+                AddFloat(lines, "Instance Density", profile.instanceDensity, Mathf.Clamp(instanceDensity, 0.01f, 1f));
+
+            if (overrideDrawDistance)
+            {
+                AddFloat(lines, "Min Fade Distance", profile.minFadeDistance, Mathf.Max(0f, minFadeDistance));
+                AddFloat(lines, "Max Draw Distance", profile.maxDrawDistance, Mathf.Max(minFadeDistance, maxDrawDistance));
+            }
+
+            if (overrideMesh)
+            {
+                if (profile.meshMode != meshMode)
+                    lines.Add($"Mesh Mode  {profile.meshMode} -> {meshMode}");
+                if (profile.proceduralType != proceduralType)
+                    lines.Add($"Blade Type  {profile.proceduralType} -> {proceduralType}");
+            }
+
+            if (overrideAlbedo && profile.useFlatAlbedo != useFlatAlbedo)
+                lines.Add($"Flat Albedo  {profile.useFlatAlbedo} -> {useFlatAlbedo}");
+
+            return lines.Count == 0 ? "No value changes." : string.Join("\n", lines);
+        }
+
+        public string DescribeUntouched()
+        {
+            var groups = new System.Collections.Generic.List<string>();
+            if (!overrideThinning) groups.Add("Thinning + Size");
+            if (!overrideInstanceDensity) groups.Add("Instance Density");
+            if (!overrideDrawDistance) groups.Add("Draw Distance");
+            if (!overrideMesh) groups.Add("Mesh");
+            if (!overrideAlbedo) groups.Add("Albedo");
+
+            return groups.Count == 0
+                ? string.Empty
+                : $"The dump carries no override for {string.Join(", ", groups)} - those groups stay exactly as they are on the profile.";
+        }
+
+        private static void AddFloat(System.Collections.Generic.List<string> lines, string label, float current, float next)
+        {
+            if (Mathf.Approximately(current, next)) return;
+            lines.Add($"{label}  {current:0.###} -> {next:0.###}");
         }
 
         public string DescribeUnapplied()
