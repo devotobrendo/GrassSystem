@@ -332,18 +332,32 @@ namespace GrassSystem
         /// This allows the shader compiler to strip the entire decal block
         /// when no decals are active.
         /// </summary>
+        private static readonly HashSet<int> IncompatibleMaterialsWarned = new HashSet<int>();
+
         private static void SyncDecalKeyword(Material mat)
         {
+            if (mat == null) return;
+
+            if (!mat.HasProperty(PropDecalEnabled[0]))
+            {
+                if (IncompatibleMaterialsWarned.Add(mat.GetInstanceID()))
+                {
+                    string shaderName = mat.shader != null ? mat.shader.name : "(none)";
+                    Debug.LogWarning($"GrassDecal: '{mat.name}' uses shader '{shaderName}', which has no decal layers, so this decal cannot touch it. Grass decals target the blade material - GrassSystem/GrassUnlitConsole or GrassSystem/GrassUnlit. Ground shaders like GrassSystem/GroundShell and GrassSystem/GroundBlend are not valid targets.", mat);
+                }
+                return;
+            }
+
             bool anyEnabled = false;
             for (int i = 0; i < PropDecalEnabled.Length; i++)
             {
-                if (mat.GetFloat(PropDecalEnabled[i]) > 0.5f)
+                if (mat.HasProperty(PropDecalEnabled[i]) && mat.GetFloat(PropDecalEnabled[i]) > 0.5f)
                 {
                     anyEnabled = true;
                     break;
                 }
             }
-            
+
             if (anyEnabled)
                 mat.EnableKeyword("_DECALS_ON");
             else
