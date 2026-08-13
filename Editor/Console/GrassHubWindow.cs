@@ -61,6 +61,14 @@ namespace GrassSystem.Consoles.Editor
         private string standardizeCacheNote = string.Empty;
         private bool standardizeOpenSceneOnly = true;
 
+        private DecalTextureBudget decalBudget;
+        private int decalSwitchMax = 512;
+        private bool decalBudgetFoldout;
+        private Vector2 decalBudgetScrollPos;
+
+        private static readonly string[] DecalSizeNames = { "256", "512", "1024", "2048", "4096" };
+        private static readonly int[] DecalSizeValues = { 256, 512, 1024, 2048, 4096 };
+
         private MigrationResult lastMigration;
         private GrassObjectRenameResult lastRename;
 
@@ -102,6 +110,7 @@ namespace GrassSystem.Consoles.Editor
         private const string SceneFolderPrefKey = "GrassHub.SceneSearchFolder";
         private const string OnlyInBuildPrefKey = "GrassHub.OnlyScenesInBuild";
         private const string StandardizeScopePrefKey = "GrassHub.StandardizeOpenSceneOnly";
+        private const string DecalSwitchMaxPrefKey = "GrassHub.DecalSwitchMax";
         private const string DefaultSceneFolder = "Assets/Scenes";
         private string sceneSearchFolder = DefaultSceneFolder;
         private bool onlyScenesInBuild = true;
@@ -112,6 +121,7 @@ namespace GrassSystem.Consoles.Editor
             sceneSearchFolder = EditorPrefs.GetString(SceneFolderPrefKey, DefaultSceneFolder);
             onlyScenesInBuild = EditorPrefs.GetBool(OnlyInBuildPrefKey, true);
             standardizeOpenSceneOnly = EditorPrefs.GetBool(StandardizeScopePrefKey, true);
+            decalSwitchMax = EditorPrefs.GetInt(DecalSwitchMaxPrefKey, 512);
             ResolveProfileSets();
         }
 
@@ -214,6 +224,16 @@ namespace GrassSystem.Consoles.Editor
                 tuningStatusType = MessageType.Error;
                 return;
             }
+
+            string diff = snapshot.DescribeDiff(tuningTarget);
+            string untouched = snapshot.DescribeUntouched();
+
+            string confirm = $"Apply this dump to {tuningTarget.name}?\n\n{diff}";
+            if (!string.IsNullOrEmpty(untouched))
+                confirm += $"\n\n{untouched}";
+
+            if (!EditorUtility.DisplayDialog("Apply Grass Tuning", confirm, "Apply", "Cancel"))
+                return;
 
             Undo.RecordObject(tuningTarget, "Apply Grass Tuning");
             snapshot.ApplyTo(tuningTarget);
@@ -393,6 +413,7 @@ namespace GrassSystem.Consoles.Editor
                 DrawProfileAssetRow("Set", status.set);
                 DrawProfileAssetRow("Full", status.full);
                 DrawProfileAssetRow("Switch", status.switchProfile);
+                EditorGUILayout.LabelField("Tune them from the renderer's inspector - it edits the profile in place.", EditorStyles.miniLabel);
             }
             else
             {
@@ -568,6 +589,93 @@ namespace GrassSystem.Consoles.Editor
 
             if (lastApply != null)
                 EditorGUILayout.LabelField($"Moved {lastApply.moved}   Skipped {lastApply.skipped}   Failed {lastApply.failed}", EditorStyles.miniLabel);
+
+            EditorGUILayout.Space(4);
+            DrawDecalBudget();
+        }
+
+        private void DrawDecalBudget()
+        {
+            if (decalBudget == null)
+                ScanDecalBudget();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Decal textures", GUILayout.Width(110));
+
+                EditorGUI.BeginChangeCheck();
+                decalSwitchMax = EditorGUILayout.IntPopup(decalSwitchMax, DecalSizeNames, DecalSizeValues, GUILayout.Width(70));
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorPrefs.SetInt(DecalSwitchMaxPrefKey, decalSwitchMax);
+                    ScanDecalBudget();
+                }
+
+                GUILayout.Label($"{decalBudget.megabytesNow:0.#} MB -> {decalBudget.megabytesAfter:0.#} MB on Switch",
+                    decalBudget.ChangeCount > 0 ? stateWarnStyle : stateReadyStyle);
+
+                GUILayout.FlexibleSpace();
+
+                using (new EditorGUI.DisabledScope(decalBudget.ChangeCount == 0))
+                {
+                    if (GUILayout.Button("Apply", GUILayout.Width(90)))
+                        ApplyDecalBudget();
+                }
+            }
+
+            EditorGUILayout.LabelField(
+                decalBudget.ChangeCount == 0
+                    ? $"{decalBudget.entries.Count} map(s), all already capped at {decalSwitchMax} for Switch."
+                    : $"{decalBudget.entries.Count} map(s), {decalBudget.missingOverride} with no Switch override. Only the importer is touched - no re-bake, no pixel change, PC build untouched.",
+                EditorStyles.miniLabel);
+
+            if (decalBudget.entries.Count == 0)
+                return;
+
+            decalBudgetFoldout = EditorGUILayout.Foldout(decalBudgetFoldout, $"Maps ({decalBudget.ChangeCount} to change)", true);
+            if (!decalBudgetFoldout)
+                return;
+
+            decalBudgetScrollPos = EditorGUILayout.BeginScrollView(decalBudgetScrollPos, GUILayout.Height(Mathf.Min(150f, 20f + decalBudget.entries.Count * 18f)));
+            for (int i = 0; i < decalBudget.entries.Count; i++)
+                DrawDecalBudgetRow(decalBudget.entries[i]);
+            EditorGUILayout.EndScrollView();
+        }
+
+        private void DrawDecalBudgetRow(DecalTextureEntry entry)
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button(Path.GetFileNameWithoutExtension(entry.texturePath), linkStyle, GUILayout.Width(SceneColumnWidth)))
+                    EditorGUIUtility.PingObject(entry.texture);
+
+                GUILayout.Label($"{entry.switchSizeNow} -> {entry.switchSizeAfter}", entry.Changes ? stateWarnStyle : stateGrayStyle, GUILayout.Width(100));
+                GUILayout.Label($"{entry.MegabytesNow:0.##} -> {entry.MegabytesAfter:0.##} MB", stateGrayStyle, GUILayout.Width(140));
+                GUILayout.Label(entry.hasOverride ? string.Empty : "no override", stateGrayStyle);
+                GUILayout.FlexibleSpace();
+            }
+        }
+
+        private void ScanDecalBudget()
+        {
+            decalBudget = GrassDecalTextureBudget.Scan(decalSwitchMax);
+            Repaint();
+        }
+
+        private void ApplyDecalBudget()
+        {
+            string message =
+                $"Cap {decalBudget.ChangeCount} baked decal map(s) at {decalSwitchMax} for the Switch build?\n\n" +
+                $"{decalBudget.megabytesNow:0.#} MB -> {decalBudget.megabytesAfter:0.#} MB (estimate at 8bpp).\n\n" +
+                "Only the importer is written. The PNGs are not re-baked, the Editor and the PC build keep the full size, and clearing the override undoes it.\n\n" +
+                "The decals do get softer on Switch - check it on the devkit before shipping.";
+
+            if (!EditorUtility.DisplayDialog("Decal Texture Budget", message, "Apply", "Cancel"))
+                return;
+
+            int applied = GrassDecalTextureBudget.Apply(decalBudget, decalSwitchMax);
+            Debug.Log($"Decal Texture Budget: capped {applied} map(s) at {decalSwitchMax} for Switch.");
+            ScanDecalBudget();
         }
 
         private void DrawToolsSection()
@@ -796,6 +904,7 @@ namespace GrassSystem.Consoles.Editor
 
             RecomputeRows();
             profileSceneStatus = null;
+            ScanDecalBudget();
             Repaint();
         }
 
