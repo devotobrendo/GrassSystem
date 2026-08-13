@@ -19,6 +19,7 @@ namespace GrassSystem.Consoles.Editor
         private SerializedProperty propThinStartDistance;
         private SerializedProperty propThinRampDistance;
         private SerializedProperty propCoverageCompensation;
+        private SerializedProperty propMaxCoverageScale;
         private SerializedProperty propInstanceDensity;
         private SerializedProperty propSizeScale;
         private SerializedProperty propVariantMode;
@@ -77,6 +78,7 @@ namespace GrassSystem.Consoles.Editor
             propThinStartDistance = serializedObject.FindProperty("thinStartDistance");
             propThinRampDistance = serializedObject.FindProperty("thinRampDistance");
             propCoverageCompensation = serializedObject.FindProperty("coverageCompensation");
+            propMaxCoverageScale = serializedObject.FindProperty("maxCoverageScale");
             propInstanceDensity = serializedObject.FindProperty("instanceDensity");
             propSizeScale = serializedObject.FindProperty("sizeScale");
             propVariantMode = serializedObject.FindProperty("variantMode");
@@ -297,6 +299,25 @@ namespace GrassSystem.Consoles.Editor
             EditorGUI.indentLevel--;
         }
 
+        private static void DrawCoverageReadout(float farKeep, float coverage, float maxScale)
+        {
+            float keep = Mathf.Max(farKeep, 0.001f);
+            float full = 1f / Mathf.Sqrt(keep);
+            float blended = Mathf.Lerp(1f, full, Mathf.Clamp01(coverage));
+            float final = Mathf.Min(blended, Mathf.Max(1f, maxScale));
+
+            string text =
+                $"Far blades end up {final:0.00}x.  " +
+                $"Full compensation asks {full:0.00}x (1/sqrt({keep:0.###})), " +
+                $"blending at {Mathf.Clamp01(coverage):0.##} gives {blended:0.00}x";
+
+            text += blended > maxScale
+                ? $", capped to {Mathf.Max(1f, maxScale):0.00}x."
+                : ".";
+
+            EditorGUILayout.HelpBox(text, blended > maxScale ? MessageType.Info : MessageType.None);
+        }
+
         private bool IsSceneKnobOverridden(System.Func<GrassPlatformProfile, bool> selector)
         {
             var set = propProfileSet.objectReferenceValue as GrassPlatformProfileSet;
@@ -350,10 +371,18 @@ namespace GrassSystem.Consoles.Editor
                 EditorGUILayout.PropertyField(KnobProp("thinRampDistance", propThinRampDistance));
                 EditorGUILayout.PropertyField(coverageProp);
 
+                SerializedProperty maxScaleProp = KnobProp("maxCoverageScale", propMaxCoverageScale);
+                EditorGUILayout.PropertyField(maxScaleProp);
+
+                DrawCoverageReadout(
+                    KnobProp("farKeepFraction", propFarKeepFraction).floatValue,
+                    coverageProp.floatValue,
+                    maxScaleProp.floatValue);
+
                 if (console.EffectiveMode == GrassMode.CustomMesh && coverageProp.floatValue > 0f)
                     EditorGUILayout.HelpBox("Custom Mesh scales uniformly, so coverage compensation grows the survivors in height too, not just width. Lower it if the far grass starts looking too tall.", MessageType.Info);
                 if (EditorGUI.EndChangeCheck())
-                    SceneView.RepaintAll();
+                    RepaintScene();
             }
 
             EditorGUILayout.Space();

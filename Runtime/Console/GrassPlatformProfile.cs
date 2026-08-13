@@ -25,6 +25,7 @@ namespace GrassSystem.Consoles
         public float thinStartDistance = 10f;
         public float thinRampDistance = 5f;
         [Range(0f, 1f)] public float coverageCompensation = 1f;
+        [Min(1f)] public float maxCoverageScale = 4f;
         public Vector2 sizeScale = Vector2.one;
 
         [Header("Instance Density")]

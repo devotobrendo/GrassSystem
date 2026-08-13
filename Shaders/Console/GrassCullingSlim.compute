@@ -29,6 +29,7 @@ float _ThinStartDistance;
 float _ThinRampDistance;
 float2 _SizeScale;
 float _CoverageCompensation;
+float _MaxCoverageScale;
 
 uint _InstanceCount;
 
@@ -79,7 +80,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     if (rnd > keep)
         return;
 
-    float widthComp = lerp(1.0, rsqrt(max(keep, 0.001)), _CoverageCompensation);
+    float widthComp = min(lerp(1.0, rsqrt(max(keep, 0.001)), _CoverageCompensation), max(_MaxCoverageScale, 1.0));
 
     GrassOutput output;
     output.position = input.position;

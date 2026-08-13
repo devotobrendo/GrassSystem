@@ -37,6 +37,9 @@ namespace GrassSystem.Consoles
         [Range(0f, 1f)]
         [Tooltip("How much thinned-away blades grow the survivors to keep ground coverage. 1 = full. 0 = off (grass just gets sparser). Default mode grows width only; Custom Mesh grows uniformly, so survivors also get taller.")]
         public float coverageCompensation = 1f;
+        [Min(1f)]
+        [Tooltip("Hard ceiling on how much a survivor may grow. Full compensation asks for 1/sqrt(FarKeepFraction) - at 0.185 that is 2.32x, which nobody chose. Lower this to cap the growth at a size you picked. 1 = never grow.")]
+        public float maxCoverageScale = 4f;
         [Range(0.01f, 1f)]
         [Tooltip("Fraction of the baked instances actually uploaded to the GPU. Unlike Far Keep Fraction, which drops blades inside the compute shader, this shrinks the source buffer and the dispatch itself — use it to preview what a decimated bake would cost in memory and culling. Rebuilds buffers when changed.")]
         public float instanceDensity = 1f;
@@ -81,6 +84,7 @@ namespace GrassSystem.Consoles
         private static readonly int PropThinRamp = Shader.PropertyToID("_ThinRampDistance");
         private static readonly int PropSizeScale = Shader.PropertyToID("_SizeScale");
         private static readonly int PropCoverageComp = Shader.PropertyToID("_CoverageCompensation");
+        private static readonly int PropMaxCoverageScale = Shader.PropertyToID("_MaxCoverageScale");
         private static readonly int PropUseUniformScale = Shader.PropertyToID("_UseUniformScale");
         private static readonly int PropInstanceCount = Shader.PropertyToID("_InstanceCount");
         private static readonly int PropInteractors = Shader.PropertyToID("_Interactors");
@@ -882,11 +886,13 @@ namespace GrassSystem.Consoles
             float effThinRamp = ov ? GrassConsoleDebug.ThinRampDistance : (pt ? p.thinRampDistance : thinRampDistance);
             float effCoverage = ov ? GrassConsoleDebug.CoverageCompensation : (pt ? p.coverageCompensation : coverageCompensation);
             Vector2 effSize = ov ? GrassConsoleDebug.SizeScale : (pt ? p.sizeScale : sizeScale);
+            float effMaxCoverageScale = pt ? p.maxCoverageScale : maxCoverageScale;
             cullingShaderInstance.SetFloat(PropFarKeep, Mathf.Clamp01(effFarKeep));
             cullingShaderInstance.SetFloat(PropThinStart, effThinStart);
             cullingShaderInstance.SetFloat(PropThinRamp, Mathf.Max(0.01f, effThinRamp));
             cullingShaderInstance.SetVector(PropSizeScale, effSize);
             cullingShaderInstance.SetFloat(PropCoverageComp, Mathf.Clamp01(effCoverage));
+            cullingShaderInstance.SetFloat(PropMaxCoverageScale, Mathf.Max(1f, effMaxCoverageScale));
 
             cullingShaderInstance.SetFloat(PropMinFade, EffectiveMinFadeDistance);
             cullingShaderInstance.SetFloat(PropMaxDraw, EffectiveMaxDrawDistance);
