@@ -235,11 +235,15 @@ namespace GrassSystem.Consoles.Editor
 
             GrassDecalBakeAsset decalForConsole = renderer.BakedDecalAsset != null ? renderer.BakedDecalAsset : fallbackDecal;
 
+            GrassPlatformProfileSet existingSet = GrassProfileFactory.InspectOpenScene().set;
+
             Undo.RecordObject(console, "Migrate Grass To Console");
             console.settings = consoleSettings;
             console.dataAsset = slimData;
             if (decalForConsole != null)
                 console.SetBakedDecalAsset(decalForConsole);
+            if (console.profileSet == null && existingSet != null)
+                console.profileSet = existingSet;
             console.enabled = true;
             EditorUtility.SetDirty(console);
 
