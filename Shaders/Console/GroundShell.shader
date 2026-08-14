@@ -14,6 +14,8 @@ Shader "GrassSystem/GroundShell"
         _Coverage ("Coverage", Range(0, 1)) = 0.3
 
         [Enum(Off,0,On,1)] _ReceiveShadows ("Receive Shadows", Float) = 1
+
+        [Toggle(_LIGHTMAP_FROM_UV0)] _LightmapFromUV0 ("Lightmap UVs from UV0", Float) = 0
     }
 
     SubShader
@@ -71,6 +73,7 @@ Shader "GrassSystem/GroundShell"
             #pragma multi_compile_fragment _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fog
+            #pragma shader_feature_local_vertex _LIGHTMAP_FROM_UV0
             #pragma skip_variants STEREO_CUBEMAP_RENDER_ON STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON UNITY_SINGLE_PASS_STEREO DOTS_INSTANCING_ON
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -106,7 +109,13 @@ Shader "GrassSystem/GroundShell"
                 OUT.uv         = IN.uv;
                 OUT.fogFactor  = half(ComputeFogFactor(positionInputs.positionCS.z));
 
-                OUTPUT_LIGHTMAP_UV(IN.lightmapUV, unity_LightmapST, OUT.lightmapUV);
+                #if defined(_LIGHTMAP_FROM_UV0)
+                    float2 lightmapSource = IN.uv;
+                #else
+                    float2 lightmapSource = IN.lightmapUV;
+                #endif
+
+                OUTPUT_LIGHTMAP_UV(lightmapSource, unity_LightmapST, OUT.lightmapUV);
                 OUTPUT_SH(OUT.normalWS, OUT.vertexSH);
 
                 return OUT;
@@ -271,6 +280,7 @@ Shader "GrassSystem/GroundShell"
             #pragma target 3.5
             #pragma vertex   MetaVert
             #pragma fragment MetaFrag
+            #pragma shader_feature_local_vertex _LIGHTMAP_FROM_UV0
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/MetaInput.hlsl"
 
@@ -291,7 +301,14 @@ Shader "GrassSystem/GroundShell"
             MetaVaryings MetaVert(MetaAttributes IN)
             {
                 MetaVaryings OUT;
-                OUT.positionCS = UnityMetaVertexPosition(IN.positionOS.xyz, IN.lightmapUV,
+
+                #if defined(_LIGHTMAP_FROM_UV0)
+                    float2 lightmapSource = IN.uv;
+                #else
+                    float2 lightmapSource = IN.lightmapUV;
+                #endif
+
+                OUT.positionCS = UnityMetaVertexPosition(IN.positionOS.xyz, lightmapSource,
                     IN.dynamicLightmapUV, unity_LightmapST, unity_DynamicLightmapST);
                 OUT.uv = IN.uv;
                 return OUT;
