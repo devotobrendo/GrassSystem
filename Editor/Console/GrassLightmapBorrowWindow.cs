@@ -12,6 +12,13 @@ namespace GrassSystem.Consoles.Editor
         private string status = string.Empty;
         private MessageType statusType = MessageType.None;
 
+        private int manualIndex = -1;
+        private Vector2 manualTiling = Vector2.one;
+        private Vector2 manualOffset = Vector2.zero;
+
+        private static readonly GUIContent ReadDonorLabel = new GUIContent("Read from donor", "Fills the fields below with the donor's numbers so you can note them down or tweak them.");
+        private static readonly GUIContent ApplyManualLabel = new GUIContent("Apply typed values to target", "Writes the four numbers above onto the target renderer. Undoable, no bake.");
+
         private static readonly GUIContent DonorLabel = new GUIContent("Donor", "A renderer that already carries a baked lightmap and covers the same ground.");
         private static readonly GUIContent TargetLabel = new GUIContent("Target", "The renderer that should read the donor's lightmap region.");
         private static readonly GUIContent FindLabel = new GUIContent("Find donor", "Picks the lightmapped renderer whose bounds overlap the target the most.");
@@ -76,6 +83,36 @@ namespace GrassSystem.Consoles.Editor
                 {
                     if (GUILayout.Button(ClearLabel, GUILayout.Width(100)))
                         ClearTarget();
+                }
+            }
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("By hand", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("When no donor lives in this scene, read the four numbers off any renderer that shares the same ground - another scene, an older commit, a screenshot - and type them here.", EditorStyles.wordWrappedMiniLabel);
+
+            manualIndex = EditorGUILayout.IntField("Lightmap Index", manualIndex);
+            manualTiling = EditorGUILayout.Vector2Field("Tiling", manualTiling);
+            manualOffset = EditorGUILayout.Vector2Field("Offset", manualOffset);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(donor == null || donor.lightmapIndex < 0))
+                {
+                    if (GUILayout.Button(ReadDonorLabel, GUILayout.Width(150)))
+                    {
+                        manualIndex = donor.lightmapIndex;
+                        Vector4 st = donor.lightmapScaleOffset;
+                        manualTiling = new Vector2(st.x, st.y);
+                        manualOffset = new Vector2(st.z, st.w);
+                        status = $"Read from '{donor.name}'.";
+                        statusType = MessageType.Info;
+                    }
+                }
+
+                using (new EditorGUI.DisabledScope(target == null || manualIndex < 0))
+                {
+                    if (GUILayout.Button(ApplyManualLabel))
+                        ApplyLightmap(manualIndex, new Vector4(manualTiling.x, manualTiling.y, manualOffset.x, manualOffset.y), "typed values");
                 }
             }
 
@@ -155,6 +192,11 @@ namespace GrassSystem.Consoles.Editor
 
         private void CopyLightmap()
         {
+            ApplyLightmap(donor.lightmapIndex, donor.lightmapScaleOffset, $"'{donor.name}'");
+        }
+
+        private void ApplyLightmap(int lightmapIndex, Vector4 scaleOffset, string source)
+        {
             var so = new SerializedObject(target);
             SerializedProperty index = so.FindProperty("m_LightmapIndex");
             SerializedProperty tiling = so.FindProperty("m_LightmapTilingOffset");
@@ -167,12 +209,12 @@ namespace GrassSystem.Consoles.Editor
             }
 
             Undo.RecordObject(target, "Borrow Lightmap");
-            index.intValue = donor.lightmapIndex;
-            tiling.vector4Value = donor.lightmapScaleOffset;
+            index.intValue = lightmapIndex;
+            tiling.vector4Value = scaleOffset;
             so.ApplyModifiedProperties();
             EditorUtility.SetDirty(target);
 
-            status = $"'{target.name}' now reads index {donor.lightmapIndex} with the same tiling as '{donor.name}'. Save the scene to keep it. If the shading looks like it belongs to another object, Undo.";
+            status = $"'{target.name}' now reads index {lightmapIndex} from {source}. Save the scene to keep it. If the shading looks like it belongs to another object, Undo.";
             statusType = MessageType.Info;
             SceneView.RepaintAll();
         }
