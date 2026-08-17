@@ -41,6 +41,7 @@ namespace GrassSystem.Consoles.Editor
             CollectInScene<GrassRendererConsole>(scene, targets);
             CollectInScene<GrassRenderer>(scene, targets);
             CollectInScene<GrassDecal>(scene, targets);
+            CollectContainers(scene, targets);
 
             if (targets.Count == 0)
             {
@@ -52,7 +53,7 @@ namespace GrassSystem.Consoles.Editor
 
             foreach (GameObject go in targets)
             {
-                string targetName = ComputeTargetName(go);
+                string targetName = ComputeTargetName(go, scene.name);
                 if (string.IsNullOrEmpty(targetName))
                 {
                     result.skipped++;
@@ -92,14 +93,30 @@ namespace GrassSystem.Consoles.Editor
             }
         }
 
-        private static string ComputeTargetName(GameObject go)
+        private static void CollectContainers(Scene scene, HashSet<GameObject> targets)
+        {
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (roots[i].transform.childCount == 0) continue;
+                if (!GrassSceneMigrator.IsBareContainer(roots[i])) continue;
+                if (roots[i].GetComponentInChildren<GrassRendererConsole>(true) == null) continue;
+
+                targets.Add(roots[i]);
+            }
+        }
+
+        private static string ComputeTargetName(GameObject go, string sceneName)
         {
             if (go.TryGetComponent(out GrassRendererConsole _))
             {
                 string baseName = StripConsoleSuffix(go.name);
                 string veg = ParseDescriptor(baseName);
-                return $"Grass_{veg}_Console";
+                return $"GrassSystem_{veg}_Console";
             }
+
+            if (GrassSceneMigrator.IsBareContainer(go))
+                return GrassSceneMigrator.BuildContainerName(sceneName);
 
             if (go.TryGetComponent(out GrassRenderer _))
             {

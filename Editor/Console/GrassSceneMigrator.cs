@@ -26,6 +26,26 @@ namespace GrassSystem.Consoles.Editor
         private const string DecalBakeAssetName = "BakedGrassDecalMap";
         private const int DecalBakeResolution = 2048;
 
+        public const string ConsoleObjectName = "GrassSystem_Main_Console";
+
+        public static string BuildContainerName(string sceneName)
+        {
+            string canonical = GrassAssetStandardizer.CanonicalSceneName(sceneName);
+            string dayNight = GrassAssetStandardizer.SceneDayNight(sceneName);
+
+            var parts = new List<string>
+            {
+                string.IsNullOrEmpty(canonical) ? SanitizeForName(sceneName) : canonical,
+                "Grass",
+            };
+
+            if (!string.IsNullOrEmpty(dayNight))
+                parts.Add(dayNight);
+
+            parts.Add("Console");
+            return string.Join("_", parts);
+        }
+
         public static MigrationResult MigrateOpenScene()
         {
             var result = new MigrationResult();
@@ -92,17 +112,22 @@ namespace GrassSystem.Consoles.Editor
 
             GrassDecalBakeAsset fallbackDecal = ResolveFallbackDecal(scene, sceneName, renderers, result);
 
+            Transform container = renderers.Count > 0 ? ResolveOrCreateContainer(scene, sceneName) : null;
+
             foreach (GrassRenderer renderer in renderers)
             {
                 try
                 {
-                    MigrateRenderer(renderer, sceneName, slimCullingShader, slimGrassMaterial, fallbackDecal, result);
+                    MigrateRenderer(renderer, sceneName, container, slimCullingShader, slimGrassMaterial, fallbackDecal, result);
                 }
                 catch (System.Exception ex)
                 {
                     result.notes.Add($"{renderer.name}: error - {ex.Message}");
                 }
             }
+
+            if (container != null && container.childCount == 0)
+                Undo.DestroyObjectImmediate(container.gameObject);
 
             EditorSceneManager.MarkSceneDirty(scene);
             AssetDatabase.SaveAssets();
@@ -117,12 +142,18 @@ namespace GrassSystem.Consoles.Editor
             if (!scene.IsValid() || !scene.isLoaded)
                 return;
 
+            var touchedContainers = new List<GameObject>();
+
             GrassRendererConsole[] consoles = Object.FindObjectsByType<GrassRendererConsole>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             for (int i = 0; i < consoles.Length; i++)
             {
                 GrassRendererConsole console = consoles[i];
                 if (console == null || console.gameObject.scene != scene)
                     continue;
+
+                Transform parent = console.transform.parent;
+                if (parent != null && IsBareContainer(parent.gameObject) && !touchedContainers.Contains(parent.gameObject))
+                    touchedContainers.Add(parent.gameObject);
 
                 GrassRenderer sameObjectRenderer = console.GetComponent<GrassRenderer>();
                 if (sameObjectRenderer != null)
@@ -170,12 +201,22 @@ namespace GrassSystem.Consoles.Editor
                 renderer.gameObject.SetActive(true);
             }
 
+            for (int i = 0; i < touchedContainers.Count; i++)
+            {
+                GameObject container = touchedContainers[i];
+                if (container == null || container.transform.childCount > 0)
+                    continue;
+
+                Undo.DestroyObjectImmediate(container);
+            }
+
             EditorSceneManager.MarkSceneDirty(scene);
         }
 
         private static void MigrateRenderer(
             GrassRenderer renderer,
             string sceneName,
+            Transform container,
             ComputeShader slimCullingShader,
             Material slimGrassMaterial,
             GrassDecalBakeAsset fallbackDecal,
@@ -213,18 +254,31 @@ namespace GrassSystem.Consoles.Editor
             }
             GrassConsoleDataBakeService.Bake(source, sceneName, originAssetPath, slimData);
 
-            string consoleObjectName = $"{renderer.gameObject.name}_Console";
-            Transform originalParent = renderer.transform.parent;
-            GameObject consoleGO = FindSiblingWithComponent<GrassRendererConsole>(originalParent, renderer.gameObject.scene, consoleObjectName);
+            Scene scene = renderer.gameObject.scene;
+            string legacyConsoleName = $"{renderer.gameObject.name}_Console";
+            GameObject consoleGO = FindExistingConsoleObject(scene, container, legacyConsoleName);
 
             if (consoleGO == null)
             {
-                consoleGO = new GameObject(consoleObjectName);
+                consoleGO = new GameObject(ConsoleObjectName);
                 Undo.RegisterCreatedObjectUndo(consoleGO, "Create Grass Console Object");
-                consoleGO.transform.SetParent(originalParent, false);
-                consoleGO.transform.localPosition = renderer.transform.localPosition;
-                consoleGO.transform.localRotation = renderer.transform.localRotation;
-                consoleGO.transform.localScale = renderer.transform.localScale;
+                consoleGO.transform.SetParent(container, false);
+                consoleGO.transform.SetPositionAndRotation(renderer.transform.position, renderer.transform.rotation);
+                consoleGO.transform.localScale = renderer.transform.lossyScale;
+            }
+            else
+            {
+                if (consoleGO.transform.parent != container)
+                {
+                    Undo.SetTransformParent(consoleGO.transform, container, "Move Grass Console Into Container");
+                    result.notes.Add($"Moved '{consoleGO.name}' into {container.name}.");
+                }
+
+                if (!string.Equals(consoleGO.name, ConsoleObjectName, System.StringComparison.Ordinal))
+                {
+                    Undo.RecordObject(consoleGO, "Rename Grass Console Object");
+                    consoleGO.name = ConsoleObjectName;
+                }
             }
 
             GrassRendererConsole console = consoleGO.GetComponent<GrassRendererConsole>() ?? Undo.AddComponent<GrassRendererConsole>(consoleGO);
@@ -252,7 +306,91 @@ namespace GrassSystem.Consoles.Editor
 
             result.renderersMigrated++;
             string decalNote = decalForConsole != null ? "" : " (no decal - bake one and re-run)";
-            result.notes.Add($"{renderer.name}: migrated to '{consoleObjectName}' ({source.Count:N0} instances){decalNote}.");
+            result.notes.Add($"{renderer.name}: migrated to '{container.name}/{ConsoleObjectName}' ({source.Count:N0} instances){decalNote}.");
+        }
+
+        private static Transform ResolveOrCreateContainer(Scene scene, string sceneName)
+        {
+            string containerName = BuildContainerName(sceneName);
+
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (string.Equals(roots[i].name, containerName, System.StringComparison.Ordinal))
+                    return roots[i].transform;
+            }
+
+            Transform adopted = FindLegacyContainer(scene);
+            if (adopted != null)
+            {
+                Undo.RecordObject(adopted.gameObject, "Rename Grass Console Container");
+                adopted.gameObject.name = containerName;
+                return adopted;
+            }
+
+            var created = new GameObject(containerName);
+            Undo.RegisterCreatedObjectUndo(created, "Create Grass Console Container");
+            created.transform.SetParent(null, false);
+            created.transform.localPosition = Vector3.zero;
+            created.transform.localRotation = Quaternion.identity;
+            created.transform.localScale = Vector3.one;
+            return created.transform;
+        }
+
+        private static Transform FindLegacyContainer(Scene scene)
+        {
+            GameObject[] roots = scene.GetRootGameObjects();
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (IsBareContainer(roots[i]) && roots[i].GetComponentInChildren<GrassRendererConsole>(true) != null)
+                    return roots[i].transform;
+            }
+            return null;
+        }
+
+        public static bool IsBareContainer(GameObject go)
+        {
+            if (go == null) return false;
+            if (go.transform.parent != null) return false;
+
+            Component[] components = go.GetComponents<Component>();
+            for (int i = 0; i < components.Length; i++)
+                if (!(components[i] is Transform))
+                    return false;
+
+            for (int i = 0; i < go.transform.childCount; i++)
+                if (go.transform.GetChild(i).GetComponent<GrassRendererConsole>() == null)
+                    return false;
+
+            return true;
+        }
+
+        private static GameObject FindExistingConsoleObject(Scene scene, Transform container, string legacyConsoleName)
+        {
+            List<GrassRendererConsole> consoles = Object.FindObjectsByType<GrassRendererConsole>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Where(c => c != null && c.gameObject.scene == scene)
+                .ToList();
+
+            if (consoles.Count == 0)
+                return null;
+
+            foreach (GrassRendererConsole console in consoles)
+            {
+                if (console.transform.parent == container &&
+                    string.Equals(console.gameObject.name, ConsoleObjectName, System.StringComparison.Ordinal))
+                    return console.gameObject;
+            }
+
+            if (consoles.Count == 1)
+                return consoles[0].gameObject;
+
+            foreach (GrassRendererConsole console in consoles)
+            {
+                if (string.Equals(console.gameObject.name, legacyConsoleName, System.StringComparison.Ordinal))
+                    return console.gameObject;
+            }
+
+            return null;
         }
 
         private static SO_GrassSettings ResolveConsoleSettings(string originalSettingsPath, ComputeShader slimCullingShader, Material slimGrassMaterial)
@@ -415,6 +553,19 @@ namespace GrassSystem.Consoles.Editor
         {
             string path = AssetDatabase.GUIDToAssetPath(guid);
             return string.IsNullOrEmpty(path) ? null : AssetDatabase.LoadAssetAtPath<T>(path);
+        }
+
+        private static string SanitizeForName(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "Unnamed";
+
+            var sb = new System.Text.StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+                if (char.IsLetterOrDigit(value[i]))
+                    sb.Append(value[i]);
+
+            return sb.Length == 0 ? "Unnamed" : sb.ToString();
         }
 
         private static string SanitizeForPath(string value)
