@@ -39,6 +39,7 @@ namespace GrassSystem.Consoles.Editor
         private static readonly GUIContent ThinningOverrideLabel = new GUIContent("Override Thinning", "While off, this profile leaves thinning and size to the scene knobs and the sliders below stay locked.");
         private static readonly GUIContent DensityOverrideLabel = new GUIContent("Override Instance Density", "While off, this profile leaves instance density to the scene knobs and the slider below stays locked.");
         private static readonly GUIContent SaveProfileLabel = new GUIContent("Save Profile", "Writes this profile asset to disk. Edits above only mark it dirty until then.");
+        private static readonly GUIContent VariantModeLabel = new GUIContent("Variant Mode (ships)", "Leave on Auto. Auto picks the Switch profile on Switch and the Full profile everywhere else, at runtime. Force* is a debug override that ships with the build - the build guard fails on it.");
 
         private KnobTarget knobTarget = KnobTarget.SceneKnobs;
         private bool knobTargetInitialized;
@@ -233,7 +234,22 @@ namespace GrassSystem.Consoles.Editor
             if (!showVariant) return;
 
             EditorGUI.indentLevel++;
-            EditorGUILayout.PropertyField(propVariantMode);
+            EditorGUILayout.PropertyField(propVariantMode, VariantModeLabel);
+
+            if ((PlatformVariant)propVariantMode.enumValueIndex != PlatformVariant.Auto)
+            {
+                EditorGUILayout.HelpBox(
+                    "This renderer ignores the target platform and always uses this profile. That is a debug override - the build fails while it is not Auto. " +
+                    "To preview a platform without changing what ships, use the Full/Switch tabs below instead.",
+                    MessageType.Warning);
+
+                if (GUILayout.Button("Set back to Auto"))
+                {
+                    propVariantMode.enumValueIndex = (int)PlatformVariant.Auto;
+                    serializedObject.ApplyModifiedProperties();
+                }
+            }
+
             EditorGUILayout.PropertyField(propProfileSet);
 
             GrassPlatformProfileSet set = propProfileSet.objectReferenceValue as GrassPlatformProfileSet;

@@ -13,6 +13,7 @@ namespace GrassSystem.Consoles
         public SO_GrassSettings settings;
 
         [Header("Platform Variant")]
+        [Tooltip("Leave on Auto. Auto picks the Switch profile on Switch and the Full profile everywhere else, at runtime. Force* is a debug override that ships with the build - GrassVariantBuildGuard fails the build on it.")]
         public PlatformVariant variantMode = PlatformVariant.Auto;
         public GrassPlatformProfileSet profileSet;
 
