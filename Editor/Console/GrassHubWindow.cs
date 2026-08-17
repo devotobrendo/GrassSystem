@@ -40,10 +40,19 @@ namespace GrassSystem.Consoles.Editor
         private const string MenuPathConverter = "Tools/Grass System/Convert to Console (Slim)";
         private const string MenuPathDashboard = "Tools/Grass System/Migration Dashboard";
 
-        private const float SceneColumnWidth = 250f;
+        private const float SceneColumnMinWidth = 160f;
         private const float StateColumnWidth = 130f;
         private const float ActionColumnWidth = 170f;
         private const float OpenColumnWidth = 56f;
+        private const float AssetNameColumnWidth = 210f;
+
+        private const float BoardRowHeight = 20f;
+        private const float BoardMinHeight = 90f;
+        private const float BoardMaxHeight = 240f;
+        private const float BoardScrollbarWidth = 13f;
+
+        private const float PrimaryButtonHeight = 26f;
+        private const float SecondaryButtonHeight = 21f;
 
         private readonly List<SceneScanInfo> scanInfos = new List<SceneScanInfo>();
         private readonly List<SceneRow> sceneRows = new List<SceneRow>();
@@ -58,7 +67,6 @@ namespace GrassSystem.Consoles.Editor
         private int standardizeMovableCount;
         private string standardizeSummaryText = string.Empty;
         private string standardizeScopeNote = string.Empty;
-        private string standardizeCacheNote = string.Empty;
         private bool standardizeOpenSceneOnly = true;
 
         private DecalTextureBudget decalBudget;
@@ -73,13 +81,10 @@ namespace GrassSystem.Consoles.Editor
         private GrassObjectRenameResult lastRename;
 
         private bool scanned;
+        private bool housekeepingExpanded;
+        private string boardScopeNote = string.Empty;
         private Vector2 boardScrollPos;
-
-        private string tuningJson = string.Empty;
-        private GrassPlatformProfile tuningTarget;
-        private string tuningStatus = string.Empty;
-        private MessageType tuningStatusType = MessageType.None;
-        private Vector2 tuningScrollPos;
+        private Vector2 windowScrollPos;
 
         private GUIStyle titleStyle;
         private GUIStyle linkStyle;
@@ -89,16 +94,23 @@ namespace GrassSystem.Consoles.Editor
         private GUIStyle stateWarnStyle;
         private GUIStyle stateNeutralStyle;
         private GUIStyle stateGrayStyle;
+        private GUIStyle wrapLabelStyle;
+        private GUIStyle microCaptionStyle;
+        private GUIStyle groupTitleStyle;
+        private Color openRowTint;
 
-        private static readonly GUIContent BuildFilterContent = new GUIContent("Scenes in build", "Scans only the scenes enabled in Build Settings. Uncheck to scan a folder instead. Either way, scenes without grass are left out.");
+        private static readonly GUIContent BuildFilterContent = new GUIContent("Scenes in build", "Lists only the scenes enabled in Build Settings. Uncheck to list a folder instead. Either way, scenes without grass are left out.");
         private static readonly GUIContent OpenButtonContent = new GUIContent("Open", "Opens this scene, prompting to save the current one first.");
-        private static readonly GUIContent MigrateButtonContent = new GUIContent("Migrate Open Scene", "Adds console renderers and creates assets for the currently open scene. Requires a valid open scene.");
-        private static readonly GUIContent RevertButtonContent = new GUIContent("Revert Open Scene", "Reverts console migration in the currently open scene. Requires a valid open scene.");
-        private static readonly GUIContent RenameButtonContent = new GUIContent("Rename Scene Objects", "Renames grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention. Undoable. Requires a valid open scene.");
+        private static readonly GUIContent MigrateButtonContent = new GUIContent("Migrate Open Scene", "Adds console renderers and creates assets for the currently open scene.");
+        private static readonly GUIContent RevertButtonContent = new GUIContent("Revert Open Scene", "Reverts console migration in the currently open scene.");
+        private static readonly GUIContent RenameButtonContent = new GUIContent("Rename Scene Objects", "Renames grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention. Undoable.");
         private static readonly GUIContent CreateProfilesContent = new GUIContent("Create Profiles For Open Scene", "Creates the Full and Switch profiles for the open scene under Assets/Grass/<Scene>/Profiles, fills both with the values this scene is using right now, and assigns the set to its renderers. Existing profiles are never overwritten.");
         private static readonly GUIContent SaveProfilesContent = new GUIContent("Save Assets", "Writes edited profiles to disk. Changing a profile in the Inspector only marks it dirty - Unity flushes it on File > Save Project, on quit, or here.");
         private static readonly GUIContent RefreshProfilesContent = new GUIContent("Refresh", "Re-reads the open scene and its profile assets, and updates that scene's row on the board.");
         private static readonly GUIContent StandardizeScopeContent = new GUIContent("Open scene only", "Limits the plan to the assets this scene owns - settings, data, decal maps and material. Uncheck to standardize the whole project in one go.");
+        private static readonly GUIContent RebuildPlanContent = new GUIContent("Rebuild Plan", "Recomputes where each grass asset should live. The scene dependency read happens once per session - after that this is instant.");
+        private static readonly GUIContent ScanContent = new GUIContent("Scan", "Reads every scene once to work out which assets belong to which scene. Everything else in this window reuses that read.");
+        private static readonly GUIContent RescanContent = new GUIContent("Rescan", "Throws away this session's scene read and does it again. Only needed if scenes changed outside this window.");
 
         [MenuItem("Tools/Grass System/Grass Hub", priority = 0)]
         private static void Open()
@@ -111,6 +123,7 @@ namespace GrassSystem.Consoles.Editor
         private const string OnlyInBuildPrefKey = "GrassHub.OnlyScenesInBuild";
         private const string StandardizeScopePrefKey = "GrassHub.StandardizeOpenSceneOnly";
         private const string DecalSwitchMaxPrefKey = "GrassHub.DecalSwitchMax";
+        private const string HousekeepingPrefKey = "GrassHub.HousekeepingExpanded";
         private const string DefaultSceneFolder = "Assets/Scenes";
         private string sceneSearchFolder = DefaultSceneFolder;
         private bool onlyScenesInBuild = true;
@@ -122,6 +135,7 @@ namespace GrassSystem.Consoles.Editor
             onlyScenesInBuild = EditorPrefs.GetBool(OnlyInBuildPrefKey, true);
             standardizeOpenSceneOnly = EditorPrefs.GetBool(StandardizeScopePrefKey, true);
             decalSwitchMax = EditorPrefs.GetInt(DecalSwitchMaxPrefKey, 512);
+            housekeepingExpanded = EditorPrefs.GetBool(HousekeepingPrefKey, false);
             ResolveProfileSets();
         }
 
@@ -147,189 +161,137 @@ namespace GrassSystem.Consoles.Editor
             stateGrayStyle = new GUIStyle(EditorStyles.label);
             stateGrayStyle.normal.textColor = Color.gray;
 
+            wrapLabelStyle = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true };
+
+            microCaptionStyle = new GUIStyle(EditorStyles.miniBoldLabel);
+
+            groupTitleStyle = new GUIStyle(EditorStyles.boldLabel);
+
+            openRowTint = EditorGUIUtility.isProSkin
+                ? new Color(1f, 1f, 1f, 0.06f)
+                : new Color(0f, 0f, 0f, 0.06f);
         }
 
         private void OnGUI()
         {
             InitStyles();
 
-            DrawHeader();
-            EditorGUILayout.Space();
-            DrawBoard();
-            EditorGUILayout.Space();
-            DrawProfilesSection();
-            EditorGUILayout.Space();
-            DrawSceneActions();
-            EditorGUILayout.Space();
-            DrawAssetsSection();
-            EditorGUILayout.Space();
-            DrawTuningSection();
-            EditorGUILayout.Space();
-            DrawToolsSection();
+            DrawToolbar();
+
+            using (var scroll = new EditorGUILayout.ScrollViewScope(windowScrollPos))
+            {
+                windowScrollPos = scroll.scrollPosition;
+
+                EditorGUILayout.Space(4);
+                DrawScenesBlock();
+
+                EditorGUILayout.Space(8);
+                DrawOpenSceneBlock();
+
+                EditorGUILayout.Space(8);
+                DrawHousekeepingBlock();
+
+                EditorGUILayout.Space(6);
+            }
         }
 
-        private void DrawTuningSection()
+        private void DrawToolbar()
         {
-            EditorGUILayout.LabelField("Device Tuning", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Tune on device, press the dump button in the overlay, then paste the [GrassTuning] line here.", EditorStyles.miniLabel);
-
-            tuningTarget = (GrassPlatformProfile)EditorGUILayout.ObjectField("Target Profile", tuningTarget, typeof(GrassPlatformProfile), false);
-
-            tuningScrollPos = EditorGUILayout.BeginScrollView(tuningScrollPos, GUILayout.Height(80));
-            tuningJson = EditorGUILayout.TextArea(tuningJson, GUILayout.ExpandHeight(true));
-            EditorGUILayout.EndScrollView();
-
-            using (new EditorGUILayout.HorizontalScope())
+            using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
             {
-                if (GUILayout.Button("Paste From Clipboard", GUILayout.Width(160)))
-                {
-                    tuningJson = EditorGUIUtility.systemCopyBuffer;
-                    ClearTuningStatus();
-                    GUI.FocusControl(null);
-                }
-
-                using (new EditorGUI.DisabledScope(tuningTarget == null || string.IsNullOrWhiteSpace(tuningJson)))
-                {
-                    if (GUILayout.Button("Apply To Profile", GUILayout.Width(140)))
-                        ApplyTuningToProfile();
-                }
+                GUILayout.Label("Grass Hub", titleStyle, GUILayout.Width(90));
 
                 GUILayout.FlexibleSpace();
 
-                if (GUILayout.Button("Clear", GUILayout.Width(70)))
-                {
-                    tuningJson = string.Empty;
-                    ClearTuningStatus();
-                    GUI.FocusControl(null);
-                }
-            }
-
-            if (!string.IsNullOrEmpty(tuningStatus))
-                EditorGUILayout.HelpBox(tuningStatus, tuningStatusType);
-        }
-
-        private void ClearTuningStatus()
-        {
-            tuningStatus = string.Empty;
-            tuningStatusType = MessageType.None;
-        }
-
-        private void ApplyTuningToProfile()
-        {
-            string payload = ExtractTuningJson(tuningJson);
-
-            if (!GrassTuningSnapshot.TryParse(payload, out GrassTuningSnapshot snapshot, out string error))
-            {
-                tuningStatus = error;
-                tuningStatusType = MessageType.Error;
-                return;
-            }
-
-            string diff = snapshot.DescribeDiff(tuningTarget);
-            string untouched = snapshot.DescribeUntouched();
-
-            string confirm = $"Apply this dump to {tuningTarget.name}?\n\n{diff}";
-            if (!string.IsNullOrEmpty(untouched))
-                confirm += $"\n\n{untouched}";
-
-            if (!EditorUtility.DisplayDialog("Apply Grass Tuning", confirm, "Apply", "Cancel"))
-                return;
-
-            Undo.RecordObject(tuningTarget, "Apply Grass Tuning");
-            snapshot.ApplyTo(tuningTarget);
-            EditorUtility.SetDirty(tuningTarget);
-            AssetDatabase.SaveAssets();
-
-            string note = snapshot.DescribeUnapplied();
-            if (string.IsNullOrEmpty(note))
-            {
-                tuningStatus = $"Applied to {tuningTarget.name}.";
-                tuningStatusType = MessageType.Info;
-            }
-            else
-            {
-                tuningStatus = $"Applied to {tuningTarget.name}.\n{note}";
-                tuningStatusType = MessageType.Warning;
-            }
-        }
-
-        private static string ExtractTuningJson(string raw)
-        {
-            if (string.IsNullOrEmpty(raw)) return raw;
-
-            int start = raw.IndexOf('{');
-            int end = raw.LastIndexOf('}');
-            if (start < 0 || end <= start) return raw;
-
-            return raw.Substring(start, end - start + 1);
-        }
-
-        private void DrawHeader()
-        {
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField("Grass Hub", titleStyle);
-                GUILayout.FlexibleSpace();
                 EditorGUI.BeginChangeCheck();
                 onlyScenesInBuild = GUILayout.Toggle(onlyScenesInBuild, BuildFilterContent, GUILayout.Width(112));
                 if (EditorGUI.EndChangeCheck())
+                {
                     EditorPrefs.SetBool(OnlyInBuildPrefKey, onlyScenesInBuild);
+                    if (scanned) RefreshBoard();
+                    GUIUtility.ExitGUI();
+                }
 
                 using (new EditorGUI.DisabledScope(onlyScenesInBuild))
                 {
-                    EditorGUILayout.LabelField("in", GUILayout.Width(14));
                     EditorGUI.BeginChangeCheck();
-                    sceneSearchFolder = EditorGUILayout.TextField(sceneSearchFolder, GUILayout.Width(170));
+                    sceneSearchFolder = EditorGUILayout.TextField(sceneSearchFolder, EditorStyles.toolbarTextField, GUILayout.Width(170));
                     if (EditorGUI.EndChangeCheck())
+                    {
                         EditorPrefs.SetString(SceneFolderPrefKey, sceneSearchFolder);
+                        if (scanned) RefreshBoard();
+                    }
                 }
 
-                if (GUILayout.Button(scanned ? "Rescan" : "Scan", GUILayout.Width(80)))
+                if (GUILayout.Button(scanned ? RescanContent : ScanContent, EditorStyles.toolbarButton, GUILayout.Width(80)))
+                {
                     Rescan();
+                    GUIUtility.ExitGUI();
+                }
             }
+        }
+
+        private void DrawScenesBlock()
+        {
+            EditorGUILayout.LabelField("Scenes", groupTitleStyle);
 
             if (!scanned)
             {
                 string source = onlyScenesInBuild
                     ? "the scenes enabled in Build Settings"
                     : $"the scenes under '{sceneSearchFolder}'";
-                EditorGUILayout.HelpBox($"Not scanned yet. Press Scan to walk {source}. Each scene's full dependency graph is resolved, so keeping this list short is what keeps the scan fast. Scenes without grass never show up.", MessageType.Info);
-            }
 
-            EditorGUILayout.Space(2);
-        }
-
-        private void DrawBoard()
-        {
-            EditorGUILayout.LabelField("Scenes", EditorStyles.boldLabel);
-
-            if (sceneRows.Count == 0)
-            {
-                EditorGUILayout.HelpBox("No scenes with grass data found in the project.", MessageType.Info);
+                EditorGUILayout.HelpBox(
+                    $"Not scanned yet. Press Scan to read {source}. Every scene is read once per session so this window can tell a scene-owned asset from a shared one - after that, everything here is instant. Scenes without grass never show up.",
+                    MessageType.Info);
                 return;
             }
 
-            using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+            if (sceneRows.Count == 0)
             {
-                GUILayout.Label("Scene", EditorStyles.boldLabel, GUILayout.Width(SceneColumnWidth));
-                GUILayout.Label(GUIContent.none, EditorStyles.boldLabel, GUILayout.Width(OpenColumnWidth));
-                GUILayout.Label("State", EditorStyles.boldLabel, GUILayout.Width(StateColumnWidth));
-                GUILayout.Label("Next Action", EditorStyles.boldLabel, GUILayout.Width(ActionColumnWidth));
-                GUILayout.FlexibleSpace();
+                EditorGUILayout.HelpBox("No scenes with grass data found. If you just added grass to a scene, save it and press Rescan.", MessageType.Info);
+                return;
             }
 
-            boardScrollPos = EditorGUILayout.BeginScrollView(boardScrollPos, GUILayout.ExpandHeight(true), GUILayout.MinHeight(140));
-            for (int i = 0; i < sceneRows.Count; i++)
-                DrawSceneRow(sceneRows[i]);
-            EditorGUILayout.EndScrollView();
+            if (!string.IsNullOrEmpty(boardScopeNote))
+            {
+                if (onlyScenesInBuild)
+                    EditorGUILayout.LabelField(boardScopeNote, wrapLabelStyle);
+                else
+                    EditorGUILayout.HelpBox(boardScopeNote, MessageType.Warning);
+            }
+
+            float contentHeight = sceneRows.Count * BoardRowHeight + 8f;
+            bool needsScrollbar = contentHeight > BoardMaxHeight;
+
+            using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
+            {
+                GUILayout.Label("Scene", EditorStyles.boldLabel, GUILayout.ExpandWidth(true), GUILayout.MinWidth(SceneColumnMinWidth));
+                GUILayout.Label(GUIContent.none, GUILayout.Width(OpenColumnWidth));
+                GUILayout.Label("State", EditorStyles.boldLabel, GUILayout.Width(StateColumnWidth));
+                GUILayout.Label("Next Action", EditorStyles.boldLabel, GUILayout.Width(ActionColumnWidth));
+                if (needsScrollbar)
+                    GUILayout.Space(BoardScrollbarWidth);
+            }
+
+            float boardHeight = Mathf.Clamp(contentHeight, BoardMinHeight, BoardMaxHeight);
+            using (var scroll = new EditorGUILayout.ScrollViewScope(boardScrollPos, GUILayout.Height(boardHeight)))
+            {
+                boardScrollPos = scroll.scrollPosition;
+                for (int i = 0; i < sceneRows.Count; i++)
+                    DrawSceneRow(sceneRows[i]);
+            }
         }
 
         private void DrawSceneRow(SceneRow row)
         {
-            using (new EditorGUILayout.HorizontalScope())
+            using (var scope = new EditorGUILayout.HorizontalScope())
             {
+                if (row.isOpenScene && Event.current.type == EventType.Repaint)
+                    EditorGUI.DrawRect(scope.rect, openRowTint);
+
                 GUIStyle nameStyle = row.state == SceneGrassState.NoGrass ? linkGrayStyle : (row.isOpenScene ? linkBoldStyle : linkStyle);
-                if (GUILayout.Button(row.displayName, nameStyle, GUILayout.Width(SceneColumnWidth)))
+                if (GUILayout.Button(row.displayName, nameStyle, GUILayout.ExpandWidth(true), GUILayout.MinWidth(SceneColumnMinWidth)))
                     EditorGUIUtility.PingObject(row.info.sceneAsset);
 
                 using (new EditorGUI.DisabledScope(row.isOpenScene))
@@ -337,8 +299,7 @@ namespace GrassSystem.Consoles.Editor
                     if (GUILayout.Button(OpenButtonContent, GUILayout.Width(OpenColumnWidth)) &&
                         OpenSceneIfNeeded(row.info.scenePath))
                     {
-                        RecomputeRows();
-                        Repaint();
+                        RefreshBoard();
                         GUIUtility.ExitGUI();
                     }
                 }
@@ -349,8 +310,6 @@ namespace GrassSystem.Consoles.Editor
                     GUILayout.Label("-", GUILayout.Width(ActionColumnWidth));
                 else if (GUILayout.Button(row.actionLabel, GUILayout.Width(ActionColumnWidth)))
                     ExecuteRowAction(row);
-
-                GUILayout.FlexibleSpace();
             }
         }
 
@@ -367,30 +326,135 @@ namespace GrassSystem.Consoles.Editor
             }
         }
 
-        private void DrawProfilesSection()
+        private void DrawOpenSceneBlock()
         {
-            EditorGUILayout.LabelField("Profiles", EditorStyles.boldLabel);
+            Scene activeScene = SceneManager.GetActiveScene();
+            bool validScene = activeScene.IsValid();
+            SceneRow openRow = FindOpenSceneRow();
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                string header = validScene ? $"Open Scene   {activeScene.name}" : "Open Scene   (none)";
+                EditorGUILayout.LabelField(header, groupTitleStyle, GUILayout.ExpandWidth(true));
+
+                if (openRow != null)
+                {
+                    GUILayout.FlexibleSpace();
+                    GUILayout.Label(openRow.stateLabel, GetStateStyle(openRow.state), GUILayout.Width(StateColumnWidth));
+                }
+            }
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                if (!validScene)
+                {
+                    EditorGUILayout.HelpBox("No valid open scene. Open one from the board above to migrate, tune its profiles, or standardize its assets.", MessageType.Info);
+                    return;
+                }
+
+                if (openRow == null && !OpenSceneHasGrass())
+                {
+                    EditorGUILayout.HelpBox(
+                        $"'{activeScene.name}' has no grass yet, or it is not in the last scan. Paint grass with the Grass Painter, or press Rescan up top if you just changed this scene.",
+                        MessageType.Info);
+                    return;
+                }
+
+                DrawMigrateGroup(activeScene, openRow);
+                EditorGUILayout.Space(6);
+                DrawProfilesGroup(openRow);
+                EditorGUILayout.Space(6);
+                DrawStandardizeGroup(openRow);
+            }
+        }
+
+        private void DrawMigrateGroup(Scene activeScene, SceneRow openRow)
+        {
+            EditorGUILayout.LabelField("Migrate", microCaptionStyle);
+
+            bool migrateIsPrimary = openRow == null || openRow.state != SceneGrassState.Ready;
+            float migrateHeight = migrateIsPrimary ? PrimaryButtonHeight : SecondaryButtonHeight;
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button(MigrateButtonContent, GUILayout.ExpandWidth(true), GUILayout.Height(migrateHeight)))
+                {
+                    if (EditorUtility.DisplayDialog("Migrate Scene", $"Migrate scene '{activeScene.name}'? This adds console renderers and creates assets.", "Migrate", "Cancel"))
+                    {
+                        lastMigration = GrassSceneMigrator.MigrateOpenScene();
+                        RefreshBoard();
+                        GUIUtility.ExitGUI();
+                    }
+                }
+
+                if (GUILayout.Button(RevertButtonContent, GUILayout.ExpandWidth(true), GUILayout.Height(SecondaryButtonHeight)))
+                {
+                    if (EditorUtility.DisplayDialog("Revert Scene", $"Revert console migration in scene '{activeScene.name}'?", "Revert", "Cancel"))
+                    {
+                        GrassSceneMigrator.RevertOpenScene();
+                        lastMigration = null;
+                        RefreshBoard();
+                        GUIUtility.ExitGUI();
+                    }
+                }
+
+                if (GUILayout.Button(RenameButtonContent, GUILayout.ExpandWidth(true), GUILayout.Height(SecondaryButtonHeight)))
+                {
+                    if (EditorUtility.DisplayDialog("Rename Scene Objects", "Rename grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention? (Undoable)", "Rename", "Cancel"))
+                    {
+                        lastRename = GrassSceneObjectRenamer.RenameOpenScene();
+                        RefreshBoard();
+                        GUIUtility.ExitGUI();
+                    }
+                }
+            }
+
+            if (lastMigration != null)
+                DrawMigrationResult();
+
+            if (lastRename != null)
+                EditorGUILayout.LabelField($"Renamed {lastRename.renamed}   Skipped {lastRename.skipped}", wrapLabelStyle);
+        }
+
+        private void DrawMigrationResult()
+        {
+            if (!lastMigration.ok)
+            {
+                EditorGUILayout.HelpBox(lastMigration.error, MessageType.Error);
+                return;
+            }
+
+            EditorGUILayout.LabelField($"Renderers migrated: {lastMigration.renderersMigrated}   Decal: {lastMigration.decalOutcome}", wrapLabelStyle);
+        }
+
+        private void DrawProfilesGroup(SceneRow openRow)
+        {
+            EditorGUILayout.LabelField("Profiles", microCaptionStyle);
 
             RefreshProfileStatusIfNeeded();
             GrassProfileSceneStatus status = profileSceneStatus;
 
             if (status.blocker != null)
             {
-                EditorGUILayout.HelpBox(status.blocker, MessageType.Info);
+                EditorGUILayout.LabelField(status.blocker, wrapLabelStyle);
                 return;
             }
 
-            EditorGUILayout.LabelField("Folder", status.folder, EditorStyles.miniLabel);
+            EditorGUILayout.LabelField(status.folder, wrapLabelStyle);
+
+            float createHeight = status.CanCreate ? PrimaryButtonHeight : SecondaryButtonHeight;
 
             using (new EditorGUILayout.HorizontalScope())
             {
                 using (new EditorGUI.DisabledScope(!status.CanCreate))
                 {
-                    if (GUILayout.Button(CreateProfilesContent, GUILayout.Width(200), GUILayout.Height(22)))
+                    if (GUILayout.Button(CreateProfilesContent, GUILayout.Width(220), GUILayout.Height(createHeight)))
+                    {
                         CreateProfilesForOpenScene();
+                        GUIUtility.ExitGUI();
+                    }
                 }
 
-                GUILayout.Label(ProfileStatusText(status), status.CanCreate ? stateWarnStyle : stateReadyStyle);
                 GUILayout.FlexibleSpace();
 
                 if (GUILayout.Button(SaveProfilesContent, GUILayout.Width(90)))
@@ -403,21 +467,23 @@ namespace GrassSystem.Consoles.Editor
                 if (GUILayout.Button(RefreshProfilesContent, GUILayout.Width(70)))
                 {
                     profileSceneStatus = null;
-                    RecomputeRows();
-                    Repaint();
+                    RefreshBoard();
+                    GUIUtility.ExitGUI();
                 }
             }
+
+            GUILayout.Label(ProfileStatusText(status), status.CanCreate ? stateWarnStyle : stateReadyStyle);
 
             if (status.AssetsComplete)
             {
                 DrawProfileAssetRow("Set", status.set);
                 DrawProfileAssetRow("Full", status.full);
                 DrawProfileAssetRow("Switch", status.switchProfile);
-                EditorGUILayout.LabelField("Tune them from the renderer's inspector - it edits the profile in place.", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("Tune them from the renderer's inspector - it edits the profile in place.", wrapLabelStyle);
             }
             else
             {
-                EditorGUILayout.LabelField($"Creates {Path.GetFileNameWithoutExtension(status.setPath)} plus its Full and Switch pair, both filled with what this scene renders right now.", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField($"Creates {Path.GetFileNameWithoutExtension(status.setPath)} plus its Full and Switch pair, both filled with what this scene renders right now.", wrapLabelStyle);
             }
 
             if (status.renderersOnOtherSet > 0)
@@ -432,7 +498,7 @@ namespace GrassSystem.Consoles.Editor
             using (new EditorGUILayout.HorizontalScope())
             {
                 GUILayout.Label(label, GUILayout.Width(56));
-                if (GUILayout.Button(asset != null ? asset.name : "(missing)", asset != null ? linkStyle : linkGrayStyle, GUILayout.Width(SceneColumnWidth)))
+                if (GUILayout.Button(asset != null ? asset.name : "(missing)", asset != null ? linkStyle : linkGrayStyle, GUILayout.Width(AssetNameColumnWidth)))
                     EditorGUIUtility.PingObject(asset);
                 GUILayout.FlexibleSpace();
             }
@@ -450,10 +516,10 @@ namespace GrassSystem.Consoles.Editor
         {
             EditorGUILayout.LabelField(
                 $"Profiles {lastProfileApply.profilesCreated}   Renderers {lastProfileApply.renderersAssigned}   Set {(lastProfileApply.setCreated ? "created" : lastProfileApply.setRepaired ? "rewired" : "kept")}",
-                EditorStyles.miniLabel);
+                wrapLabelStyle);
 
             if (lastProfileApply.renderersAssigned > 0)
-                EditorGUILayout.HelpBox("Save the scene to keep the assignment. The board above only picks it up on the next Scan after saving.", MessageType.Info);
+                EditorGUILayout.HelpBox("Save the scene to keep the assignment. The board above only picks it up once the scene is saved.", MessageType.Info);
 
             if (lastProfileApply.problems.Count > 0)
                 EditorGUILayout.HelpBox(string.Join("\n", lastProfileApply.problems), MessageType.Warning);
@@ -474,82 +540,20 @@ namespace GrassSystem.Consoles.Editor
             lastProfileApply = GrassProfileFactory.CreateForOpenScene();
             profileSceneStatus = GrassProfileFactory.InspectOpenScene();
             ResolveProfileSets();
-            RecomputeRows();
-            Repaint();
+            RefreshBoard();
         }
 
-        private void DrawSceneActions()
+        private void DrawStandardizeGroup(SceneRow openRow)
         {
-            EditorGUILayout.LabelField("Open Scene Actions", EditorStyles.boldLabel);
-
-            Scene activeScene = SceneManager.GetActiveScene();
-            bool validScene = activeScene.IsValid();
-
-            EditorGUILayout.LabelField("Active Scene", validScene ? activeScene.name : "(none)");
-
-            using (new EditorGUI.DisabledScope(!validScene))
-            {
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    if (GUILayout.Button(MigrateButtonContent, GUILayout.Height(24)))
-                    {
-                        if (EditorUtility.DisplayDialog("Migrate Scene", $"Migrate scene '{activeScene.name}'? This adds console renderers and creates assets.", "Migrate", "Cancel"))
-                        {
-                            lastMigration = GrassSceneMigrator.MigrateOpenScene();
-                            Rescan();
-                        }
-                    }
-
-                    if (GUILayout.Button(RevertButtonContent, GUILayout.Height(24)))
-                    {
-                        if (EditorUtility.DisplayDialog("Revert Scene", $"Revert console migration in scene '{activeScene.name}'?", "Revert", "Cancel"))
-                        {
-                            GrassSceneMigrator.RevertOpenScene();
-                            lastMigration = null;
-                            Rescan();
-                        }
-                    }
-
-                    if (GUILayout.Button(RenameButtonContent, GUILayout.Height(24)))
-                    {
-                        if (EditorUtility.DisplayDialog("Rename Scene Objects", "Rename grass renderers, console objects, and GrassDecal objects in the open scene to the Grass_<Veg> convention? (Undoable)", "Rename", "Cancel"))
-                        {
-                            lastRename = GrassSceneObjectRenamer.RenameOpenScene();
-                            Rescan();
-                        }
-                    }
-                }
-            }
-
-            if (!validScene)
-                EditorGUILayout.HelpBox("No valid open scene - open one from the board above to migrate, revert, or rename its grass objects.", MessageType.Info);
-
-            if (lastMigration != null)
-                DrawMigrationResult();
-
-            if (lastRename != null)
-                EditorGUILayout.LabelField($"Renamed {lastRename.renamed}   Skipped {lastRename.skipped}", EditorStyles.miniLabel);
-        }
-
-        private void DrawMigrationResult()
-        {
-            if (!lastMigration.ok)
-            {
-                EditorGUILayout.HelpBox(lastMigration.error, MessageType.Error);
-                return;
-            }
-
-            EditorGUILayout.LabelField($"Renderers migrated: {lastMigration.renderersMigrated}   Decal: {lastMigration.decalOutcome}", EditorStyles.miniLabel);
-        }
-
-        private void DrawAssetsSection()
-        {
-            EditorGUILayout.LabelField("Assets", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Standardize", microCaptionStyle);
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button(standardizePlan == null ? "Build Plan" : "Rebuild Plan", GUILayout.Width(110)))
+                if (GUILayout.Button(RebuildPlanContent, GUILayout.Width(110), GUILayout.Height(SecondaryButtonHeight)))
+                {
                     BuildStandardizePlan();
+                    GUIUtility.ExitGUI();
+                }
 
                 EditorGUI.BeginChangeCheck();
                 standardizeOpenSceneOnly = GUILayout.Toggle(standardizeOpenSceneOnly, StandardizeScopeContent, GUILayout.Width(112));
@@ -557,41 +561,75 @@ namespace GrassSystem.Consoles.Editor
                 {
                     EditorPrefs.SetBool(StandardizeScopePrefKey, standardizeOpenSceneOnly);
                     if (standardizePlan != null)
+                    {
                         BuildStandardizePlan();
+                        GUIUtility.ExitGUI();
+                    }
                 }
 
-                GUILayout.Label(standardizeSummaryText);
                 GUILayout.FlexibleSpace();
 
                 using (new EditorGUI.DisabledScope(standardizeMovableCount == 0))
                 {
-                    if (GUILayout.Button("Apply", GUILayout.Width(90)))
+                    float applyHeight = standardizeMovableCount > 0 ? PrimaryButtonHeight : SecondaryButtonHeight;
+                    if (GUILayout.Button("Apply", GUILayout.Width(90), GUILayout.Height(applyHeight)))
                     {
-                        string scope = standardizeOpenSceneOnly
-                            ? $"the {standardizeMovableCount} item(s) owned by the open scene"
-                            : $"{standardizeMovableCount} grass item(s) across the whole project";
-
-                        if (EditorUtility.DisplayDialog("Standardize Assets", $"Move {scope}? Used assets are filed into Assets/Grass/<Scene>/<Category>/, unused ones are quarantined into Assets/Grass/_Unused/. GUIDs are preserved, so every reference survives the move. Do this on a clean branch and coordinate with the team.", "Apply", "Cancel"))
-                        {
-                            lastApply = GrassAssetStandardizer.Apply(standardizePlan);
-                            BuildStandardizePlan();
-                            Rescan();
-                        }
+                        ApplyStandardizePlan();
+                        GUIUtility.ExitGUI();
                     }
                 }
             }
 
-            if (!string.IsNullOrEmpty(standardizeScopeNote))
-                EditorGUILayout.LabelField(standardizeScopeNote, EditorStyles.miniLabel);
+            if (standardizePlan == null)
+            {
+                EditorGUILayout.LabelField("Press Rebuild Plan to see what would move.", wrapLabelStyle);
+                return;
+            }
 
-            if (!string.IsNullOrEmpty(standardizeCacheNote))
-                EditorGUILayout.LabelField(standardizeCacheNote, EditorStyles.miniLabel);
+            EditorGUILayout.LabelField(standardizeSummaryText, wrapLabelStyle);
+
+            if (!string.IsNullOrEmpty(standardizeScopeNote))
+                EditorGUILayout.LabelField(standardizeScopeNote, wrapLabelStyle);
 
             if (lastApply != null)
-                EditorGUILayout.LabelField($"Moved {lastApply.moved}   Skipped {lastApply.skipped}   Failed {lastApply.failed}", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField($"Moved {lastApply.moved}   Skipped {lastApply.skipped}   Failed {lastApply.failed}", wrapLabelStyle);
+        }
 
-            EditorGUILayout.Space(4);
-            DrawDecalBudget();
+        private void ApplyStandardizePlan()
+        {
+            string scope = standardizeOpenSceneOnly
+                ? $"the {standardizeMovableCount} item(s) owned by the open scene"
+                : $"{standardizeMovableCount} grass item(s) across the whole project";
+
+            if (!EditorUtility.DisplayDialog(
+                    "Standardize Assets",
+                    $"Move {scope}? Used assets are filed into Assets/Grass/<Scene>/<Category>/, unused ones are quarantined into Assets/Grass/_Unused/. GUIDs are preserved, so every reference survives the move. Do this on a clean branch and coordinate with the team.",
+                    "Apply", "Cancel"))
+                return;
+
+            lastApply = GrassAssetStandardizer.Apply(standardizePlan);
+            BuildStandardizePlan();
+            RefreshBoard();
+        }
+
+        private void DrawHousekeepingBlock()
+        {
+            EditorGUI.BeginChangeCheck();
+            housekeepingExpanded = EditorGUILayout.BeginFoldoutHeaderGroup(housekeepingExpanded, "Housekeeping");
+            if (EditorGUI.EndChangeCheck())
+                EditorPrefs.SetBool(HousekeepingPrefKey, housekeepingExpanded);
+
+            if (housekeepingExpanded)
+            {
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    DrawDecalBudget();
+                    EditorGUILayout.Space(6);
+                    DrawToolsGroup();
+                }
+            }
+
+            EditorGUILayout.EndFoldoutHeaderGroup();
         }
 
         private void DrawDecalBudget()
@@ -599,9 +637,12 @@ namespace GrassSystem.Consoles.Editor
             if (decalBudget == null)
                 ScanDecalBudget();
 
+            EditorGUILayout.LabelField("Decal Texture Budget", microCaptionStyle);
+            EditorGUILayout.LabelField("Whole project - not scoped to the open scene.", wrapLabelStyle);
+
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("Decal textures", GUILayout.Width(110));
+                EditorGUILayout.LabelField("Decal textures", GUILayout.Width(90));
 
                 EditorGUI.BeginChangeCheck();
                 decalSwitchMax = EditorGUILayout.IntPopup(decalSwitchMax, DecalSizeNames, DecalSizeValues, GUILayout.Width(70));
@@ -611,48 +652,55 @@ namespace GrassSystem.Consoles.Editor
                     ScanDecalBudget();
                 }
 
-                GUILayout.Label($"{decalBudget.megabytesNow:0.#} MB -> {decalBudget.megabytesAfter:0.#} MB on Switch",
-                    decalBudget.ChangeCount > 0 ? stateWarnStyle : stateReadyStyle);
-
                 GUILayout.FlexibleSpace();
 
                 using (new EditorGUI.DisabledScope(decalBudget.ChangeCount == 0))
                 {
-                    if (GUILayout.Button("Apply", GUILayout.Width(90)))
+                    if (GUILayout.Button("Apply", GUILayout.Width(90), GUILayout.Height(SecondaryButtonHeight)))
+                    {
                         ApplyDecalBudget();
+                        GUIUtility.ExitGUI();
+                    }
                 }
             }
+
+            if (decalBudget.entries.Count == 0)
+            {
+                EditorGUILayout.LabelField("No baked decal maps found in the project yet.", wrapLabelStyle);
+                return;
+            }
+
+            GUILayout.Label($"{decalBudget.megabytesNow:0.#} MB -> {decalBudget.megabytesAfter:0.#} MB on Switch",
+                decalBudget.ChangeCount > 0 ? stateWarnStyle : stateReadyStyle);
 
             EditorGUILayout.LabelField(
                 decalBudget.ChangeCount == 0
                     ? $"{decalBudget.entries.Count} map(s), all already capped at {decalSwitchMax} for Switch."
                     : $"{decalBudget.entries.Count} map(s), {decalBudget.missingOverride} with no Switch override. Only the importer is touched - no re-bake, no pixel change, PC build untouched.",
-                EditorStyles.miniLabel);
-
-            if (decalBudget.entries.Count == 0)
-                return;
+                wrapLabelStyle);
 
             decalBudgetFoldout = EditorGUILayout.Foldout(decalBudgetFoldout, $"Maps ({decalBudget.ChangeCount} to change)", true);
             if (!decalBudgetFoldout)
                 return;
 
-            decalBudgetScrollPos = EditorGUILayout.BeginScrollView(decalBudgetScrollPos, GUILayout.Height(Mathf.Min(150f, 20f + decalBudget.entries.Count * 18f)));
-            for (int i = 0; i < decalBudget.entries.Count; i++)
-                DrawDecalBudgetRow(decalBudget.entries[i]);
-            EditorGUILayout.EndScrollView();
+            using (var scroll = new EditorGUILayout.ScrollViewScope(decalBudgetScrollPos, GUILayout.Height(Mathf.Min(150f, 20f + decalBudget.entries.Count * 18f))))
+            {
+                decalBudgetScrollPos = scroll.scrollPosition;
+                for (int i = 0; i < decalBudget.entries.Count; i++)
+                    DrawDecalBudgetRow(decalBudget.entries[i]);
+            }
         }
 
         private void DrawDecalBudgetRow(DecalTextureEntry entry)
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button(Path.GetFileNameWithoutExtension(entry.texturePath), linkStyle, GUILayout.Width(SceneColumnWidth)))
+                if (GUILayout.Button(Path.GetFileNameWithoutExtension(entry.texturePath), linkStyle, GUILayout.ExpandWidth(true), GUILayout.MinWidth(SceneColumnMinWidth)))
                     EditorGUIUtility.PingObject(entry.texture);
 
                 GUILayout.Label($"{entry.switchSizeNow} -> {entry.switchSizeAfter}", entry.Changes ? stateWarnStyle : stateGrayStyle, GUILayout.Width(100));
                 GUILayout.Label($"{entry.MegabytesNow:0.##} -> {entry.MegabytesAfter:0.##} MB", stateGrayStyle, GUILayout.Width(140));
-                GUILayout.Label(entry.hasOverride ? string.Empty : "no override", stateGrayStyle);
-                GUILayout.FlexibleSpace();
+                GUILayout.Label(entry.hasOverride ? string.Empty : "no override", stateGrayStyle, GUILayout.Width(80));
             }
         }
 
@@ -678,20 +726,48 @@ namespace GrassSystem.Consoles.Editor
             ScanDecalBudget();
         }
 
-        private void DrawToolsSection()
+        private void DrawToolsGroup()
         {
-            EditorGUILayout.LabelField("Tools", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("More Tools", microCaptionStyle);
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Grass Painter", GUILayout.Height(28)))
+                if (GUILayout.Button("Grass Painter", GUILayout.ExpandWidth(true), GUILayout.Height(24)))
                     EditorApplication.ExecuteMenuItem(MenuPathPainter);
-                if (GUILayout.Button("Grass Decal Baker", GUILayout.Height(28)))
+                if (GUILayout.Button("Grass Decal Baker", GUILayout.ExpandWidth(true), GUILayout.Height(24)))
                     EditorApplication.ExecuteMenuItem(MenuPathDecalBaker);
-                if (GUILayout.Button("Console Converter", GUILayout.Height(28)))
+                if (GUILayout.Button("Console Converter", GUILayout.ExpandWidth(true), GUILayout.Height(24)))
                     EditorApplication.ExecuteMenuItem(MenuPathConverter);
-                if (GUILayout.Button("Migration Dashboard", GUILayout.Height(28)))
+                if (GUILayout.Button("Migration Dashboard", GUILayout.ExpandWidth(true), GUILayout.Height(24)))
                     EditorApplication.ExecuteMenuItem(MenuPathDashboard);
+                if (GUILayout.Button("Device Tuning", GUILayout.ExpandWidth(true), GUILayout.Height(24)))
+                    GrassDeviceTuningWindow.Open();
             }
+        }
+
+        private SceneRow FindOpenSceneRow()
+        {
+            for (int i = 0; i < sceneRows.Count; i++)
+                if (sceneRows[i].isOpenScene)
+                    return sceneRows[i];
+            return null;
+        }
+
+        private static bool OpenSceneHasGrass()
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid()) return false;
+
+            GrassRendererConsole[] console = UnityEngine.Object.FindObjectsByType<GrassRendererConsole>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < console.Length; i++)
+                if (console[i] != null && console[i].gameObject.scene == scene)
+                    return true;
+
+            GrassRenderer[] original = UnityEngine.Object.FindObjectsByType<GrassRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < original.Length; i++)
+                if (original[i] != null && original[i].gameObject.scene == scene)
+                    return true;
+
+            return false;
         }
 
         private void ExecuteRowAction(SceneRow row)
@@ -716,8 +792,8 @@ namespace GrassSystem.Consoles.Editor
                     break;
             }
 
-            RecomputeRows();
-            Repaint();
+            RefreshBoard();
+            GUIUtility.ExitGUI();
         }
 
         private static bool OpenSceneIfNeeded(string scenePath)
@@ -787,7 +863,7 @@ namespace GrassSystem.Consoles.Editor
             standardizeScopeNote = $"Only the assets owned by {canonical}. Hidden: {unusedHidden} unused, {sharedHidden} shared or unattributed - uncheck to see them.";
 
             if (unusedHidden > 0)
-                standardizeScopeNote += $"\nAn asset shows up as unused when no SAVED scene references it. If you just migrated, save the scene and press Rescan before trusting this.";
+                standardizeScopeNote += " An asset shows up as unused when no SAVED scene references it. If you just migrated, save the scene and press Rescan before trusting this.";
 
             return filtered;
         }
@@ -813,12 +889,16 @@ namespace GrassSystem.Consoles.Editor
 
         private void BuildStandardizePlan()
         {
-            bool reusedCache = GrassAssetStandardizer.HasSceneDependencyCache;
-            standardizePlan = FilterStandardizePlan(GrassAssetStandardizer.BuildPlan());
+            List<StandardizePlanEntry> plan = GrassAssetStandardizer.BuildPlan();
 
-            standardizeCacheNote = reusedCache
-                ? "Reusing this session's scene dependency snapshot. Press Rescan up top if scenes or references changed since."
-                : string.Empty;
+            if (plan == null)
+            {
+                standardizeScopeNote = "Scene read cancelled - the plan below is from before. Press Rebuild Plan to try again.";
+                Repaint();
+                return;
+            }
+
+            standardizePlan = FilterStandardizePlan(plan);
 
             int ready = 0, ambiguous = 0, already = 0, deferred = 0, unused = 0;
             for (int i = 0; i < standardizePlan.Count; i++)
@@ -840,86 +920,92 @@ namespace GrassSystem.Consoles.Editor
 
         private void Rescan()
         {
-            List<SceneScanInfo> backup = new List<SceneScanInfo>(scanInfos);
-            bool previousScanned = scanned;
-            bool completed = false;
+            GrassSceneDependencyIndex.Invalidate();
+            RefreshBoard();
+        }
 
-            try
+        private void RefreshBoard()
+        {
+            ResolveProfileSets();
+
+            if (!GrassSceneDependencyIndex.TryGet(out List<GrassSceneDependencies> scenes))
             {
-                ResolveProfileSets();
-                GrassAssetStandardizer.InvalidateSceneDependencyCache();
-
-                HashSet<string> dataAssetPaths = CollectPaths("t:GrassDataAsset");
-                HashSet<string> consoleDataPaths = CollectPaths("t:GrassDataConsoleAsset");
-                HashSet<string> decalPaths = CollectPaths("t:GrassDecalBakeAsset");
-                HashSet<string> settingsPaths = CollectPaths("t:SO_GrassSettings");
-
-                string[] sceneGuids = FindSceneGuids();
-                scanInfos.Clear();
-                bool cancelled = false;
-
-                for (int i = 0; i < sceneGuids.Length; i++)
-                {
-                    string scenePath = AssetDatabase.GUIDToAssetPath(sceneGuids[i]);
-                    float progress = sceneGuids.Length == 0 ? 0f : (float)i / sceneGuids.Length;
-                    if (EditorUtility.DisplayCancelableProgressBar("Grass Hub", $"Scanning {Path.GetFileNameWithoutExtension(scenePath)}", progress))
-                    {
-                        cancelled = true;
-                        break;
-                    }
-
-                    HashSet<string> deps = new HashSet<string>(AssetDatabase.GetDependencies(scenePath, true), StringComparer.OrdinalIgnoreCase);
-
-                    bool hasSettings = deps.Overlaps(settingsPaths);
-                    bool hasOriginalData = deps.Overlaps(dataAssetPaths);
-                    bool hasConsole = deps.Overlaps(consoleDataPaths);
-                    bool hasDecal = deps.Overlaps(decalPaths);
-
-                    if (!hasSettings && !hasOriginalData && !hasConsole && !hasDecal)
-                        continue;
-
-                    scanInfos.Add(new SceneScanInfo
-                    {
-                        scenePath = scenePath,
-                        sceneName = Path.GetFileNameWithoutExtension(scenePath),
-                        sceneAsset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(scenePath),
-                        hasOriginalSettings = hasSettings,
-                        hasOriginalDataAsset = hasOriginalData,
-                        hasConsoleData = hasConsole,
-                        hasDecal = hasDecal,
-                        deps = deps,
-                    });
-                }
-
-                if (cancelled)
-                {
-                    scanInfos.Clear();
-                    scanInfos.AddRange(backup);
-                    scanned = previousScanned;
-                }
-                else
-                {
-                    scanInfos.Sort((a, b) => string.Compare(a.sceneName, b.sceneName, StringComparison.OrdinalIgnoreCase));
-                    scanned = true;
-                }
-
-                completed = true;
+                Repaint();
+                return;
             }
-            finally
+
+            HashSet<string> dataAssetPaths = CollectPaths("t:GrassDataAsset");
+            HashSet<string> consoleDataPaths = CollectPaths("t:GrassDataConsoleAsset");
+            HashSet<string> decalPaths = CollectPaths("t:GrassDecalBakeAsset");
+            HashSet<string> settingsPaths = CollectPaths("t:SO_GrassSettings");
+            HashSet<string> visibleScenePaths = CollectVisibleScenePaths();
+
+            scanInfos.Clear();
+
+            for (int i = 0; i < scenes.Count; i++)
             {
-                EditorUtility.ClearProgressBar();
-                if (!completed)
+                GrassSceneDependencies scene = scenes[i];
+                if (!visibleScenePaths.Contains(scene.scenePath))
+                    continue;
+
+                bool hasSettings = scene.deps.Overlaps(settingsPaths);
+                bool hasOriginalData = scene.deps.Overlaps(dataAssetPaths);
+                bool hasConsole = scene.deps.Overlaps(consoleDataPaths);
+                bool hasDecal = scene.deps.Overlaps(decalPaths);
+
+                if (!hasSettings && !hasOriginalData && !hasConsole && !hasDecal)
+                    continue;
+
+                scanInfos.Add(new SceneScanInfo
                 {
-                    scanInfos.Clear();
-                    scanInfos.AddRange(backup);
-                    scanned = previousScanned;
-                }
+                    scenePath = scene.scenePath,
+                    sceneName = scene.sceneName,
+                    sceneAsset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(scene.scenePath),
+                    hasOriginalSettings = hasSettings,
+                    hasOriginalDataAsset = hasOriginalData,
+                    hasConsoleData = hasConsole,
+                    hasDecal = hasDecal,
+                    deps = scene.deps,
+                });
             }
+
+            scanInfos.Sort((a, b) => string.Compare(a.sceneName, b.sceneName, StringComparison.OrdinalIgnoreCase));
+            scanned = true;
+
+            boardScopeNote = onlyScenesInBuild
+                ? $"{scanInfos.Count} of the {visibleScenePaths.Count} scene(s) enabled in Build Settings have grass."
+                : $"BUILD FILTER OFF - showing every scene under '{sceneSearchFolder}' ({scanInfos.Count} of {visibleScenePaths.Count} have grass). Tick 'Scenes in build' to hide staging and test scenes.";
 
             RecomputeRows();
             profileSceneStatus = null;
             ScanDecalBudget();
             Repaint();
+        }
+
+        private HashSet<string> CollectVisibleScenePaths()
+        {
+            var visible = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (onlyScenesInBuild)
+            {
+                foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+                {
+                    if (scene == null || !scene.enabled || string.IsNullOrEmpty(scene.path)) continue;
+                    if (!File.Exists(scene.path)) continue;
+                    visible.Add(scene.path);
+                }
+
+                return visible;
+            }
+
+            string[] guids = !string.IsNullOrEmpty(sceneSearchFolder) && AssetDatabase.IsValidFolder(sceneSearchFolder)
+                ? AssetDatabase.FindAssets("t:Scene", new[] { sceneSearchFolder })
+                : AssetDatabase.FindAssets("t:Scene");
+
+            for (int i = 0; i < guids.Length; i++)
+                visible.Add(AssetDatabase.GUIDToAssetPath(guids[i]));
+
+            return visible;
         }
 
         private void ResolveProfileSets()
@@ -954,7 +1040,7 @@ namespace GrassSystem.Consoles.Editor
                 {
                     info = info,
                     state = state,
-                    displayName = isOpen ? $"> {info.sceneName}" : info.sceneName,
+                    displayName = info.sceneName,
                     stateLabel = StateLabel(state),
                     actionLabel = ActionLabel(state),
                     isOpenScene = isOpen,
@@ -1011,37 +1097,6 @@ namespace GrassSystem.Consoles.Editor
                 case SceneGrassState.Ready: return "Open Scene";
                 default: return "-";
             }
-        }
-
-        private string[] FindSceneGuids()
-        {
-            if (onlyScenesInBuild)
-                return FindBuildSceneGuids();
-
-            if (!string.IsNullOrEmpty(sceneSearchFolder) && AssetDatabase.IsValidFolder(sceneSearchFolder))
-                return AssetDatabase.FindAssets("t:Scene", new[] { sceneSearchFolder });
-
-            return AssetDatabase.FindAssets("t:Scene");
-        }
-
-        private static string[] FindBuildSceneGuids()
-        {
-            var guids = new List<string>();
-
-            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
-            {
-                if (scene == null || !scene.enabled || string.IsNullOrEmpty(scene.path))
-                    continue;
-
-                if (!File.Exists(scene.path))
-                    continue;
-
-                string guid = AssetDatabase.AssetPathToGUID(scene.path);
-                if (!string.IsNullOrEmpty(guid) && !guids.Contains(guid))
-                    guids.Add(guid);
-            }
-
-            return guids.ToArray();
         }
 
         private static HashSet<string> CollectPaths(string filter)

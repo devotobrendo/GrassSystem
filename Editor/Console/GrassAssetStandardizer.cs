@@ -43,7 +43,6 @@ namespace GrassSystem.Consoles.Editor
         public const string StatusDeferred = "Deferred";
         public const string StatusUnused = "Unused";
 
-        private const string ScenesFolder = "Assets/Scenes";
         private const string GrassRootFolder = "Assets/Grass";
         private const string DecalFolderSegment = "Decals";
         private const string DeprecatedSuffix = "_Deprecated";
@@ -109,26 +108,19 @@ namespace GrassSystem.Consoles.Editor
             public HashSet<string> deps;
         }
 
-        public static bool HasSceneDependencyCache => cachedSceneInfos != null;
+        public static bool HasSceneDependencyCache => GrassSceneDependencyIndex.HasCache;
 
         public static void InvalidateSceneDependencyCache()
         {
-            cachedSceneInfos = null;
+            GrassSceneDependencyIndex.Invalidate();
         }
 
         public static List<StandardizePlanEntry> BuildPlan()
         {
-            var entries = new List<StandardizePlanEntry>();
-            List<SceneUsageInfo> sceneInfos;
+            if (!TryGetSceneInfos(out List<SceneUsageInfo> sceneInfos))
+                return null;
 
-            try
-            {
-                sceneInfos = GetSceneInfos();
-            }
-            finally
-            {
-                EditorUtility.ClearProgressBar();
-            }
+            var entries = new List<StandardizePlanEntry>();
 
             CollectDataEntries(entries, sceneInfos);
             CollectSettingsEntries(entries, sceneInfos);
@@ -216,12 +208,17 @@ namespace GrassSystem.Consoles.Editor
                     string backupErr = AssetDatabase.MoveAsset(backupSourcePath, backupTargetPath);
                     if (!string.IsNullOrEmpty(backupErr))
                         result.notes.Add($"backup move failed for {Path.GetFileName(entry.assetPath)}: {backupErr}");
+                    else
+                        GrassSceneDependencyIndex.RewritePath(backupSourcePath, backupTargetPath);
                 }
 
                 string err = AssetDatabase.MoveAsset(entry.assetPath, entry.targetPath);
                 if (string.IsNullOrEmpty(err))
                 {
                     result.moved++;
+                    GrassSceneDependencyIndex.RewritePath(entry.assetPath, entry.targetPath);
+                    entry.assetPath = entry.targetPath;
+                    entry.status = StatusAlreadyStandard;
                 }
                 else
                 {
@@ -232,7 +229,6 @@ namespace GrassSystem.Consoles.Editor
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            InvalidateSceneDependencyCache();
             return result;
         }
 
@@ -285,50 +281,31 @@ namespace GrassSystem.Consoles.Editor
             return paths;
         }
 
-        private static List<SceneUsageInfo> cachedSceneInfos;
-
-        private static List<SceneUsageInfo> GetSceneInfos()
+        private static bool TryGetSceneInfos(out List<SceneUsageInfo> sceneInfos)
         {
-            if (cachedSceneInfos != null)
-                return cachedSceneInfos;
+            sceneInfos = null;
 
-            cachedSceneInfos = BuildSceneInfos();
-            return cachedSceneInfos;
-        }
+            if (!GrassSceneDependencyIndex.TryGet(out List<GrassSceneDependencies> scenes))
+                return false;
 
-        private static List<SceneUsageInfo> BuildSceneInfos()
-        {
-            var sceneInfos = new List<SceneUsageInfo>();
-            string[] scenePaths = AssetDatabase.IsValidFolder(ScenesFolder)
-                ? FindPathsInFolder("t:Scene", ScenesFolder)
-                : FindPathsProjectWide("t:Scene");
+            sceneInfos = new List<SceneUsageInfo>(scenes.Count);
 
-            for (int i = 0; i < scenePaths.Length; i++)
+            for (int i = 0; i < scenes.Count; i++)
             {
-                string scenePath = scenePaths[i];
-                string sceneName = Path.GetFileNameWithoutExtension(scenePath);
-
-                EditorUtility.DisplayProgressBar(
-                    "Standardize",
-                    $"Reading dependencies of {sceneName} - every scene has to be read once to tell a scene-owned asset from a shared one",
-                    (float)i / scenePaths.Length);
-
-                var tokens = new List<string>(sceneName.Split('_'));
-                string canonicalScene = ResolveScenePascal(sceneName, tokens);
+                GrassSceneDependencies scene = scenes[i];
+                var tokens = new List<string>(scene.sceneName.Split('_'));
+                string canonicalScene = ResolveScenePascal(scene.sceneName, tokens);
                 if (canonicalScene == null) continue;
-
-                string dayNight = DetectDayNight(sceneName);
-                var deps = new HashSet<string>(AssetDatabase.GetDependencies(scenePath, true), StringComparer.OrdinalIgnoreCase);
 
                 sceneInfos.Add(new SceneUsageInfo
                 {
                     canonicalScene = canonicalScene,
-                    dayNight = dayNight,
-                    deps = deps,
+                    dayNight = DetectDayNight(scene.sceneName),
+                    deps = scene.deps,
                 });
             }
 
-            return sceneInfos;
+            return true;
         }
 
         private static string DetectDayNight(string nameNoExt)
